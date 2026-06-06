@@ -15,6 +15,7 @@ public class ScannerProperties {
     private Liquidity liquidity = new Liquidity();
     private Klines klines = new Klines();
     private MarketRegime marketRegime = new MarketRegime();
+    private Funding funding = new Funding();
 
     @Getter
     @Setter
@@ -31,6 +32,15 @@ public class ScannerProperties {
         private Integer oneHourLimit = 250;
         private Integer fourHourLimit = 250;
         private Integer minClosedCandles = 220;
+    }
+
+    @Getter
+    @Setter
+    public static class Funding {
+        private BigDecimal warningPositive = new BigDecimal("0.0005");
+        private BigDecimal dangerPositive = new BigDecimal("0.001");
+        private BigDecimal warningNegative = new BigDecimal("-0.0005");
+        private BigDecimal dangerNegative = new BigDecimal("-0.001");
     }
 
     @Getter
