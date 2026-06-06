@@ -13,6 +13,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class ScannerProperties {
     private List<String> blacklist = new ArrayList<>();
     private Liquidity liquidity = new Liquidity();
+    private Klines klines = new Klines();
 
     @Getter
     @Setter
@@ -21,5 +22,13 @@ public class ScannerProperties {
         private BigDecimal maxSpreadPct = new BigDecimal("0.08");
         private BigDecimal maxPump24hPct = BigDecimal.valueOf(25);
         private BigDecimal maxDump24hPct = BigDecimal.valueOf(-25);
+    }
+
+    @Getter
+    @Setter
+    public static class Klines {
+        private Integer oneHourLimit = 250;
+        private Integer fourHourLimit = 250;
+        private Integer minClosedCandles = 220;
     }
 }
