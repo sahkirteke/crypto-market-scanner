@@ -14,6 +14,7 @@ public class ScannerProperties {
     private List<String> blacklist = new ArrayList<>();
     private Liquidity liquidity = new Liquidity();
     private Klines klines = new Klines();
+    private MarketRegime marketRegime = new MarketRegime();
 
     @Getter
     @Setter
@@ -30,5 +31,17 @@ public class ScannerProperties {
         private Integer oneHourLimit = 250;
         private Integer fourHourLimit = 250;
         private Integer minClosedCandles = 220;
+    }
+
+    @Getter
+    @Setter
+    public static class MarketRegime {
+        private BigDecimal breadthRiskOnMinPct = BigDecimal.valueOf(35);
+        private BigDecimal breadthStrongPct = BigDecimal.valueOf(60);
+        private BigDecimal breadthRiskOffMaxPct = BigDecimal.valueOf(20);
+        private BigDecimal panicBtc24hDropPct = BigDecimal.valueOf(-5);
+        private BigDecimal panicBtc4hDropPct = BigDecimal.valueOf(-3);
+        private BigDecimal panicVolumeRatio1h = new BigDecimal("1.5");
+        private BigDecimal panicVolumeRatio4hRule = new BigDecimal("1.8");
     }
 }
