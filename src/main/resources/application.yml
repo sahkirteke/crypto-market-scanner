@@ -42,3 +42,8 @@ scanner:
     danger-positive: 0.001
     warning-negative: -0.0005
     danger-negative: -0.001
+  scoring:
+    strong-threshold: 80
+    watchlist-threshold: 65
+    eliminated-threshold: 50
+    direction-difference-threshold: 10
