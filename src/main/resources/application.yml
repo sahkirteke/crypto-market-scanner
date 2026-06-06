@@ -20,3 +20,8 @@ binance:
 
 scanner:
   blacklist: []
+  liquidity:
+    min-quote-volume-24h: 30000000
+    max-spread-pct: 0.08
+    max-pump-24h-pct: 25
+    max-dump-24h-pct: -25

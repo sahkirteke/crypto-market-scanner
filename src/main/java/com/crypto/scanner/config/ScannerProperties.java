@@ -1,5 +1,6 @@
 package com.crypto.scanner.config;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.Getter;
@@ -11,4 +12,14 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "scanner")
 public class ScannerProperties {
     private List<String> blacklist = new ArrayList<>();
+    private Liquidity liquidity = new Liquidity();
+
+    @Getter
+    @Setter
+    public static class Liquidity {
+        private BigDecimal minQuoteVolume24h = BigDecimal.valueOf(30_000_000L);
+        private BigDecimal maxSpreadPct = new BigDecimal("0.08");
+        private BigDecimal maxPump24hPct = BigDecimal.valueOf(25);
+        private BigDecimal maxDump24hPct = BigDecimal.valueOf(-25);
+    }
 }
