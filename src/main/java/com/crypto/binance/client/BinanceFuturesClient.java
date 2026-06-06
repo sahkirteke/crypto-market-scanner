@@ -51,14 +51,17 @@ public class BinanceFuturesClient {
                     .bodyToMono(BinanceExchangeInfoResponse.class)
                     .block();
 
+            List<SymbolInfo> symbolInfos;
             if (response == null || response.getSymbols() == null) {
-                return Collections.emptyList();
+                symbolInfos = Collections.emptyList();
+            } else {
+                symbolInfos = response.getSymbols().stream()
+                        .filter(Objects::nonNull)
+                        .map(this::mapSymbolInfo)
+                        .toList();
             }
-
-            return response.getSymbols().stream()
-                    .filter(Objects::nonNull)
-                    .map(this::mapSymbolInfo)
-                    .toList();
+            log.info("BINANCE_EXCHANGE_INFO_READY count={}", symbolInfos.size());
+            return symbolInfos;
         });
     }
 
@@ -72,14 +75,12 @@ public class BinanceFuturesClient {
                     })
                     .block();
 
-            if (response == null) {
-                return Collections.emptyList();
-            }
-
-            return response.stream()
+            List<Ticker24h> tickers = response == null ? Collections.emptyList() : response.stream()
                     .filter(Objects::nonNull)
                     .map(this::mapTicker24h)
                     .toList();
+            log.info("BINANCE_24H_TICKERS_READY count={}", tickers.size());
+            return tickers;
         });
     }
 
@@ -93,14 +94,12 @@ public class BinanceFuturesClient {
                     })
                     .block();
 
-            if (response == null) {
-                return Collections.emptyList();
-            }
-
-            return response.stream()
+            List<BookTicker> bookTickers = response == null ? Collections.emptyList() : response.stream()
                     .filter(Objects::nonNull)
                     .map(this::mapBookTicker)
                     .toList();
+            log.info("BINANCE_BOOK_TICKERS_READY count={}", bookTickers.size());
+            return bookTickers;
         });
     }
 
@@ -119,14 +118,12 @@ public class BinanceFuturesClient {
                     })
                     .block();
 
-            if (response == null) {
-                return Collections.emptyList();
-            }
-
-            return response.stream()
+            List<Kline> klines = response == null ? Collections.emptyList() : response.stream()
                     .filter(Objects::nonNull)
                     .map(kline -> mapKline(symbol, interval, kline))
                     .toList();
+            log.info("BINANCE_KLINES_READY symbol={} interval={} count={}", symbol, interval, klines.size());
+            return klines;
         });
     }
 
@@ -144,20 +141,27 @@ public class BinanceFuturesClient {
                     })
                     .block();
 
-            return response == null ? Collections.emptyList() : response;
+            List<BinanceFundingRateDto> fundingRates = response == null ? Collections.emptyList() : response;
+            log.info("BINANCE_FUNDING_RATE_READY symbol={} count={}", symbol, fundingRates.size());
+            return fundingRates;
         });
     }
 
     public BinanceOpenInterestDto getOpenInterest(String symbol) {
-        return execute("open interest for symbol " + symbol, () -> binanceWebClient.get()
-                .uri(uriBuilder -> uriBuilder
-                        .path("/fapi/v1/openInterest")
-                        .queryParam("symbol", symbol)
-                        .build())
-                .retrieve()
-                .onStatus(HttpStatusCode::isError, this::toClientException)
-                .bodyToMono(BinanceOpenInterestDto.class)
-                .block());
+        return execute("open interest for symbol " + symbol, () -> {
+            BinanceOpenInterestDto openInterest = binanceWebClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/fapi/v1/openInterest")
+                            .queryParam("symbol", symbol)
+                            .build())
+                    .retrieve()
+                    .onStatus(HttpStatusCode::isError, this::toClientException)
+                    .bodyToMono(BinanceOpenInterestDto.class)
+                    .block();
+            log.info("BINANCE_OPEN_INTEREST_READY symbol={} openInterest={}", symbol,
+                    openInterest == null ? null : openInterest.getOpenInterest());
+            return openInterest;
+        });
     }
 
     private SymbolInfo mapSymbolInfo(BinanceSymbolDto dto) {
