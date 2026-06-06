@@ -104,6 +104,14 @@ class CoinScoringServiceTest {
     }
 
     @Test
+    void scoreBelowWatchlistThresholdUsesScoreBelowThresholdReason() {
+        CoinScanResult result = service().score(neutralInput(MarketRegime.CHOP));
+
+        assertThat(result.getClassification()).isEqualTo(CoinClassification.ELIMINATED);
+        assertThat(result.getEliminatedReason()).isEqualTo(EliminationReason.SCORE_BELOW_THRESHOLD);
+    }
+
+    @Test
     void panicRegimeEliminatesWithNeutralBias() {
         CoinScanResult result = service().score(bullishInput(MarketRegime.PANIC, BigDecimal.ZERO, BigDecimal.ZERO, null));
 

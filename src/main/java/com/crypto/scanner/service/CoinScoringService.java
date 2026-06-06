@@ -412,7 +412,7 @@ public class CoinScoringService {
         if (marketRegime(marketRegimeResult) == MarketRegime.PANIC) {
             return EliminationReason.MARKET_PANIC_NO_NEW_ENTRY;
         }
-        return EliminationReason.NONE;
+        return EliminationReason.SCORE_BELOW_THRESHOLD;
     }
 
     private CoinScanResult dataNotReadyResult(String symbol) {
