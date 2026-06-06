@@ -19,7 +19,7 @@ import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
-@Profile("manual")
+@Profile("manual-kline")
 @RequiredArgsConstructor
 public class KlineManualRunner implements CommandLineRunner {
     private static final int MANUAL_SYMBOL_LIMIT = 5;

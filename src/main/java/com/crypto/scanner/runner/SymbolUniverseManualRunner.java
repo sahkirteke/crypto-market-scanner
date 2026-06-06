@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
-@Profile("manual")
+@Profile("manual-symbol-universe")
 @RequiredArgsConstructor
 public class SymbolUniverseManualRunner implements CommandLineRunner {
     private static final String CRVUSDT = "CRVUSDT";

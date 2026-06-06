@@ -17,7 +17,7 @@ import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
-@Profile("manual")
+@Profile("manual-binance")
 @RequiredArgsConstructor
 public class BinanceManualTestRunner implements CommandLineRunner {
     private static final String BTC_USDT = "BTCUSDT";
