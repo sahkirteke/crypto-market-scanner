@@ -10,4 +10,5 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class BinanceProperties {
     private String futuresBaseUrl;
     private Integer timeoutSeconds;
+    private Integer maxInMemorySizeMb = 10;
 }
