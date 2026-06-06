@@ -29,3 +29,11 @@ scanner:
     one-hour-limit: 250
     four-hour-limit: 250
     min-closed-candles: 220
+  market-regime:
+    breadth-risk-on-min-pct: 35
+    breadth-strong-pct: 60
+    breadth-risk-off-max-pct: 20
+    panic-btc-24h-drop-pct: -5
+    panic-btc-4h-drop-pct: -3
+    panic-volume-ratio-1h: 1.5
+    panic-volume-ratio-4h-rule: 1.8
