@@ -16,6 +16,7 @@ public class ScannerProperties {
     private Klines klines = new Klines();
     private MarketRegime marketRegime = new MarketRegime();
     private Funding funding = new Funding();
+    private Scoring scoring = new Scoring();
 
     @Getter
     @Setter
@@ -41,6 +42,15 @@ public class ScannerProperties {
         private BigDecimal dangerPositive = new BigDecimal("0.001");
         private BigDecimal warningNegative = new BigDecimal("-0.0005");
         private BigDecimal dangerNegative = new BigDecimal("-0.001");
+    }
+
+    @Getter
+    @Setter
+    public static class Scoring {
+        private Integer strongThreshold = 80;
+        private Integer watchlistThreshold = 65;
+        private Integer eliminatedThreshold = 50;
+        private Integer directionDifferenceThreshold = 10;
     }
 
     @Getter

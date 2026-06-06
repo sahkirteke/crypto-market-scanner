@@ -10,5 +10,6 @@ public enum EliminationReason {
     MARKET_PANIC_NO_NEW_ENTRY,
     INVALID_QUANTITY,
     DATA_ERROR,
+    SCORE_BELOW_THRESHOLD,
     NONE
 }
