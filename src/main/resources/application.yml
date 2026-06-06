@@ -1,0 +1,3 @@
+binance:
+  futures-base-url: https://fapi.binance.com
+  timeout-seconds: 10
