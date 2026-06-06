@@ -1,3 +1,18 @@
+spring:
+  application:
+    name: crypto-market-scanner
+  datasource:
+    url: jdbc:postgresql://aws-1-eu-central-1.pooler.supabase.com:5432/postgres?prepareThreshold=0&ssl=true&sslmode=require
+    username: postgres.wdsxcflkxixvwaqnltkk
+    password: DhlDi1wQn4XqC749
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+
 binance:
   futures-base-url: https://fapi.binance.com
   timeout-seconds: 10
