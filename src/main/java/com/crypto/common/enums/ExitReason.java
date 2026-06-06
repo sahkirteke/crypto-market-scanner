@@ -1,0 +1,15 @@
+package com.crypto.common.enums;
+
+public enum ExitReason {
+    STOP_LOSS,
+    TRAILING_STOP,
+    PARTIAL_TAKE_PROFIT_1,
+    PARTIAL_TAKE_PROFIT_2,
+    TIME_STOP,
+    SIGNAL_INVALIDATION,
+    MARKET_REGIME_EXIT,
+    OPPOSITE_SIGNAL_EXIT,
+    EMERGENCY_EXIT,
+    MANUAL_EXIT,
+    NONE
+}
