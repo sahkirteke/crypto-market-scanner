@@ -17,7 +17,7 @@ import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
-@Profile("manual")
+@Profile("manual-prefilter")
 @RequiredArgsConstructor
 public class PreFilterManualRunner implements CommandLineRunner {
     private static final int LOG_SAMPLE_LIMIT = 10;

@@ -25,3 +25,7 @@ scanner:
     max-spread-pct: 0.08
     max-pump-24h-pct: 25
     max-dump-24h-pct: -25
+  klines:
+    one-hour-limit: 250
+    four-hour-limit: 250
+    min-closed-candles: 220
