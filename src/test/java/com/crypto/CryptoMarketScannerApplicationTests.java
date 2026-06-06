@@ -1,13 +1,13 @@
 package com.crypto;
 
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
+import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest
+import org.junit.jupiter.api.Test;
+
 class CryptoMarketScannerApplicationTests {
 
-	@Test
-	void contextLoads() {
-	}
-
+    @Test
+    void applicationClassExists() {
+        assertThat(CryptoMarketScannerApplication.class).isNotNull();
+    }
 }

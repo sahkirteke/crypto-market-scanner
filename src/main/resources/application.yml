@@ -11,3 +11,9 @@ spring:
       connection-timeout: 30000
       idle-timeout: 600000
       max-lifetime: 1800000
+
+
+binance:
+  futures-base-url: https://fapi.binance.com
+  timeout-seconds: 10
+  max-in-memory-size-mb: 10
