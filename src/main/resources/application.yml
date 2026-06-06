@@ -37,3 +37,8 @@ scanner:
     panic-btc-4h-drop-pct: -3
     panic-volume-ratio-1h: 1.5
     panic-volume-ratio-4h-rule: 1.8
+  funding:
+    warning-positive: 0.0005
+    danger-positive: 0.001
+    warning-negative: -0.0005
+    danger-negative: -0.001
