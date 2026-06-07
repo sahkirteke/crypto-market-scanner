@@ -38,8 +38,8 @@ public class ExitEngineService {
             return List.of();
         }
 
-        List<PaperPositionEntity> openPositions = paperPositionRepository.findByStatusOrderByOpenedAtDesc(
-                PaperPositionStatus.OPEN
+        List<PaperPositionEntity> openPositions = paperPositionRepository.findByStatusInOrderByOpenedAtDesc(
+                List.of(PaperPositionStatus.OPEN, PaperPositionStatus.PARTIALLY_CLOSED)
         );
         Map<String, BigDecimal> priceBySymbol = priceBySymbol();
 

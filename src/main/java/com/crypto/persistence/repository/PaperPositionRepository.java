@@ -13,6 +13,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface PaperPositionRepository extends JpaRepository<PaperPositionEntity, Long> {
     List<PaperPositionEntity> findByStatusOrderByOpenedAtDesc(PaperPositionStatus status);
 
+    List<PaperPositionEntity> findByStatusInOrderByOpenedAtDesc(List<PaperPositionStatus> statuses);
+
     List<PaperPositionEntity> findByStatus(PaperPositionStatus status);
 
     Page<PaperPositionEntity> findByStatusOrderByOpenedAtDesc(PaperPositionStatus status, Pageable pageable);
@@ -39,6 +41,8 @@ public interface PaperPositionRepository extends JpaRepository<PaperPositionEnti
     );
 
     boolean existsBySymbolAndStatus(String symbol, PaperPositionStatus status);
+
+    boolean existsBySymbolAndStatusIn(String symbol, List<PaperPositionStatus> statuses);
 
     Optional<PaperPositionEntity> findByIdAndStatus(Long id, PaperPositionStatus status);
 

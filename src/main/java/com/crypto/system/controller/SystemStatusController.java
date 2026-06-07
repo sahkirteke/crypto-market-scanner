@@ -20,10 +20,11 @@ public class SystemStatusController {
     public SystemStatusResponse getStatus() {
         SystemStatusResponse response = systemStatusService.getStatus();
         log.info(
-                "SYSTEM_STATUS_REQUEST status={} safeMode={} schedulerEnabled={} profiles={}",
+                "SYSTEM_STATUS_REQUEST status={} safeMode={} schedulerEnabled={} paperAutoEnabled={} profiles={}",
                 response.status(),
                 response.safeMode(),
                 response.schedulerEnabled(),
+                response.paperAutoEnabled(),
                 response.activeProfiles()
         );
         return response;

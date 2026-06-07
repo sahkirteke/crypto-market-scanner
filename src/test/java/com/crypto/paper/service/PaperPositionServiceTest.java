@@ -45,7 +45,10 @@ class PaperPositionServiceTest {
                 scannerProperties,
                 new JsonTextMapper(new ObjectMapper())
         );
-        when(repository.findByStatusOrderByOpenedAtDesc(PaperPositionStatus.OPEN)).thenReturn(List.of());
+        when(repository.findByStatusInOrderByOpenedAtDesc(List.of(
+                PaperPositionStatus.OPEN,
+                PaperPositionStatus.PARTIALLY_CLOSED
+        ))).thenReturn(List.of());
         when(repository.save(any(PaperPositionEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
@@ -109,7 +112,10 @@ class PaperPositionServiceTest {
 
     @Test
     void duplicateSymbolDoesNotOpenWhenMultipleOpenSameSymbolDisabled() {
-        when(repository.existsBySymbolAndStatus("BTCUSDT", PaperPositionStatus.OPEN)).thenReturn(true);
+        when(repository.existsBySymbolAndStatusIn("BTCUSDT", List.of(
+                PaperPositionStatus.OPEN,
+                PaperPositionStatus.PARTIALLY_CLOSED
+        ))).thenReturn(true);
 
         PaperPositionEntity opened = service.openPosition(signal("BTCUSDT", EntryAction.ENTER_LONG, PositionSide.LONG, "10", RiskLevel.LOW));
 
@@ -119,7 +125,10 @@ class PaperPositionServiceTest {
 
     @Test
     void maxOpenPositionsReachedDoesNotOpenPosition() {
-        when(repository.findByStatusOrderByOpenedAtDesc(PaperPositionStatus.OPEN)).thenReturn(List.of(
+        when(repository.findByStatusInOrderByOpenedAtDesc(List.of(
+                PaperPositionStatus.OPEN,
+                PaperPositionStatus.PARTIALLY_CLOSED
+        ))).thenReturn(List.of(
                 position(PositionSide.LONG), position(PositionSide.LONG), position(PositionSide.SHORT),
                 position(PositionSide.SHORT), position(PositionSide.LONG)
         ));
@@ -132,7 +141,10 @@ class PaperPositionServiceTest {
 
     @Test
     void maxOpenShortPositionsReachedDoesNotOpenShortPosition() {
-        when(repository.findByStatusOrderByOpenedAtDesc(PaperPositionStatus.OPEN)).thenReturn(List.of(
+        when(repository.findByStatusInOrderByOpenedAtDesc(List.of(
+                PaperPositionStatus.OPEN,
+                PaperPositionStatus.PARTIALLY_CLOSED
+        ))).thenReturn(List.of(
                 position(PositionSide.SHORT), position(PositionSide.SHORT), position(PositionSide.SHORT)
         ));
 
@@ -144,7 +156,10 @@ class PaperPositionServiceTest {
 
     @Test
     void maxOpenLongPositionsReachedDoesNotOpenLongPosition() {
-        when(repository.findByStatusOrderByOpenedAtDesc(PaperPositionStatus.OPEN)).thenReturn(List.of(
+        when(repository.findByStatusInOrderByOpenedAtDesc(List.of(
+                PaperPositionStatus.OPEN,
+                PaperPositionStatus.PARTIALLY_CLOSED
+        ))).thenReturn(List.of(
                 position(PositionSide.LONG), position(PositionSide.LONG), position(PositionSide.LONG)
         ));
 
@@ -152,6 +167,31 @@ class PaperPositionServiceTest {
 
         assertThat(opened).isNull();
         verify(repository, never()).save(any(PaperPositionEntity.class));
+    }
+
+
+    @Test
+    void watchlistSignalDoesNotOpenPaperPosition() {
+        EntrySignal signal = signal("SOLUSDT", EntryAction.ENTER_LONG, PositionSide.LONG, "10", RiskLevel.LOW);
+        signal.setSourceClassification(CoinClassification.WATCHLIST);
+
+        PaperPositionEntity opened = service.openPosition(signal);
+
+        assertThat(opened).isNull();
+        verify(repository, never()).save(any(PaperPositionEntity.class));
+    }
+
+    @Test
+    void openPositionsFromLatestSignalsFiltersWatchlistSignals() {
+        EntrySignal strongSignal = signal("BTCUSDT", EntryAction.ENTER_LONG, PositionSide.LONG, "10", RiskLevel.LOW);
+        EntrySignal watchlistSignal = signal("SOLUSDT", EntryAction.ENTER_LONG, PositionSide.LONG, "30", RiskLevel.LOW);
+        watchlistSignal.setSourceClassification(CoinClassification.WATCHLIST);
+        when(entrySignalService.generateSignalsFromLatestScan()).thenReturn(List.of(strongSignal, watchlistSignal));
+
+        List<PaperPositionEntity> opened = service.openPositionsFromLatestSignals();
+
+        assertThat(opened).hasSize(1);
+        verify(repository).save(any(PaperPositionEntity.class));
     }
 
     @Test
@@ -165,7 +205,10 @@ class PaperPositionServiceTest {
         List<PaperPositionEntity> opened = service.openPositions(signals);
 
         assertThat(opened).hasSize(2);
-        verify(repository, never()).existsBySymbolAndStatus("SOLUSDT", PaperPositionStatus.OPEN);
+        verify(repository, never()).existsBySymbolAndStatusIn("SOLUSDT", List.of(
+                PaperPositionStatus.OPEN,
+                PaperPositionStatus.PARTIALLY_CLOSED
+        ));
         verify(repository, Mockito.times(2)).save(any(PaperPositionEntity.class));
     }
 

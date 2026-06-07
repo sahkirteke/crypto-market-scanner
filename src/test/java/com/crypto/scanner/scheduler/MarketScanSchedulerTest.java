@@ -6,8 +6,11 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.List;
+
 import com.crypto.common.enums.ScanType;
 import com.crypto.domain.model.MarketScanResult;
+import com.crypto.paper.service.PaperPositionService;
 import com.crypto.scanner.config.ScannerProperties;
 import com.crypto.scanner.service.MarketScannerOrchestratorService;
 import com.crypto.scanner.service.ScanLockService;
@@ -18,6 +21,7 @@ class MarketScanSchedulerTest {
     private MarketScannerOrchestratorService marketScannerOrchestratorService;
     private ScanLockService scanLockService;
     private ScannerProperties scannerProperties;
+    private PaperPositionService paperPositionService;
     private MarketScanScheduler marketScanScheduler;
 
     @BeforeEach
@@ -25,10 +29,13 @@ class MarketScanSchedulerTest {
         marketScannerOrchestratorService = mock(MarketScannerOrchestratorService.class);
         scanLockService = mock(ScanLockService.class);
         scannerProperties = new ScannerProperties();
+        paperPositionService = mock(PaperPositionService.class);
+        when(paperPositionService.openPositionsFromLatestSignals()).thenReturn(List.of());
         marketScanScheduler = new MarketScanScheduler(
                 marketScannerOrchestratorService,
                 scanLockService,
-                scannerProperties);
+                scannerProperties,
+                paperPositionService);
     }
 
     @Test
@@ -50,6 +57,33 @@ class MarketScanSchedulerTest {
         marketScanScheduler.runFourHourScheduledScan();
 
         verify(marketScannerOrchestratorService).runAndPersist(ScanType.FOUR_HOUR);
+    }
+
+    @Test
+    void enabledSchedulerOpensPaperPositionsAfterScan() {
+        scannerProperties.getScheduler().setEnabled(true);
+        scannerProperties.getPaperAuto().setEnabled(true);
+        scannerProperties.getPaperAuto().setOpenAfterScan(true);
+        when(scanLockService.tryAcquire()).thenReturn(true);
+        when(marketScannerOrchestratorService.runAndPersist(ScanType.ONE_HOUR))
+                .thenReturn(MarketScanResult.builder().scanRunId(100L).build());
+
+        marketScanScheduler.runOneHourScheduledScan();
+
+        verify(paperPositionService).openPositionsFromLatestSignals();
+    }
+
+    @Test
+    void disabledPaperAutoDoesNotOpenPaperPositionsAfterScan() {
+        scannerProperties.getScheduler().setEnabled(true);
+        scannerProperties.getPaperAuto().setEnabled(false);
+        when(scanLockService.tryAcquire()).thenReturn(true);
+        when(marketScannerOrchestratorService.runAndPersist(ScanType.ONE_HOUR))
+                .thenReturn(MarketScanResult.builder().scanRunId(100L).build());
+
+        marketScanScheduler.runOneHourScheduledScan();
+
+        verify(paperPositionService, never()).openPositionsFromLatestSignals();
     }
 
     @Test
