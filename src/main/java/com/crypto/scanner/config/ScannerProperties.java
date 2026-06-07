@@ -24,6 +24,8 @@ public class ScannerProperties {
     private EntrySignal entrySignal = new EntrySignal();
     private Paper paper = new Paper();
     private PaperExit paperExit = new PaperExit();
+    private PaperRisk paperRisk = new PaperRisk();
+    private PaperCost paperCost = new PaperCost();
 
     @Getter
     @Setter
@@ -86,7 +88,7 @@ public class ScannerProperties {
         private Boolean enabled = true;
         private Integer maxCandidates = 10;
         private Integer minScore = 70;
-        private Boolean allowWatchlist = true;
+        private Boolean allowWatchlist = false;
         private Boolean allowNeutralWatchlist = false;
         private Boolean allowHighRisk = false;
         private Integer maxLongCandidates = 5;
@@ -99,7 +101,7 @@ public class ScannerProperties {
         private Boolean enabled = true;
         private Integer minEnterScore = 75;
         private Integer minStrongEnterScore = 80;
-        private Boolean allowWatchlistEntry = true;
+        private Boolean allowWatchlistEntry = false;
         private Boolean allowMediumRiskEntry = true;
         private Boolean allowHighRiskEntry = false;
         private BigDecimal maxSpreadPct = new BigDecimal("0.08");
@@ -124,6 +126,29 @@ public class ScannerProperties {
         private Boolean allowHighRisk = false;
     }
 
+
+    @Getter
+    @Setter
+    public static class PaperRisk {
+        private BigDecimal atrStopMultiplier = new BigDecimal("1.2");
+        private BigDecimal minStopDistancePct = new BigDecimal("0.007");
+        private BigDecimal maxStopDistancePct = new BigDecimal("0.018");
+        private BigDecimal tp1RMultiple = new BigDecimal("1.0");
+        private BigDecimal tp2RMultiple = new BigDecimal("2.0");
+        private BigDecimal tp1ClosePct = new BigDecimal("50");
+        private BigDecimal tp2ClosePct = new BigDecimal("25");
+        private BigDecimal trailingRemainingPct = new BigDecimal("25");
+        private BigDecimal feeBufferPct = new BigDecimal("0.0005");
+        private BigDecimal trailingAtrMultiplier = new BigDecimal("1.2");
+    }
+
+    @Getter
+    @Setter
+    public static class PaperCost {
+        private Integer leverage = 3;
+        private BigDecimal takerFeePct = new BigDecimal("0.0004");
+        private BigDecimal slippagePct = new BigDecimal("0.0005");
+    }
 
     @Getter
     @Setter

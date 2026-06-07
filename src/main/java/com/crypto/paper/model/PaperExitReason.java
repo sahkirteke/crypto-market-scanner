@@ -2,8 +2,14 @@ package com.crypto.paper.model;
 
 public enum PaperExitReason {
     TAKE_PROFIT,
+    PARTIAL_TP1,
+    PARTIAL_TP2,
     STOP_LOSS,
+    TRAILING_STOP,
     TIME_STOP,
+    SIGNAL_INVALIDATION,
+    MARKET_REGIME_EXIT,
+    OPPOSITE_SIGNAL_EXIT,
     MANUAL_CLOSE,
     DATA_ERROR,
     EXIT_DISABLED

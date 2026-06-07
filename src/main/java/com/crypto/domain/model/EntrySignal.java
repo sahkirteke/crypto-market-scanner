@@ -51,11 +51,16 @@ public class EntrySignal {
     private Integer entryPriorityScore;
     private Integer scannerScore;
     private MarketRegime marketRegime;
+    private String entryTrigger;
     private BigDecimal close1h;
+    private BigDecimal previousClose1h;
+    private BigDecimal previous1hHigh;
+    private BigDecimal previous1hLow;
     private BigDecimal ema20_1h;
     private BigDecimal macdHist_1h;
     private BigDecimal previousMacdHist_1h;
     private BigDecimal rsi14_1h;
     private BigDecimal previousRsi14_1h;
     private BigDecimal volumeRatio_1h;
+    private BigDecimal atr14_1h;
 }
