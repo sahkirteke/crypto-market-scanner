@@ -40,12 +40,16 @@ class PaperPositionQueryServiceTest {
 
     @Test
     void getOpenPositionsMapsOpenPositionsToResponses() {
-        List<PaperPositionEntity> positions = List.of(position(PaperPositionStatus.OPEN, PositionSide.LONG, "1.5", "2.0"));
+        PaperPositionEntity position = position(PaperPositionStatus.OPEN, PositionSide.LONG, "1.5", "2.0");
+        List<PaperPositionEntity> positions = List.of(position);
         List<PaperPositionResponse> responses = Collections.singletonList(null);
-        when(repository.findByStatusOrderByOpenedAtDesc(PaperPositionStatus.OPEN)).thenReturn(positions);
+        when(repository.findByStatusInOrderByOpenedAtDesc(List.of(
+                PaperPositionStatus.OPEN,
+                PaperPositionStatus.PARTIALLY_CLOSED
+        ))).thenReturn(positions);
         when(mapper.toResponseList(positions)).thenReturn(responses);
 
-        assertThat(service.getOpenPositions()).isSameAs(responses);
+        assertThat(service.getOpenPositions()).containsExactlyElementsOf(responses);
         verify(mapper).toResponseList(positions);
     }
 
