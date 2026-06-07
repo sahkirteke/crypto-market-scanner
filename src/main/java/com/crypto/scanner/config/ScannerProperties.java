@@ -20,6 +20,7 @@ public class ScannerProperties {
     private Scheduler scheduler = new Scheduler();
     private EntryCandidate entryCandidate = new EntryCandidate();
     private EntrySignal entrySignal = new EntrySignal();
+    private Paper paper = new Paper();
 
     @Getter
     @Setter
@@ -93,6 +94,20 @@ public class ScannerProperties {
         private BigDecimal minQuoteVolume24h = BigDecimal.valueOf(30_000_000L);
         private Boolean blockMarketChop = false;
         private Boolean requireVolumeConfirmed = false;
+    }
+
+    @Getter
+    @Setter
+    public static class Paper {
+        private Boolean enabled = true;
+        private BigDecimal defaultNotionalUsdt = BigDecimal.valueOf(100);
+        private Integer leverage = 3;
+        private Boolean allowMultipleOpenSameSymbol = false;
+        private Integer maxOpenPositions = 5;
+        private Integer maxOpenLongPositions = 3;
+        private Integer maxOpenShortPositions = 3;
+        private Boolean allowMediumRisk = true;
+        private Boolean allowHighRisk = false;
     }
 
     @Getter
