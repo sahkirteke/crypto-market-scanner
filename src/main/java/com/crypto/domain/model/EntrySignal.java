@@ -27,6 +27,9 @@ public class EntrySignal {
     private PositionSide side;
     private EntryAction action;
     private Integer score;
+    private BigDecimal baseEntryScore;
+    private BigDecimal bbScore;
+    private BigDecimal finalEntryScore;
     private Integer longScore;
     private Integer shortScore;
     private CoinClassification sourceClassification;
@@ -63,4 +66,15 @@ public class EntrySignal {
     private BigDecimal previousRsi14_1h;
     private BigDecimal volumeRatio_1h;
     private BigDecimal atr14_1h;
+    @Builder.Default
+    private List<String> bbReasons = new ArrayList<>();
+    private BigDecimal bbPercentB;
+    private BigDecimal bbWidth;
+    private BigDecimal bbUpper;
+    private BigDecimal bbMiddle;
+    private BigDecimal bbLower;
+    private Boolean bbUpperTouched;
+    private Boolean bbLowerTouched;
+    private Boolean bbUpperClosedOutside;
+    private Boolean bbLowerClosedOutside;
 }

@@ -67,6 +67,39 @@ public class PaperPositionEntity {
     @Column(name = "entry_score")
     private Integer entryScore;
 
+    @Column(name = "entry_bb_score", precision = 20, scale = 8)
+    private BigDecimal entryBbScore;
+
+    @Column(name = "entry_bb_percent_b", precision = 20, scale = 8)
+    private BigDecimal entryBbPercentB;
+
+    @Column(name = "entry_bb_width", precision = 20, scale = 8)
+    private BigDecimal entryBbWidth;
+
+    @Column(name = "entry_bb_upper", precision = 30, scale = 12)
+    private BigDecimal entryBbUpper;
+
+    @Column(name = "entry_bb_middle", precision = 30, scale = 12)
+    private BigDecimal entryBbMiddle;
+
+    @Column(name = "entry_bb_lower", precision = 30, scale = 12)
+    private BigDecimal entryBbLower;
+
+    @Column(name = "entry_bb_upper_touched")
+    private Boolean entryBbUpperTouched;
+
+    @Column(name = "entry_bb_lower_touched")
+    private Boolean entryBbLowerTouched;
+
+    @Column(name = "entry_bb_upper_closed_outside")
+    private Boolean entryBbUpperClosedOutside;
+
+    @Column(name = "entry_bb_lower_closed_outside")
+    private Boolean entryBbLowerClosedOutside;
+
+    @Column(name = "entry_bb_reasons_json", columnDefinition = "TEXT")
+    private String entryBbReasonsJson;
+
     @Column(name = "long_score")
     private Integer longScore;
 

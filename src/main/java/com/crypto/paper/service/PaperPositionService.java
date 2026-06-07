@@ -165,6 +165,17 @@ public class PaperPositionService {
                 .leverage(intValue(costConfig.getLeverage(), intValue(config.getLeverage(), 3)))
                 .entryScore(signal.getScore())
                 .entrySignalScore(signal.getScore())
+                .entryBbScore(signal.getBbScore())
+                .entryBbPercentB(signal.getBbPercentB())
+                .entryBbWidth(signal.getBbWidth())
+                .entryBbUpper(signal.getBbUpper())
+                .entryBbMiddle(signal.getBbMiddle())
+                .entryBbLower(signal.getBbLower())
+                .entryBbUpperTouched(signal.getBbUpperTouched())
+                .entryBbLowerTouched(signal.getBbLowerTouched())
+                .entryBbUpperClosedOutside(signal.getBbUpperClosedOutside())
+                .entryBbLowerClosedOutside(signal.getBbLowerClosedOutside())
+                .entryBbReasonsJson(jsonTextMapper.toJson(signal.getBbReasons()))
                 .longScore(signal.getLongScore())
                 .shortScore(signal.getShortScore())
                 .sourceClassification(signal.getSourceClassification())
@@ -314,11 +325,44 @@ public class PaperPositionService {
                     .adjustedPrice(position.getEntryPriceAdjusted())
                     .leverage(position.getLeverage())
                     .reason("PAPER_POSITION_OPENED")
+                    .detailsJson(openedDetailsJson(position))
                     .build());
         }
         if (jsonlDecisionLogService != null) {
-            jsonlDecisionLogService.logPaper(Map.of("event", "PAPER_POSITION_OPENED", "time", position.getOpenedAt(), "symbol", position.getSymbol(), "side", position.getSide().name(), "positionId", position.getId() == null ? "" : position.getId(), "entryPrice", position.getEntryPrice()));
+            jsonlDecisionLogService.logPaper(openedDetails(position));
         }
+    }
+
+    private String openedDetailsJson(PaperPositionEntity position) {
+        return jsonTextMapper.toJson(openedDetails(position));
+    }
+
+    private Map<String, Object> openedDetails(PaperPositionEntity position) {
+        return Map.ofEntries(
+                Map.entry("event", "PAPER_POSITION_OPENED"),
+                Map.entry("time", position.getOpenedAt()),
+                Map.entry("symbol", position.getSymbol()),
+                Map.entry("side", position.getSide().name()),
+                Map.entry("positionId", position.getId() == null ? "" : position.getId()),
+                Map.entry("entryPrice", position.getEntryPrice()),
+                Map.entry("baseEntryScore", nullToEmpty(position.getEntryScore() == null || position.getEntryBbScore() == null ? position.getEntryScore() : BigDecimal.valueOf(position.getEntryScore()).subtract(position.getEntryBbScore()))),
+                Map.entry("bbScore", nullToEmpty(position.getEntryBbScore())),
+                Map.entry("finalEntryScore", nullToEmpty(position.getEntryScore())),
+                Map.entry("bbReasons", jsonTextMapper.toStringList(position.getEntryBbReasonsJson())),
+                Map.entry("bbPercentB", nullToEmpty(position.getEntryBbPercentB())),
+                Map.entry("bbWidth", nullToEmpty(position.getEntryBbWidth())),
+                Map.entry("bbUpper", nullToEmpty(position.getEntryBbUpper())),
+                Map.entry("bbMiddle", nullToEmpty(position.getEntryBbMiddle())),
+                Map.entry("bbLower", nullToEmpty(position.getEntryBbLower())),
+                Map.entry("bbUpperTouched", nullToEmpty(position.getEntryBbUpperTouched())),
+                Map.entry("bbLowerTouched", nullToEmpty(position.getEntryBbLowerTouched())),
+                Map.entry("bbUpperClosedOutside", nullToEmpty(position.getEntryBbUpperClosedOutside())),
+                Map.entry("bbLowerClosedOutside", nullToEmpty(position.getEntryBbLowerClosedOutside()))
+        );
+    }
+
+    private Object nullToEmpty(Object value) {
+        return value == null ? "" : value;
     }
 
     private void markCandidateUsed(String symbol) {

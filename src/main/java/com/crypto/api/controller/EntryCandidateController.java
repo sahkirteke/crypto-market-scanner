@@ -64,6 +64,9 @@ public class EntryCandidateController {
                 signal.getSide(),
                 signal.getAction(),
                 signal.getScore(),
+                signal.getBaseEntryScore(),
+                signal.getBbScore(),
+                signal.getFinalEntryScore(),
                 signal.getLongScore(),
                 signal.getShortScore(),
                 signal.getSourceClassification(),
@@ -79,6 +82,7 @@ public class EntryCandidateController {
                 signal.getMarketBreadthPct(),
                 signal.getReasons(),
                 signal.getWarnings(),
+                signal.getBbReasons(),
                 signal.getSignalReason(),
                 signal.getBlockReason(),
                 IstanbulTimeUtil.format(signal.getSignalTime()),
@@ -92,7 +96,16 @@ public class EntryCandidateController {
                 signal.getPreviousRsi14_1h(),
                 signal.getMacdHist_1h(),
                 signal.getPreviousMacdHist_1h(),
-                signal.getVolumeRatio_1h()
+                signal.getVolumeRatio_1h(),
+                signal.getBbPercentB(),
+                signal.getBbWidth(),
+                signal.getBbUpper(),
+                signal.getBbMiddle(),
+                signal.getBbLower(),
+                signal.getBbUpperTouched(),
+                signal.getBbLowerTouched(),
+                signal.getBbUpperClosedOutside(),
+                signal.getBbLowerClosedOutside()
         );
     }
 
