@@ -3,6 +3,7 @@ package com.crypto.scanner.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -138,7 +139,8 @@ class MarketScannerServiceTest {
 
         MarketScanResult result = marketScannerService.runScan(ScanType.FOUR_HOUR);
 
-        assertThat(result.getWatchlistCount()).isEqualTo(4);
+        assertThat(result.getWatchlistCount()).isEqualTo(2);
+        assertThat(finalListedTotal(result)).isEqualTo(result.getTotalSymbols());
         verify(klineService).loadForSymbol("BTCUSDT");
         verify(klineService).loadForSymbol("ETHUSDT");
     }
@@ -190,11 +192,101 @@ class MarketScannerServiceTest {
         assertThat(result.getEliminated()).extracting(CoinScanResult::getSymbol).containsExactly("AVAXUSDT", "XRPUSDT");
     }
 
+    @Test
+    void klineNotReadyPassedSymbolIsIncludedInEliminatedResults() {
+        KlineBundle solNotReady = notReadyBundle("SOLUSDT", EliminationReason.DATA_NOT_READY);
+        stubBaseFlow(
+                List.of(symbol("BTCUSDT"), symbol("ETHUSDT"), symbol("SOLUSDT"), symbol("XRPUSDT")),
+                List.of(symbol("BTCUSDT"), symbol("ETHUSDT"), symbol("SOLUSDT")),
+                List.of(eliminatedDecision("XRPUSDT", EliminationReason.LOW_VOLUME)),
+                List.of(readyBundle("BTCUSDT"), readyBundle("ETHUSDT")),
+                List.of(solNotReady),
+                List.of(readyPair("BTCUSDT"), readyPair("ETHUSDT")),
+                List.of(scored("BTCUSDT", CoinClassification.STRONG_LONG, 90),
+                        scored("ETHUSDT", CoinClassification.WATCHLIST, 55)));
+
+        MarketScanResult result = marketScannerService.runScan(ScanType.FOUR_HOUR);
+
+        assertThat(result.getStrongLongCount() + result.getWatchlistCount()).isEqualTo(2);
+        assertThat(result.getEliminated()).extracting(CoinScanResult::getSymbol).contains("SOLUSDT", "XRPUSDT");
+        assertThat(result.getEliminated())
+                .filteredOn(eliminated -> "SOLUSDT".equals(eliminated.getSymbol()))
+                .first()
+                .satisfies(eliminated -> assertThat(eliminated.getEliminatedReason())
+                        .isEqualTo(EliminationReason.DATA_NOT_READY));
+        assertThat(finalListedTotal(result)).isEqualTo(result.getTotalSymbols());
+    }
+
+    @Test
+    void indicatorExceptionDoesNotFailScanAndAddsEliminatedResult() {
+        KlineBundle solReady = readyBundle("SOLUSDT");
+        stubBaseFlow(
+                List.of(symbol("BTCUSDT"), symbol("ETHUSDT"), symbol("SOLUSDT"), symbol("XRPUSDT")),
+                List.of(symbol("BTCUSDT"), symbol("ETHUSDT"), symbol("SOLUSDT")),
+                List.of(eliminatedDecision("XRPUSDT", EliminationReason.LOW_VOLUME)),
+                List.of(readyBundle("BTCUSDT"), readyBundle("ETHUSDT"), solReady),
+                List.of(),
+                List.of(readyPair("BTCUSDT"), readyPair("ETHUSDT"), readyPair("SOLUSDT")),
+                List.of(scored("BTCUSDT", CoinClassification.STRONG_LONG, 90),
+                        scored("ETHUSDT", CoinClassification.WATCHLIST, 55)));
+        when(indicatorService.calculatePair(solReady)).thenThrow(new IllegalStateException("indicator failed"));
+
+        MarketScanResult result = marketScannerService.runScan(ScanType.FOUR_HOUR);
+
+        assertThat(result.getEliminated()).extracting(CoinScanResult::getSymbol).contains("SOLUSDT", "XRPUSDT");
+        assertThat(result.getEliminated())
+                .filteredOn(eliminated -> "SOLUSDT".equals(eliminated.getSymbol()))
+                .first()
+                .satisfies(eliminated -> {
+                    assertThat(eliminated.getEliminatedReason()).isIn(
+                            EliminationReason.DATA_NOT_READY, EliminationReason.DATA_ERROR);
+                    assertThat(eliminated.getReasons()).contains(ReasonTag.DATA_NOT_READY);
+                });
+        assertThat(finalListedTotal(result)).isEqualTo(result.getTotalSymbols());
+    }
+
+    @Test
+    void scoringExceptionDoesNotFailScanAndAddsEliminatedResult() {
+        stubBaseFlow(
+                List.of(symbol("BTCUSDT"), symbol("ETHUSDT"), symbol("SOLUSDT"), symbol("XRPUSDT")),
+                List.of(symbol("BTCUSDT"), symbol("ETHUSDT"), symbol("SOLUSDT")),
+                List.of(eliminatedDecision("XRPUSDT", EliminationReason.LOW_VOLUME)),
+                List.of(readyBundle("BTCUSDT"), readyBundle("ETHUSDT"), readyBundle("SOLUSDT")),
+                List.of(),
+                List.of(readyPair("BTCUSDT"), readyPair("ETHUSDT"), readyPair("SOLUSDT")),
+                List.of(scored("BTCUSDT", CoinClassification.STRONG_LONG, 90),
+                        scored("ETHUSDT", CoinClassification.WATCHLIST, 55)));
+        when(coinScoringService.score(argThat(input -> input != null && "SOLUSDT".equals(input.getSymbol()))))
+                .thenThrow(new IllegalStateException("scoring failed"));
+
+        MarketScanResult result = marketScannerService.runScan(ScanType.FOUR_HOUR);
+
+        assertThat(result.getEliminated()).extracting(CoinScanResult::getSymbol).contains("SOLUSDT", "XRPUSDT");
+        assertThat(result.getEliminated())
+                .filteredOn(eliminated -> "SOLUSDT".equals(eliminated.getSymbol()))
+                .first()
+                .satisfies(eliminated -> assertThat(eliminated.getEliminatedReason())
+                        .isEqualTo(EliminationReason.DATA_ERROR));
+        assertThat(finalListedTotal(result)).isEqualTo(result.getTotalSymbols());
+    }
+
     private void stubBaseFlow(
             List<SymbolInfo> tradableSymbols,
             List<SymbolInfo> passedSymbols,
             List<FilterDecision> eliminatedDecisions,
             List<KlineBundle> readyBundles,
+            List<TechnicalSnapshotPair> technicalPairs,
+            List<CoinScanResult> scoredResults
+    ) {
+        stubBaseFlow(tradableSymbols, passedSymbols, eliminatedDecisions, readyBundles, List.of(), technicalPairs, scoredResults);
+    }
+
+    private void stubBaseFlow(
+            List<SymbolInfo> tradableSymbols,
+            List<SymbolInfo> passedSymbols,
+            List<FilterDecision> eliminatedDecisions,
+            List<KlineBundle> readyBundles,
+            List<KlineBundle> notReadyBundles,
             List<TechnicalSnapshotPair> technicalPairs,
             List<CoinScanResult> scoredResults
     ) {
@@ -210,10 +302,10 @@ class MarketScannerServiceTest {
                 .build());
         when(klineService.loadForSymbols(passedSymbols)).thenReturn(KlineLoadResult.builder()
                 .readyBundles(readyBundles)
-                .notReadyBundles(List.of())
-                .totalCount(readyBundles.size())
+                .notReadyBundles(notReadyBundles)
+                .totalCount(readyBundles.size() + notReadyBundles.size())
                 .readyCount(readyBundles.size())
-                .notReadyCount(0)
+                .notReadyCount(notReadyBundles.size())
                 .build());
         for (int i = 0; i < readyBundles.size(); i++) {
             when(indicatorService.calculatePair(readyBundles.get(i))).thenReturn(technicalPairs.get(i));
@@ -281,6 +373,22 @@ class MarketScannerServiceTest {
 
     private KlineBundle readyBundle(String symbol) {
         return KlineBundle.builder().symbol(symbol).ready(true).build();
+    }
+
+    private KlineBundle notReadyBundle(String symbol, EliminationReason reason) {
+        return KlineBundle.builder()
+                .symbol(symbol)
+                .ready(false)
+                .eliminatedReason(reason)
+                .reasons(List.of(ReasonTag.DATA_NOT_READY))
+                .build();
+    }
+
+    private int finalListedTotal(MarketScanResult result) {
+        return result.getStrongLongCount()
+                + result.getStrongShortCount()
+                + result.getWatchlistCount()
+                + result.getEliminatedCount();
     }
 
     private TechnicalSnapshotPair readyPair(String symbol) {
