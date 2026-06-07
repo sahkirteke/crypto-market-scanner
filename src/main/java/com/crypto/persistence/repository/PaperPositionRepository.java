@@ -3,6 +3,7 @@ package com.crypto.persistence.repository;
 import com.crypto.common.enums.PositionSide;
 import com.crypto.paper.model.PaperPositionStatus;
 import com.crypto.persistence.entity.PaperPositionEntity;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -16,7 +17,21 @@ public interface PaperPositionRepository extends JpaRepository<PaperPositionEnti
 
     Page<PaperPositionEntity> findByStatusOrderByOpenedAtDesc(PaperPositionStatus status, Pageable pageable);
 
+    List<PaperPositionEntity> findByStatusOrderByClosedAtDesc(PaperPositionStatus status);
+
     Page<PaperPositionEntity> findByStatusOrderByClosedAtDesc(PaperPositionStatus status, Pageable pageable);
+
+    List<PaperPositionEntity> findByStatusAndClosedAtBetweenOrderByClosedAtDesc(
+            PaperPositionStatus status,
+            Instant start,
+            Instant end
+    );
+
+    Page<PaperPositionEntity> findByStatusAndSymbolOrderByClosedAtDesc(
+            PaperPositionStatus status,
+            String symbol,
+            Pageable pageable
+    );
 
     Optional<PaperPositionEntity> findFirstBySymbolAndStatusOrderByOpenedAtDesc(
             String symbol,
