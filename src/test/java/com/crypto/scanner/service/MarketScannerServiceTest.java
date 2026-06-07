@@ -5,7 +5,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -35,7 +37,6 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 
 class MarketScannerServiceTest {
     private SymbolUniverseService symbolUniverseService;
@@ -267,6 +268,7 @@ class MarketScannerServiceTest {
                 .first()
                 .satisfies(eliminated -> assertThat(eliminated.getEliminatedReason())
                         .isEqualTo(EliminationReason.DATA_ERROR));
+        verify(coinScoringService, never()).score(isNull());
         assertThat(finalListedTotal(result)).isEqualTo(result.getTotalSymbols());
     }
 
@@ -322,9 +324,9 @@ class MarketScannerServiceTest {
                 "BTCUSDT", FuturesSnapshot.builder().symbol("BTCUSDT").build(),
                 "ETHUSDT", FuturesSnapshot.builder().symbol("ETHUSDT").build()));
 
-        ArgumentCaptor<CoinScoringInput> inputCaptor = ArgumentCaptor.forClass(CoinScoringInput.class);
-        when(coinScoringService.score(inputCaptor.capture())).thenAnswer(invocation -> {
-            String symbol = invocation.getArgument(0, CoinScoringInput.class).getSymbol();
+        when(coinScoringService.score(argThat(input -> input != null))).thenAnswer(invocation -> {
+            CoinScoringInput input = invocation.getArgument(0, CoinScoringInput.class);
+            String symbol = input.getSymbol();
             return scoredResults.stream()
                     .filter(result -> result.getSymbol().equals(symbol))
                     .findFirst()
