@@ -52,7 +52,7 @@ spring:
     activate:
       on-profile: "db | manual-scanner-db"
   datasource:
-    url: ${SUPABASE_DB_URL:jdbc:postgresql://localhost:5432/postgres}
+    url: ${SUPABASE_DB_URL:jdbc:postgresql://aws-1-eu-central-1.pooler.supabase.com:6543/postgres?prepareThreshold=0&sslmode=require}
     username: ${SUPABASE_DB_USERNAME:postgres}
     password: ${SUPABASE_DB_PASSWORD:}
     hikari:
