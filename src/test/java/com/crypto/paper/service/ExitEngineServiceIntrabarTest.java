@@ -156,15 +156,25 @@ class ExitEngineServiceIntrabarTest {
         when(events.save(any(PaperPositionEventEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         ExitEngineService service = service(events, null);
+        PaperPositionEntity position = position(PositionSide.LONG);
 
-        service.evaluatePositionWithCandle(position(PositionSide.LONG), candle("102", "100", "101"), "5m");
+        service.evaluatePositionWithCandle(position, candle("102", "100", "101"), "5m");
 
-        verify(events, atLeastOnce()).save(any(PaperPositionEventEntity.class));
         ArgumentCaptor<PaperPositionEventEntity> captor = ArgumentCaptor.forClass(PaperPositionEventEntity.class);
         verify(events, atLeastOnce()).save(captor.capture());
+
+        PaperPositionEventEntity event = captor.getAllValues().get(0);
+        assertThat(event).isNotNull();
+        assertThat(event.getPosition()).isEqualTo(position);
+        assertThat(event.getEventType()).isNotNull();
         assertThat(captor.getAllValues()).extracting(PaperPositionEventEntity::getEventType)
                 .contains(PaperPositionEventType.PARTIAL_TP1);
-        assertThat(captor.getAllValues().get(0).getDetailsJson()).contains("\"interval\":\"5m\"");
+        assertThat(captor.getAllValues())
+                .filteredOn(capturedEvent -> capturedEvent.getEventType() == PaperPositionEventType.PARTIAL_TP1)
+                .first()
+                .extracting(PaperPositionEventEntity::getDetailsJson)
+                .asString()
+                .contains("\"interval\":\"5m\"");
     }
 
     @Test
@@ -184,6 +194,8 @@ class ExitEngineServiceIntrabarTest {
     private ExitEngineService service(PaperPositionEventRepository eventRepository, JsonlDecisionLogService jsonlDecisionLogService) {
         ExitEngineService service = new ExitEngineService(mock(PaperPositionRepository.class), mock(BinanceFuturesClient.class), properties());
         if (eventRepository != null) {
+            when(eventRepository.save(any(PaperPositionEventEntity.class)))
+                    .thenAnswer(invocation -> invocation.getArgument(0));
             ReflectionTestUtils.setField(service, "eventRepository", eventRepository);
         }
         if (jsonlDecisionLogService != null) {
