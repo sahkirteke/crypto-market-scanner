@@ -19,6 +19,7 @@ public class ScannerProperties {
     private Scoring scoring = new Scoring();
     private Scheduler scheduler = new Scheduler();
     private EntryCandidate entryCandidate = new EntryCandidate();
+    private EntrySignal entrySignal = new EntrySignal();
 
     @Getter
     @Setter
@@ -75,6 +76,23 @@ public class ScannerProperties {
         private Boolean allowHighRisk = false;
         private Integer maxLongCandidates = 5;
         private Integer maxShortCandidates = 5;
+    }
+
+    @Getter
+    @Setter
+    public static class EntrySignal {
+        private Boolean enabled = true;
+        private Integer minEnterScore = 75;
+        private Integer minStrongEnterScore = 80;
+        private Boolean allowWatchlistEntry = true;
+        private Boolean allowMediumRiskEntry = true;
+        private Boolean allowHighRiskEntry = false;
+        private BigDecimal maxSpreadPct = new BigDecimal("0.08");
+        private BigDecimal maxLong24hChangePct = BigDecimal.valueOf(18);
+        private BigDecimal maxShort24hDumpPct = BigDecimal.valueOf(-18);
+        private BigDecimal minQuoteVolume24h = BigDecimal.valueOf(30_000_000L);
+        private Boolean blockMarketChop = false;
+        private Boolean requireVolumeConfirmed = false;
     }
 
     @Getter
