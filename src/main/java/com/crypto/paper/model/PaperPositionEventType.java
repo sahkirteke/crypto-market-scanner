@@ -1,0 +1,18 @@
+package com.crypto.paper.model;
+
+public enum PaperPositionEventType {
+    OPENED,
+    ENTRY_SIGNAL_EVALUATED,
+    PARTIAL_TP1,
+    PARTIAL_TP2,
+    TAKE_PROFIT,
+    STOP_UPDATED,
+    TRAILING_UPDATED,
+    TIME_STOP,
+    SIGNAL_INVALIDATION,
+    MARKET_REGIME_EXIT,
+    OPPOSITE_SIGNAL_EXIT,
+    TRAILING_STOP,
+    STOP_LOSS,
+    CLOSED
+}

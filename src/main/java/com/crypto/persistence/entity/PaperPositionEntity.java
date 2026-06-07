@@ -115,6 +115,85 @@ public class PaperPositionEntity {
     private Instant openedAt;
 
 
+    @Column(name = "bid_price", precision = 30, scale = 12)
+    private BigDecimal bidPrice;
+
+    @Column(name = "ask_price", precision = 30, scale = 12)
+    private BigDecimal askPrice;
+
+    @Column(name = "mid_price", precision = 30, scale = 12)
+    private BigDecimal midPrice;
+
+    @Column(name = "initial_stop", precision = 30, scale = 12)
+    private BigDecimal initialStop;
+
+    @Column(name = "current_stop", precision = 30, scale = 12)
+    private BigDecimal currentStop;
+
+    @Column(name = "risk_per_unit", precision = 30, scale = 12)
+    private BigDecimal riskPerUnit;
+
+    @Column(name = "tp1", precision = 30, scale = 12)
+    private BigDecimal tp1;
+
+    @Column(name = "tp2", precision = 30, scale = 12)
+    private BigDecimal tp2;
+
+    @Column(name = "tp1_hit")
+    private Boolean tp1Hit;
+
+    @Column(name = "tp2_hit")
+    private Boolean tp2Hit;
+
+    @Column(name = "trailing_active")
+    private Boolean trailingActive;
+
+    @Column(name = "trailing_activated_at_bar_close_time")
+    private Instant trailingActivatedAtBarCloseTime;
+
+    @Column(name = "remaining_position_pct", precision = 20, scale = 8)
+    private BigDecimal remainingPositionPct;
+
+    @Column(name = "highest_price_since_entry", precision = 30, scale = 12)
+    private BigDecimal highestPriceSinceEntry;
+
+    @Column(name = "lowest_price_since_entry", precision = 30, scale = 12)
+    private BigDecimal lowestPriceSinceEntry;
+
+    @Column(name = "bars_in_position")
+    private Integer barsInPosition;
+
+    @Column(name = "entry_price_adjusted", precision = 30, scale = 12)
+    private BigDecimal entryPriceAdjusted;
+
+    @Column(name = "exit_price_adjusted", precision = 30, scale = 12)
+    private BigDecimal exitPriceAdjusted;
+
+    @Column(name = "raw_realized_pnl_pct", precision = 20, scale = 8)
+    private BigDecimal rawRealizedPnlPct;
+
+    @Column(name = "net_realized_pnl_pct", precision = 20, scale = 8)
+    private BigDecimal netRealizedPnlPct;
+
+    @Column(name = "leveraged_net_realized_pnl_pct", precision = 20, scale = 8)
+    private BigDecimal leveragedNetRealizedPnlPct;
+
+    @Column(name = "raw_unrealized_pnl_pct", precision = 20, scale = 8)
+    private BigDecimal rawUnrealizedPnlPct;
+
+    @Column(name = "net_unrealized_pnl_pct", precision = 20, scale = 8)
+    private BigDecimal netUnrealizedPnlPct;
+
+    @Column(name = "leveraged_net_unrealized_pnl_pct", precision = 20, scale = 8)
+    private BigDecimal leveragedNetUnrealizedPnlPct;
+
+    @Column(name = "total_fee_pct", precision = 20, scale = 8)
+    private BigDecimal totalFeePct;
+
+    @Column(name = "total_slippage_pct", precision = 20, scale = 8)
+    private BigDecimal totalSlippagePct;
+
+
     @Column(name = "current_price", precision = 30, scale = 12)
     private BigDecimal currentPrice;
 

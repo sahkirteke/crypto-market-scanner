@@ -31,7 +31,7 @@ public class PaperPositionQueryService {
 
     public List<PaperPositionResponse> getOpenPositions() {
         List<PaperPositionResponse> responses = paperPositionApiMapper.toResponseList(
-                paperPositionRepository.findByStatusOrderByOpenedAtDesc(PaperPositionStatus.OPEN)
+                paperPositionRepository.findByStatusInOrderByOpenedAtDesc(List.of(PaperPositionStatus.OPEN, PaperPositionStatus.PARTIALLY_CLOSED))
         );
         log.info("PAPER_POSITIONS_OPEN_READY count={}", responses.size());
         return responses;
@@ -62,7 +62,7 @@ public class PaperPositionQueryService {
     }
 
     public PaperTradeSummaryResponse getSummary() {
-        long openCount = paperPositionRepository.countByStatus(PaperPositionStatus.OPEN);
+        long openCount = paperPositionRepository.countByStatus(PaperPositionStatus.OPEN) + paperPositionRepository.countByStatus(PaperPositionStatus.PARTIALLY_CLOSED);
         long closedCount = paperPositionRepository.countByStatus(PaperPositionStatus.CLOSED);
         long openLongCount = paperPositionRepository.countByStatusAndSide(PaperPositionStatus.OPEN, PositionSide.LONG);
         long openShortCount = paperPositionRepository.countByStatusAndSide(PaperPositionStatus.OPEN, PositionSide.SHORT);

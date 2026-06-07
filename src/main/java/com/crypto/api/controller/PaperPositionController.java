@@ -2,12 +2,14 @@ package com.crypto.api.controller;
 
 import com.crypto.api.dto.ManualClosePaperPositionRequest;
 import com.crypto.api.dto.PaperPositionResponse;
+import com.crypto.api.dto.PaperPositionEventResponse;
 import com.crypto.api.dto.PaperTradeSummaryResponse;
 import com.crypto.api.mapper.PaperPositionApiMapper;
 import com.crypto.paper.service.ExitEngineService;
 import com.crypto.paper.service.PaperPositionManualCloseService;
 import com.crypto.paper.service.PaperPositionQueryService;
 import com.crypto.paper.service.PaperPositionService;
+import com.crypto.persistence.repository.PaperPositionEventRepository;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +31,7 @@ public class PaperPositionController {
     private final PaperPositionQueryService paperPositionQueryService;
     private final PaperPositionManualCloseService paperPositionManualCloseService;
     private final PaperPositionApiMapper paperPositionApiMapper;
+    private final PaperPositionEventRepository paperPositionEventRepository;
 
     @GetMapping("/positions/open")
     public List<PaperPositionResponse> getOpenPositions() {
@@ -46,6 +49,31 @@ public class PaperPositionController {
     public PaperPositionResponse getPositionDetail(@PathVariable Long id) {
         log.info("PAPER_API_POSITION_DETAIL_REQUEST id={}", id);
         return paperPositionQueryService.getPositionDetail(id);
+    }
+
+
+    @GetMapping("/positions/{id}/events")
+    public List<PaperPositionEventResponse> getPositionEvents(@PathVariable Long id) {
+        log.info("PAPER_API_POSITION_EVENTS_REQUEST id={}", id);
+        return paperPositionEventRepository.findByPosition_IdOrderByEventTimeUtcAsc(id).stream()
+                .map(event -> new PaperPositionEventResponse(
+                        event.getId(),
+                        event.getPosition() == null ? null : event.getPosition().getId(),
+                        event.getEventTimeUtc(),
+                        event.getEventType(),
+                        event.getPrice(),
+                        event.getAdjustedPrice(),
+                        event.getPositionPctClosed(),
+                        event.getRawPnlPct(),
+                        event.getNetPnlPct(),
+                        event.getLeveragedNetPnlPct(),
+                        event.getFeePct(),
+                        event.getSlippagePct(),
+                        event.getLeverage(),
+                        event.getReason(),
+                        event.getDetailsJson(),
+                        event.getCreatedAt()))
+                .toList();
     }
 
     @GetMapping("/positions/symbol/{symbol}")

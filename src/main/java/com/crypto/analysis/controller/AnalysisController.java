@@ -2,12 +2,14 @@ package com.crypto.analysis.controller;
 
 import com.crypto.analysis.dto.StrategyAnalysisResponse;
 import com.crypto.analysis.service.ResultAnalyzerService;
+import com.crypto.analysis.service.ForwardMetricsService;
 import com.crypto.api.exception.BadRequestException;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Slf4j
 public class AnalysisController {
     private final ResultAnalyzerService resultAnalyzerService;
+    private final ForwardMetricsService forwardMetricsService;
 
     @GetMapping("/summary")
     public StrategyAnalysisResponse getSummary(
@@ -36,6 +39,12 @@ public class AnalysisController {
             return resultAnalyzerService.analyzeLastClosedTrades(limit);
         }
         return resultAnalyzerService.analyzeAllClosedTrades();
+    }
+
+    @PostMapping("/calculate-forward-metrics")
+    public java.util.Map<String, Object> calculateForwardMetrics() {
+        var saved = forwardMetricsService.calculateMissingMetrics();
+        return java.util.Map.of("calculated", saved.size());
     }
 
     @GetMapping("/last")

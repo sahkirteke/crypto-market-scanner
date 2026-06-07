@@ -65,16 +65,14 @@ class EntryCandidateServiceTest {
     }
 
     @Test
-    void watchlistWithShortDirectionBecomesShortCandidateWhenWatchlistAllowed() {
+    void watchlistWithShortDirectionDoesNotBecomeCandidate() {
         scannerProperties.getEntryCandidate().setAllowWatchlist(true);
 
         List<EntryCandidate> candidates = entryCandidateService.selectCandidates(scanResult(List.of(), List.of(), List.of(
                 coin("SOLUSDT", CoinClassification.WATCHLIST, DirectionBias.SHORT, 75, RiskLevel.LOW)
         )));
 
-        assertThat(candidates).hasSize(1);
-        assertThat(candidates.getFirst().getSide()).isEqualTo(PositionSide.SHORT);
-        assertThat(candidates.getFirst().getCandidateReason()).isEqualTo("WATCHLIST_SHORT_CANDIDATE");
+        assertThat(candidates).isEmpty();
     }
 
     @Test

@@ -80,7 +80,7 @@ scanner:
     enabled: true
     max-candidates: 10
     min-score: 70
-    allow-watchlist: true
+    allow-watchlist: false
     allow-neutral-watchlist: false
     allow-high-risk: false
     max-long-candidates: 5
@@ -90,7 +90,7 @@ scanner:
     enabled: true
     min-enter-score: 75
     min-strong-enter-score: 80
-    allow-watchlist-entry: true
+    allow-watchlist-entry: false
     allow-medium-risk-entry: true
     allow-high-risk-entry: false
     max-spread-pct: 0.08
@@ -110,6 +110,23 @@ scanner:
     max-open-short-positions: 3
     allow-medium-risk: true
     allow-high-risk: false
+
+  paper-risk:
+    atr-stop-multiplier: 1.2
+    min-stop-distance-pct: 0.007
+    max-stop-distance-pct: 0.018
+    tp1-r-multiple: 1.0
+    tp2-r-multiple: 2.0
+    tp1-close-pct: 50
+    tp2-close-pct: 25
+    trailing-remaining-pct: 25
+    fee-buffer-pct: 0.0005
+    trailing-atr-multiplier: 1.2
+
+  paper-cost:
+    leverage: 3
+    taker-fee-pct: 0.0004
+    slippage-pct: 0.0005
 
   paper-exit:
     enabled: true

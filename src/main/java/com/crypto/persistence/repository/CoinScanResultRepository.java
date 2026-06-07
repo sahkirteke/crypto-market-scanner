@@ -3,6 +3,7 @@ package com.crypto.persistence.repository;
 import com.crypto.common.enums.CoinClassification;
 import com.crypto.persistence.entity.CoinScanResultEntity;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -26,4 +27,6 @@ public interface CoinScanResultRepository extends JpaRepository<CoinScanResultEn
     Page<CoinScanResultEntity> findBySymbolOrderByCreatedAtDesc(String symbol, Pageable pageable);
 
     List<CoinScanResultEntity> findTop20BySymbolOrderByCreatedAtDesc(String symbol);
+
+    Optional<CoinScanResultEntity> findFirstByScanRun_IdAndSymbolOrderByCreatedAtDesc(Long scanRunId, String symbol);
 }

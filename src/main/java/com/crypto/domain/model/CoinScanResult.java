@@ -5,6 +5,7 @@ import com.crypto.common.enums.DirectionBias;
 import com.crypto.common.enums.EliminationReason;
 import com.crypto.common.enums.ReasonTag;
 import com.crypto.common.enums.RiskLevel;
+import com.crypto.common.enums.MarketRegime;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -36,6 +37,7 @@ public class CoinScanResult {
     private BigDecimal fundingRate;
     private BigDecimal openInterest;
     private BigDecimal marketBreadthPct;
+    private MarketRegime marketRegime;
     private EliminationReason eliminatedReason;
     @Builder.Default
     private List<ReasonTag> reasons = new ArrayList<>();

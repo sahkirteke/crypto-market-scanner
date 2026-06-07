@@ -4,6 +4,14 @@ import com.crypto.common.enums.CoinClassification;
 import com.crypto.common.enums.EntryAction;
 import com.crypto.common.enums.PositionSide;
 import com.crypto.common.enums.RiskLevel;
+import com.crypto.binance.client.BinanceFuturesClient;
+import com.crypto.domain.model.BookTicker;
+import com.crypto.common.service.JsonlDecisionLogService;
+import com.crypto.paper.model.PaperPositionEventType;
+import com.crypto.persistence.entity.PaperPositionEventEntity;
+import com.crypto.persistence.repository.PaperPositionEventRepository;
+import com.crypto.persistence.repository.EntryCandidateRepository;
+import com.crypto.scanner.model.EntryCandidateStatus;
 import com.crypto.domain.model.EntrySignal;
 import com.crypto.paper.model.PaperPositionStatus;
 import com.crypto.persistence.entity.PaperPositionEntity;
@@ -15,9 +23,11 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -30,6 +40,15 @@ public class PaperPositionService {
     private final EntrySignalService entrySignalService;
     private final ScannerProperties scannerProperties;
     private final JsonTextMapper jsonTextMapper;
+
+    @Autowired(required = false)
+    private BinanceFuturesClient binanceFuturesClient;
+    @Autowired(required = false)
+    private PaperPositionEventRepository eventRepository;
+    @Autowired(required = false)
+    private EntryCandidateRepository entryCandidateRepository;
+    @Autowired(required = false)
+    private JsonlDecisionLogService jsonlDecisionLogService;
 
     public List<PaperPositionEntity> openPositionsFromLatestSignals() {
         List<EntrySignal> latestSignals = entrySignalService.generateSignalsFromLatestScan();
@@ -100,21 +119,39 @@ public class PaperPositionService {
             return reject(signal, "MAX_OPEN_SHORT_REACHED");
         }
 
+        BookTicker bookTicker = resolveBookTicker(signal);
+        if (bookTicker == null && binanceFuturesClient != null) {
+            return reject(signal, "MISSING_BOOK_TICKER");
+        }
+        BigDecimal entryPrice = bookTicker == null ? signal.getEntryPrice() : bookTicker.getMidPrice();
+        if (entryPrice == null || entryPrice.compareTo(BigDecimal.ZERO) <= 0) {
+            return reject(signal, "INVALID_ENTRY_PRICE");
+        }
+        if (bookTicker != null) {
+            log.info("PAPER_ENTRY_PRICE_READY symbol={} bid={} ask={} mid={}", signal.getSymbol(), bookTicker.getBidPrice(), bookTicker.getAskPrice(), entryPrice);
+        }
         ScannerProperties.PaperExit exitConfig = scannerProperties.getPaperExit() == null
                 ? new ScannerProperties.PaperExit()
                 : scannerProperties.getPaperExit();
+        ScannerProperties.PaperRisk riskConfig = scannerProperties.getPaperRisk() == null ? new ScannerProperties.PaperRisk() : scannerProperties.getPaperRisk();
+        ScannerProperties.PaperCost costConfig = scannerProperties.getPaperCost() == null ? new ScannerProperties.PaperCost() : scannerProperties.getPaperCost();
+        BigDecimal atr = signal.getAtr14_1h() == null ? entryPrice.multiply(new BigDecimal("0.012")) : signal.getAtr14_1h();
+        RiskLevels risk = calculateRiskLevels(signal.getSide(), entryPrice, atr, riskConfig);
         BigDecimal notionalUsdt = bigDecimalValue(config.getDefaultNotionalUsdt(), "100");
-        BigDecimal quantity = notionalUsdt.divide(signal.getEntryPrice(), QUANTITY_SCALE, RoundingMode.DOWN);
+        BigDecimal quantity = notionalUsdt.divide(entryPrice, QUANTITY_SCALE, RoundingMode.DOWN);
         Instant openedAt = Instant.now();
         PaperPositionEntity position = PaperPositionEntity.builder()
                 .symbol(signal.getSymbol())
                 .side(signal.getSide())
                 .status(PaperPositionStatus.OPEN)
                 .entryAction(signal.getAction())
-                .entryPrice(signal.getEntryPrice())
+                .entryPrice(entryPrice)
+                .bidPrice(bookTicker == null ? null : bookTicker.getBidPrice())
+                .askPrice(bookTicker == null ? null : bookTicker.getAskPrice())
+                .midPrice(entryPrice)
                 .quantity(quantity)
                 .notionalUsdt(notionalUsdt)
-                .leverage(intValue(config.getLeverage(), 3))
+                .leverage(intValue(costConfig.getLeverage(), intValue(config.getLeverage(), 3)))
                 .entryScore(signal.getScore())
                 .entrySignalScore(signal.getScore())
                 .longScore(signal.getLongScore())
@@ -132,9 +169,24 @@ public class PaperPositionService {
                 .reasonsJson(jsonTextMapper.toJson(signal.getReasons()))
                 .warningsJson(jsonTextMapper.toJson(signal.getWarnings()))
                 .openedAt(openedAt)
-                .currentPrice(signal.getEntryPrice())
-                .highestPrice(signal.getEntryPrice())
-                .lowestPrice(signal.getEntryPrice())
+                .currentPrice(entryPrice)
+                .highestPrice(entryPrice)
+                .lowestPrice(entryPrice)
+                .initialStop(risk.initialStop())
+                .currentStop(risk.initialStop())
+                .riskPerUnit(risk.riskPerUnit())
+                .tp1(risk.tp1())
+                .tp2(risk.tp2())
+                .tp1Hit(false)
+                .tp2Hit(false)
+                .trailingActive(false)
+                .remainingPositionPct(new BigDecimal("100"))
+                .highestPriceSinceEntry(entryPrice)
+                .lowestPriceSinceEntry(entryPrice)
+                .barsInPosition(0)
+                .entryPriceAdjusted(adjustedEntry(signal.getSide(), entryPrice, costConfig))
+                .totalFeePct(costConfig.getTakerFeePct().multiply(BigDecimal.valueOf(200)))
+                .totalSlippagePct(costConfig.getSlippagePct().multiply(BigDecimal.valueOf(200)))
                 .maxFavorableMovePct(BigDecimal.ZERO)
                 .maxAdverseMovePct(BigDecimal.ZERO)
                 .barsHeld(0)
@@ -146,17 +198,83 @@ public class PaperPositionService {
                 .build();
 
         PaperPositionEntity saved = paperPositionRepository.save(position);
+        writeOpenedEvent(saved);
+        markCandidateUsed(saved.getSymbol());
         log.info(
-                "PAPER_POSITION_OPENED id={} symbol={} side={} entryPrice={} quantity={} notionalUsdt={} leverage={}",
-                saved.getId(),
+                "POSITION_OPENED symbol={} side={} entry={} stop={} tp1={} tp2={} id={} quantity={} notionalUsdt={} leverage={}",
                 saved.getSymbol(),
                 saved.getSide(),
                 saved.getEntryPrice(),
+                saved.getInitialStop(),
+                saved.getTp1(),
+                saved.getTp2(),
+                saved.getId(),
                 saved.getQuantity(),
                 saved.getNotionalUsdt(),
                 saved.getLeverage()
         );
         return saved;
+    }
+
+
+    public RiskLevels calculateRiskLevels(PositionSide side, BigDecimal entryPrice, BigDecimal atr14, ScannerProperties.PaperRisk config) {
+        BigDecimal raw = atr14.multiply(config.getAtrStopMultiplier());
+        BigDecimal min = entryPrice.multiply(config.getMinStopDistancePct());
+        BigDecimal max = entryPrice.multiply(config.getMaxStopDistancePct());
+        BigDecimal distance = raw.max(min).min(max);
+        BigDecimal initialStop = side == PositionSide.SHORT ? entryPrice.add(distance) : entryPrice.subtract(distance);
+        BigDecimal riskPerUnit = side == PositionSide.SHORT ? initialStop.subtract(entryPrice) : entryPrice.subtract(initialStop);
+        BigDecimal tp1 = side == PositionSide.SHORT ? entryPrice.subtract(riskPerUnit.multiply(config.getTp1RMultiple())) : entryPrice.add(riskPerUnit.multiply(config.getTp1RMultiple()));
+        BigDecimal tp2 = side == PositionSide.SHORT ? entryPrice.subtract(riskPerUnit.multiply(config.getTp2RMultiple())) : entryPrice.add(riskPerUnit.multiply(config.getTp2RMultiple()));
+        return new RiskLevels(initialStop, riskPerUnit, tp1, tp2);
+    }
+
+    public record RiskLevels(BigDecimal initialStop, BigDecimal riskPerUnit, BigDecimal tp1, BigDecimal tp2) {}
+
+    private BookTicker resolveBookTicker(EntrySignal signal) {
+        if (binanceFuturesClient == null || signal == null || signal.getSymbol() == null) {
+            return null;
+        }
+        List<BookTicker> tickers = binanceFuturesClient.getAllBookTickers();
+        return (tickers == null ? List.<BookTicker>of() : tickers).stream()
+                .filter(ticker -> signal.getSymbol().equals(ticker.getSymbol()))
+                .filter(ticker -> ticker.getBidPrice() != null && ticker.getAskPrice() != null && ticker.getMidPrice() != null)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private BigDecimal adjustedEntry(PositionSide side, BigDecimal entryPrice, ScannerProperties.PaperCost cost) {
+        BigDecimal slip = cost.getSlippagePct();
+        return side == PositionSide.SHORT ? entryPrice.multiply(BigDecimal.ONE.subtract(slip)) : entryPrice.multiply(BigDecimal.ONE.add(slip));
+    }
+
+    private void writeOpenedEvent(PaperPositionEntity position) {
+        if (eventRepository != null) {
+            eventRepository.save(PaperPositionEventEntity.builder()
+                    .position(position)
+                    .eventTimeUtc(position.getOpenedAt())
+                    .eventType(PaperPositionEventType.OPENED)
+                    .price(position.getEntryPrice())
+                    .adjustedPrice(position.getEntryPriceAdjusted())
+                    .leverage(position.getLeverage())
+                    .reason("PAPER_POSITION_OPENED")
+                    .build());
+        }
+        if (jsonlDecisionLogService != null) {
+            jsonlDecisionLogService.logPaper(Map.of("event", "PAPER_POSITION_OPENED", "symbol", position.getSymbol(), "side", position.getSide().name(), "positionId", position.getId() == null ? "" : position.getId(), "entryPrice", position.getEntryPrice()));
+        }
+    }
+
+    private void markCandidateUsed(String symbol) {
+        if (entryCandidateRepository == null || symbol == null) { return; }
+        entryCandidateRepository.findFirstBySymbolAndStatusOrderByCreatedAtDesc(symbol, EntryCandidateStatus.ACTIVE).ifPresent(candidate -> {
+            candidate.setStatus(EntryCandidateStatus.USED);
+            entryCandidateRepository.save(candidate);
+        });
+    }
+
+    private BigDecimal defaultBigDecimal(BigDecimal value, BigDecimal fallback) {
+        return value == null ? fallback : value;
     }
 
     public List<PaperPositionEntity> getOpenPositions() {

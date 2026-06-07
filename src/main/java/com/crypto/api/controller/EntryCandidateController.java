@@ -80,7 +80,18 @@ public class EntryCandidateController {
                 signal.getWarnings(),
                 signal.getSignalReason(),
                 signal.getBlockReason(),
-                signal.getSignalTime()
+                signal.getSignalTime(),
+                signal.getEntryTrigger(),
+                signal.getClose1h(),
+                signal.getPreviousClose1h(),
+                signal.getPrevious1hHigh(),
+                signal.getPrevious1hLow(),
+                signal.getEma20_1h(),
+                signal.getRsi14_1h(),
+                signal.getPreviousRsi14_1h(),
+                signal.getMacdHist_1h(),
+                signal.getPreviousMacdHist_1h(),
+                signal.getVolumeRatio_1h()
         );
     }
 

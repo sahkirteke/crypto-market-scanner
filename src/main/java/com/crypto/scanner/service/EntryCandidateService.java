@@ -5,22 +5,28 @@ import com.crypto.common.enums.DirectionBias;
 import com.crypto.common.enums.PositionSide;
 import com.crypto.common.enums.ReasonTag;
 import com.crypto.common.enums.RiskLevel;
+import com.crypto.common.service.JsonlDecisionLogService;
 import com.crypto.domain.model.CoinScanResult;
 import com.crypto.domain.model.EntryCandidate;
 import com.crypto.domain.model.MarketScanResult;
 import com.crypto.persistence.entity.CoinScanResultEntity;
+import com.crypto.persistence.entity.EntryCandidateEntity;
 import com.crypto.persistence.entity.MarketScanRunEntity;
 import com.crypto.persistence.mapper.JsonTextMapper;
 import com.crypto.persistence.repository.CoinScanResultRepository;
+import com.crypto.persistence.repository.EntryCandidateRepository;
 import com.crypto.persistence.repository.MarketScanRunRepository;
 import com.crypto.scanner.config.ScannerProperties;
+import com.crypto.scanner.model.EntryCandidateStatus;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Slf4j
@@ -34,6 +40,11 @@ public class EntryCandidateService {
     private final CoinScanResultRepository coinScanResultRepository;
     private final JsonTextMapper jsonTextMapper;
 
+    @Autowired(required = false)
+    private EntryCandidateRepository entryCandidateRepository;
+    @Autowired(required = false)
+    private JsonlDecisionLogService jsonlDecisionLogService;
+
     public List<EntryCandidate> selectCandidates(MarketScanResult scanResult) {
         if (scanResult == null) {
             return finish(List.of());
@@ -42,7 +53,7 @@ public class EntryCandidateService {
         List<CoinScanResult> scanResults = new ArrayList<>();
         scanResults.addAll(nullSafe(scanResult.getStrongLong()));
         scanResults.addAll(nullSafe(scanResult.getStrongShort()));
-        scanResults.addAll(nullSafe(scanResult.getWatchlist()));
+        // WATCHLIST is not entry eligible in V1.2.3.
 
         List<EntryCandidate> eligibleCandidates = scanResults.stream()
                 .map(this::toEligibleCandidate)
@@ -72,10 +83,6 @@ public class EntryCandidateService {
         entities.addAll(coinScanResultRepository.findByScanRun_IdAndClassificationOrderByScoreDesc(
                 scanRunId,
                 CoinClassification.STRONG_SHORT
-        ));
-        entities.addAll(coinScanResultRepository.findByScanRun_IdAndClassificationOrderByScoreDesc(
-                scanRunId,
-                CoinClassification.WATCHLIST
         ));
 
         List<EntryCandidate> eligibleCandidates = entities.stream()
@@ -163,17 +170,7 @@ public class EntryCandidateService {
         }
 
         if (classification == CoinClassification.WATCHLIST) {
-            if (!Boolean.TRUE.equals(config.getAllowWatchlist())) {
-                logRejected(result, "CLASSIFICATION_NOT_ALLOWED");
-                return null;
-            }
-            if (directionBias == DirectionBias.LONG) {
-                return PositionSide.LONG;
-            }
-            if (directionBias == DirectionBias.SHORT) {
-                return PositionSide.SHORT;
-            }
-            logRejected(result, "NEUTRAL_DIRECTION");
+            logRejected(result, "WATCHLIST_NOT_ENTRY_ELIGIBLE");
             return null;
         }
 
@@ -218,6 +215,7 @@ public class EntryCandidateService {
                 continue;
             }
             selectedCandidates.add(candidate);
+            persistCandidate(candidate);
             log.info(
                     "ENTRY_CANDIDATE_SELECTED symbol={} side={} score={} reason={}",
                     candidate.getSymbol(),
@@ -254,11 +252,50 @@ public class EntryCandidateService {
                 .fundingRate(result.getFundingRate())
                 .openInterest(result.getOpenInterest())
                 .marketBreadthPct(result.getMarketBreadthPct())
+                .marketRegime(result.getMarketRegime())
                 .reasons(nullSafe(result.getReasons()))
                 .warnings(nullSafe(result.getWarnings()))
                 .candidateReason(candidateReason(result, side))
                 .createdAt(Instant.now())
+                .validFromUtc(result.getScanTime() == null ? Instant.now() : result.getScanTime())
+                .validUntilUtc((result.getScanTime() == null ? Instant.now() : result.getScanTime()).plusSeconds(3600))
                 .build();
+    }
+
+
+    private void persistCandidate(EntryCandidate candidate) {
+        if (entryCandidateRepository == null || candidate == null || candidate.getScanRunId() == null) {
+            return;
+        }
+        MarketScanRunEntity run = marketScanRunRepository.findById(candidate.getScanRunId()).orElse(null);
+        if (run == null) {
+            return;
+        }
+        Instant validFrom = run.getScanTimeUtc() == null ? Instant.now() : run.getScanTimeUtc();
+        Instant validUntil = validFrom.plusSeconds(run.getScanType() == com.crypto.common.enums.ScanType.FOUR_HOUR ? 4 * 3600L : 3600L);
+        candidate.setValidFromUtc(validFrom);
+        candidate.setValidUntilUtc(validUntil);
+        EntryCandidateEntity entity = EntryCandidateEntity.builder()
+                .scanRun(run)
+                .symbol(candidate.getSymbol())
+                .side(candidate.getSide())
+                .score(candidate.getScore())
+                .entryPriorityScore(candidate.getEntryPriorityScore())
+                .riskLevel(candidate.getRiskLevel())
+                .marketRegime(candidate.getMarketRegime())
+                .marketBreadthPct(candidate.getMarketBreadthPct())
+                .validFromUtc(validFrom)
+                .validUntilUtc(validUntil)
+                .reasonsJson(jsonTextMapper.toJson(candidate.getReasons()))
+                .warningsJson(jsonTextMapper.toJson(candidate.getWarnings()))
+                .status(EntryCandidateStatus.ACTIVE)
+                .build();
+        EntryCandidateEntity saved = entryCandidateRepository.save(entity);
+        candidate.setId(saved.getId());
+        if (jsonlDecisionLogService != null) {
+            jsonlDecisionLogService.logEntry(Map.of("event", "ENTRY_CANDIDATE_CREATED", "symbol", candidate.getSymbol(), "side", candidate.getSide().name(), "scanRunId", candidate.getScanRunId(), "score", candidate.getScore() == null ? 0 : candidate.getScore(), "reason", candidate.getCandidateReason()));
+        }
+        log.info("ENTRY_CANDIDATE_CREATED symbol={} side={} scanRunId={} validUntil={}", candidate.getSymbol(), candidate.getSide(), candidate.getScanRunId(), validUntil);
     }
 
     private CoinScanResult toCoinScanResult(CoinScanResultEntity entity) {
@@ -278,6 +315,7 @@ public class EntryCandidateService {
                 .fundingRate(entity.getFundingRate())
                 .openInterest(entity.getOpenInterest())
                 .marketBreadthPct(entity.getMarketBreadthPct())
+                .marketRegime(entity.getScanRun() == null ? null : entity.getScanRun().getMarketRegime())
                 .eliminatedReason(entity.getEliminatedReason())
                 .reasons(parseReasonTags(entity.getReasonsJson(), entity.getSymbol(), "reasons"))
                 .warnings(parseReasonTags(entity.getWarningsJson(), entity.getSymbol(), "warnings"))
@@ -311,10 +349,7 @@ public class EntryCandidateService {
         if (result.getClassification() == CoinClassification.STRONG_SHORT) {
             return "STRONG_SHORT_CANDIDATE";
         }
-        if (side == PositionSide.LONG) {
-            return "WATCHLIST_LONG_CANDIDATE";
-        }
-        return "WATCHLIST_SHORT_CANDIDATE";
+        return side == PositionSide.LONG ? "STRONG_LONG_CANDIDATE" : "STRONG_SHORT_CANDIDATE";
     }
 
     private boolean hasTag(CoinScanResult result, ReasonTag tag) {

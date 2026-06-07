@@ -1,6 +1,7 @@
 package com.crypto.persistence.service;
 
 import com.crypto.common.enums.ScanType;
+import com.crypto.common.service.JsonlDecisionLogService;
 import com.crypto.domain.model.CoinScanResult;
 import com.crypto.domain.model.MarketScanResult;
 import com.crypto.persistence.entity.CoinScanResultEntity;
@@ -12,8 +13,10 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +31,9 @@ public class MarketScanPersistenceService {
     private final CoinScanResultRepository coinScanResultRepository;
     private final MarketScanPersistenceMapper marketScanPersistenceMapper;
 
+    @Autowired(required = false)
+    private JsonlDecisionLogService jsonlDecisionLogService;
+
     @Transactional
     public MarketScanRunEntity saveCompletedScan(MarketScanResult result) {
         MarketScanRunEntity runEntity = marketScanPersistenceMapper.toRunEntity(result, STATUS_COMPLETED);
@@ -37,6 +43,9 @@ public class MarketScanPersistenceService {
                 .map(coinResult -> marketScanPersistenceMapper.toCoinEntity(coinResult, savedRunEntity))
                 .toList();
         coinScanResultRepository.saveAll(coinEntities);
+        if (jsonlDecisionLogService != null) {
+            jsonlDecisionLogService.logScanner(Map.of("event", "SCAN_COMPLETED", "scanRunId", savedRunEntity.getId(), "marketRegime", savedRunEntity.getMarketRegime() == null ? "" : savedRunEntity.getMarketRegime().name()));
+        }
         return savedRunEntity;
     }
 

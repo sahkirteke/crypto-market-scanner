@@ -32,6 +32,17 @@ public record EntrySignalResponse(
         List<ReasonTag> warnings,
         String signalReason,
         String blockReason,
-        Instant signalTime
+        Instant signalTime,
+        String entryTrigger,
+        BigDecimal close1h,
+        BigDecimal previousClose1h,
+        BigDecimal previous1hHigh,
+        BigDecimal previous1hLow,
+        BigDecimal ema20_1h,
+        BigDecimal rsi14_1h,
+        BigDecimal previousRsi14_1h,
+        BigDecimal macdHist_1h,
+        BigDecimal previousMacdHist_1h,
+        BigDecimal volumeRatio_1h
 ) {
 }
