@@ -54,7 +54,7 @@ spring:
   datasource:
     url: ${SUPABASE_DB_URL:jdbc:postgresql://aws-1-eu-central-1.pooler.supabase.com:6543/postgres?prepareThreshold=0&sslmode=require}
     username: ${SUPABASE_DB_USERNAME:postgres.wdsxcflkxixvwaqnltkk}
-    password: ${SUPABASE_DB_PASSWORD:}
+    password: ${SUPABASE_DB_PASSWORD:DhlDi1wQn4XqC749}
     hikari:
       maximum-pool-size: 5
       minimum-idle: 1
@@ -63,7 +63,7 @@ spring:
       max-lifetime: 1800000
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
     open-in-view: false
     properties:
       hibernate:
