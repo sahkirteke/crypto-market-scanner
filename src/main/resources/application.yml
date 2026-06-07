@@ -28,16 +28,26 @@ binance:
   max-in-memory-size-mb: 10
 
 scanner:
+  safe-mode: true
   blacklist: []
+
+  scheduler:
+    enabled: false
+    one-hour-cron: "0 2 * * * *"
+    four-hour-cron: "0 2 3,7,11,15,19,23 * * *"
+    zone: "Europe/Istanbul"
+
   liquidity:
     min-quote-volume-24h: 30000000
     max-spread-pct: 0.08
     max-pump-24h-pct: 25
     max-dump-24h-pct: -25
+
   klines:
     one-hour-limit: 250
     four-hour-limit: 250
     min-closed-candles: 220
+
   market-regime:
     breadth-risk-on-min-pct: 35
     breadth-strong-pct: 60
@@ -46,21 +56,19 @@ scanner:
     panic-btc-4h-drop-pct: -3
     panic-volume-ratio-1h: 1.5
     panic-volume-ratio-4h-rule: 1.8
+
   funding:
     warning-positive: 0.0005
-    danger-positive: 0.001
     warning-negative: -0.0005
+    danger-positive: 0.001
     danger-negative: -0.001
+
   scoring:
     strong-threshold: 80
     watchlist-threshold: 65
     eliminated-threshold: 50
     direction-difference-threshold: 10
-  scheduler:
-    enabled: false
-    one-hour-cron: "0 2 * * * *"
-    four-hour-cron: "0 2 3,7,11,15,19,23 * * *"
-    zone: "Europe/Istanbul"
+
   entry-candidate:
     enabled: true
     max-candidates: 10
@@ -70,6 +78,7 @@ scanner:
     allow-high-risk: false
     max-long-candidates: 5
     max-short-candidates: 5
+
   entry-signal:
     enabled: true
     min-enter-score: 75
@@ -83,16 +92,18 @@ scanner:
     min-quote-volume-24h: 30000000
     block-market-chop: false
     require-volume-confirmed: false
+
   paper:
     enabled: true
     default-notional-usdt: 100
     leverage: 3
     allow-multiple-open-same-symbol: false
-    max-open-positions: 10
-    max-open-long-positions: 5
-    max-open-short-positions: 5
+    max-open-positions: 5
+    max-open-long-positions: 3
+    max-open-short-positions: 3
     allow-medium-risk: true
     allow-high-risk: false
+
   paper-exit:
     enabled: true
     take-profit-pct: 1.0
@@ -100,12 +111,3 @@ scanner:
     time-stop-minutes: 240
     time-stop-close-only-if-non-positive: true
     bar-minutes: 60
-
----
-spring:
-  config:
-    activate:
-      on-profile: "db | manual-scanner-db | scheduler | manual-scheduler"
-scanner:
-  scheduler:
-    enabled: true

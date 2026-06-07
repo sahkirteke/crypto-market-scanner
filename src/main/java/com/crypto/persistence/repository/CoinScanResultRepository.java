@@ -10,6 +10,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface CoinScanResultRepository extends JpaRepository<CoinScanResultEntity, Long> {
     List<CoinScanResultEntity> findByScanRun_Id(Long scanRunId);
 
+    long countByScanRun_Id(Long scanRunId);
+
     List<CoinScanResultEntity> findByScanRun_IdAndClassificationOrderByScoreDesc(
             Long scanRunId,
             CoinClassification classification

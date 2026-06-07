@@ -47,6 +47,11 @@ public class EntrySignalService {
         return generateSignals(candidates);
     }
 
+    public List<EntrySignal> generateSignalsFromScanRun(Long scanRunId) {
+        List<EntryCandidate> candidates = entryCandidateService.selectCandidatesFromScanRun(scanRunId);
+        return generateSignals(candidates);
+    }
+
     public EntrySignal generateSignal(EntryCandidate candidate) {
         EntrySignal signal = baseSignal(candidate);
         if (candidate == null) {

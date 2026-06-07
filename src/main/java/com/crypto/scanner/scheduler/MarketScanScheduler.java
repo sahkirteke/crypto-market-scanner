@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
-@Profile({"db", "manual-scanner-db", "scheduler", "manual-scheduler"})
+@Profile({"scheduler", "manual-scheduler"})
 @RequiredArgsConstructor
 public class MarketScanScheduler {
     private final MarketScannerOrchestratorService marketScannerOrchestratorService;

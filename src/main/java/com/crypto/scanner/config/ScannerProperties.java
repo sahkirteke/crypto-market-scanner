@@ -11,6 +11,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @Setter
 @ConfigurationProperties(prefix = "scanner")
 public class ScannerProperties {
+    private Boolean safeMode = true;
     private List<String> blacklist = new ArrayList<>();
     private Liquidity liquidity = new Liquidity();
     private Klines klines = new Klines();
