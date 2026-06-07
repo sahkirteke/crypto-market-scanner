@@ -19,6 +19,7 @@ public class ScannerProperties {
     private Funding funding = new Funding();
     private Scoring scoring = new Scoring();
     private Scheduler scheduler = new Scheduler();
+    private PaperAuto paperAuto = new PaperAuto();
     private EntryCandidate entryCandidate = new EntryCandidate();
     private EntrySignal entrySignal = new EntrySignal();
     private Paper paper = new Paper();
@@ -27,9 +28,20 @@ public class ScannerProperties {
     @Getter
     @Setter
     public static class Scheduler {
-        private Boolean enabled = false;
+        private Boolean enabled = true;
         private String oneHourCron = "0 2 * * * *";
         private String fourHourCron = "0 2 3,7,11,15,19,23 * * *";
+        private String zone = "Europe/Istanbul";
+    }
+
+
+    @Getter
+    @Setter
+    public static class PaperAuto {
+        private Boolean enabled = true;
+        private Boolean openAfterScan = true;
+        private Boolean evaluateEnabled = true;
+        private String evaluateCron = "0 */5 * * * *";
         private String zone = "Europe/Istanbul";
     }
 

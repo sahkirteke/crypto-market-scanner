@@ -146,7 +146,10 @@ class ExitEngineServiceTest {
         PaperPositionRepository repository = mock(PaperPositionRepository.class);
         BinanceFuturesClient client = mock(BinanceFuturesClient.class);
         PaperPositionEntity position = position(PositionSide.LONG);
-        when(repository.findByStatusOrderByOpenedAtDesc(PaperPositionStatus.OPEN)).thenReturn(List.of(position));
+        when(repository.findByStatusInOrderByOpenedAtDesc(List.of(
+                PaperPositionStatus.OPEN,
+                PaperPositionStatus.PARTIALLY_CLOSED
+        ))).thenReturn(List.of(position));
         when(client.getAll24hTickers()).thenReturn(List.of(Ticker24h.builder()
                 .symbol("ETHUSDT")
                 .lastPrice(new BigDecimal("200"))

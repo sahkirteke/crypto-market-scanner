@@ -1,5 +1,6 @@
 package com.crypto.paper.service;
 
+import com.crypto.common.enums.CoinClassification;
 import com.crypto.common.enums.EntryAction;
 import com.crypto.common.enums.PositionSide;
 import com.crypto.common.enums.RiskLevel;
@@ -31,7 +32,10 @@ public class PaperPositionService {
     private final JsonTextMapper jsonTextMapper;
 
     public List<PaperPositionEntity> openPositionsFromLatestSignals() {
-        List<EntrySignal> signals = entrySignalService.generateSignalsFromLatestScan();
+        List<EntrySignal> latestSignals = entrySignalService.generateSignalsFromLatestScan();
+        List<EntrySignal> signals = (latestSignals == null ? List.<EntrySignal>of() : latestSignals).stream()
+                .filter(this::isStrongSignal)
+                .toList();
         return openPositions(signals);
     }
 
@@ -57,6 +61,9 @@ public class PaperPositionService {
         if (signal.getAction() == EntryAction.NO_ENTRY) {
             return reject(signal, "SIGNAL_NO_ENTRY");
         }
+        if (!isStrongSignal(signal)) {
+            return reject(signal, "SOURCE_CLASSIFICATION_NOT_STRONG");
+        }
         if (!isEnterAction(signal.getAction())) {
             return reject(signal, "ACTION_NOT_ENTER");
         }
@@ -73,7 +80,7 @@ public class PaperPositionService {
             return reject(signal, "MEDIUM_RISK_BLOCKED");
         }
         if (!booleanValue(config.getAllowMultipleOpenSameSymbol(), false)
-                && paperPositionRepository.existsBySymbolAndStatus(signal.getSymbol(), PaperPositionStatus.OPEN)) {
+                && paperPositionRepository.existsBySymbolAndStatusIn(signal.getSymbol(), activeStatuses())) {
             return reject(signal, "SYMBOL_ALREADY_OPEN");
         }
 
@@ -161,7 +168,17 @@ public class PaperPositionService {
     }
 
     private List<PaperPositionEntity> getOpenPositionsForValidation() {
-        return paperPositionRepository.findByStatusOrderByOpenedAtDesc(PaperPositionStatus.OPEN);
+        return paperPositionRepository.findByStatusInOrderByOpenedAtDesc(activeStatuses());
+    }
+
+    private List<PaperPositionStatus> activeStatuses() {
+        return List.of(PaperPositionStatus.OPEN, PaperPositionStatus.PARTIALLY_CLOSED);
+    }
+
+    private boolean isStrongSignal(EntrySignal signal) {
+        return signal != null
+                && (signal.getSourceClassification() == CoinClassification.STRONG_LONG
+                || signal.getSourceClassification() == CoinClassification.STRONG_SHORT);
     }
 
     private boolean isEnterSignal(EntrySignal signal) {

@@ -22,9 +22,9 @@ If Supabase transaction pooling is used, the JDBC URL may differ from the direct
 
 ## Final run instructions
 
-### 1. Normal API run
+### 1. Normal automated paper-trading run
 
-Starts the API and connects to the configured database. Scheduler scans, automatic paper-position opens, exit evaluation, and analysis jobs are not started automatically in the default profile.
+Starts the API, connects to the configured database, and enables the default automated paper-trading workflow without requiring any Spring profile. The default runtime follows the 1H/4H scan schedules, persists scan results, attempts paper-position opens from `STRONG_LONG` / `STRONG_SHORT` entry signals after each successful scan, and evaluates open paper positions every five minutes.
 
 ```bash
 mvn spring-boot:run
@@ -38,23 +38,7 @@ Runs a controlled scanner execution and persists the result.
 mvn spring-boot:run -Dspring-boot.run.profiles=manual-scanner-db
 ```
 
-### 3. Scheduler test
-
-Triggers scheduler code through the manual scheduler profile.
-
-```bash
-mvn spring-boot:run -Dspring-boot.run.profiles=manual-scheduler
-```
-
-### 4. Scheduler live profile
-
-Enables scheduled scanner cron execution. Use only when automatic scheduler scans are intended.
-
-```bash
-mvn spring-boot:run -Dspring-boot.run.profiles=scheduler
-```
-
-### 5. Paper open
+### 3. Paper open
 
 Opens paper positions from the latest entry signals in a controlled manual run.
 
@@ -62,7 +46,7 @@ Opens paper positions from the latest entry signals in a controlled manual run.
 mvn spring-boot:run -Dspring-boot.run.profiles=manual-paper-position
 ```
 
-### 6. Exit evaluate
+### 4. Exit evaluate
 
 Evaluates open paper positions in a controlled manual run.
 
@@ -70,7 +54,7 @@ Evaluates open paper positions in a controlled manual run.
 mvn spring-boot:run -Dspring-boot.run.profiles=manual-exit-engine
 ```
 
-### 7. Final smoke
+### 5. Final smoke
 
 Runs the final read-only smoke runner. It checks latest scan availability, latest candidates, latest signals, open paper positions, and analysis summary without opening or closing paper positions.
 
@@ -80,11 +64,12 @@ mvn spring-boot:run -Dspring-boot.run.profiles=manual-final-smoke
 
 ## Safety notes
 
-- Normal `mvn spring-boot:run` does not open paper trades.
+- Normal `mvn spring-boot:run` opens and evaluates paper trades automatically when scan signals qualify.
 - Normal `mvn spring-boot:run` does not create real trades.
-- Scheduler is disabled by default with `scanner.scheduler.enabled=false`.
-- Paper opens happen only through the manual endpoint or `manual-paper-position` profile.
-- Exit evaluation happens only through the manual endpoint or `manual-exit-engine` profile.
+- Scheduler is enabled by default with `scanner.scheduler.enabled=true`.
+- Paper automation is enabled by default with `scanner.paper-auto.enabled=true`.
+- Paper opens are attempted automatically after successful scans when `scanner.paper-auto.open-after-scan=true`.
+- Paper exit evaluation runs every five minutes by default when `scanner.paper-auto.evaluate-enabled=true`.
 - Real Binance order/private API integration is not implemented.
 - Safe mode is enabled by default with `scanner.safe-mode=true` for future live-order guardrails.
 
