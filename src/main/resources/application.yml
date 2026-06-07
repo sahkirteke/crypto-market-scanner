@@ -88,9 +88,9 @@ scanner:
     default-notional-usdt: 100
     leverage: 3
     allow-multiple-open-same-symbol: false
-    max-open-positions: 5
-    max-open-long-positions: 3
-    max-open-short-positions: 3
+    max-open-positions: 10
+    max-open-long-positions: 5
+    max-open-short-positions: 5
     allow-medium-risk: true
     allow-high-risk: false
 
