@@ -5,6 +5,7 @@ import com.crypto.common.enums.CoinClassification;
 import com.crypto.common.enums.MarketRegime;
 import com.crypto.common.enums.PositionSide;
 import com.crypto.common.service.JsonlDecisionLogService;
+import com.crypto.common.time.IstanbulTimeUtil;
 import com.crypto.domain.model.Kline;
 import com.crypto.domain.model.TechnicalSnapshot;
 import com.crypto.paper.model.KlineCandle;
@@ -132,7 +133,7 @@ public class ExitEngineService {
         String effectiveInterval = interval == null || interval.isBlank() ? defaultString(candle.getInterval(), "5m") : interval;
         if (position.getLastExitCandleCloseTime() != null && !candle.getCloseTime().isAfter(position.getLastExitCandleCloseTime())) {
             log.info("PAPER_EXIT_CANDLE_SKIPPED_ALREADY_PROCESSED id={} symbol={} candleCloseTime={}",
-                    position.getId(), position.getSymbol(), candle.getCloseTime());
+                    position.getId(), position.getSymbol(), IstanbulTimeUtil.format(candle.getCloseTime()));
             return position;
         }
 
@@ -426,7 +427,7 @@ public class ExitEngineService {
         p.setRemainingPositionPct(BigDecimal.ZERO);
         writeEvent(p, PaperPositionEventType.valueOf(reason.name()), time, exitPrice, p.getExitPriceAdjusted(), closePct, realized, reason.name(), context);
         writeEvent(p, PaperPositionEventType.CLOSED, time, exitPrice, p.getExitPriceAdjusted(), closePct, realized, reason.name(), context);
-        log.info("PAPER_POSITION_CLOSED id={} symbol={} side={} exitReason={} exitPrice={} pnlPct={}", p.getId(), p.getSymbol(), p.getSide(), reason, exitPrice, p.getRealizedPnlPct());
+        log.info("PAPER_POSITION_CLOSED closedAt={} id={} symbol={} side={} exitReason={} exitPrice={} pnlPct={}", IstanbulTimeUtil.format(p.getClosedAt()), p.getId(), p.getSymbol(), p.getSide(), reason, exitPrice, p.getRealizedPnlPct());
     }
 
     private void mergeRealized(PaperPositionEntity p, Realized r, BigDecimal exitPrice) {
@@ -496,8 +497,8 @@ public class ExitEngineService {
         Map<String, Object> details = new LinkedHashMap<>();
         if (context != null) {
             details.put("interval", context.interval());
-            details.put("candleOpenTime", context.candle().getOpenTime());
-            details.put("candleCloseTime", context.candle().getCloseTime());
+            details.put("candleOpenTime", IstanbulTimeUtil.format(context.candle().getOpenTime()));
+            details.put("candleCloseTime", IstanbulTimeUtil.format(context.candle().getCloseTime()));
             details.put("candleHigh", context.candle().getHigh());
             details.put("candleLow", context.candle().getLow());
             details.put("candleClose", context.candle().getClose());
@@ -507,6 +508,10 @@ public class ExitEngineService {
             details.put("remainingPositionPctBefore", context.remainingPositionPctBefore());
             details.put("trailingActiveBefore", context.trailingActiveBefore());
         }
+        details.put("openedAt", IstanbulTimeUtil.format(p.getOpenedAt()));
+        details.put("closedAt", IstanbulTimeUtil.format(p.getClosedAt()));
+        details.put("lastCheckedAt", IstanbulTimeUtil.format(p.getLastCheckedAt()));
+        details.put("trailingActivatedAtBarCloseTime", IstanbulTimeUtil.format(p.getTrailingActivatedAtBarCloseTime()));
         details.put("currentStopAfter", p.getCurrentStop());
         details.put("tp1", p.getTp1());
         details.put("tp2", p.getTp2());

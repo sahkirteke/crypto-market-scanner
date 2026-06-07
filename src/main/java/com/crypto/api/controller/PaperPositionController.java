@@ -5,6 +5,7 @@ import com.crypto.api.dto.PaperPositionResponse;
 import com.crypto.api.dto.PaperPositionEventResponse;
 import com.crypto.api.dto.PaperTradeSummaryResponse;
 import com.crypto.api.mapper.PaperPositionApiMapper;
+import com.crypto.common.time.IstanbulTimeUtil;
 import com.crypto.paper.service.ExitEngineService;
 import com.crypto.paper.service.PaperPositionManualCloseService;
 import com.crypto.paper.service.PaperPositionQueryService;
@@ -59,7 +60,7 @@ public class PaperPositionController {
                 .map(event -> new PaperPositionEventResponse(
                         event.getId(),
                         event.getPosition() == null ? null : event.getPosition().getId(),
-                        event.getEventTimeUtc(),
+                        IstanbulTimeUtil.format(event.getEventTimeUtc()),
                         event.getEventType(),
                         event.getPrice(),
                         event.getAdjustedPrice(),
@@ -72,7 +73,7 @@ public class PaperPositionController {
                         event.getLeverage(),
                         event.getReason(),
                         event.getDetailsJson(),
-                        event.getCreatedAt()))
+                        IstanbulTimeUtil.format(event.getCreatedAt())))
                 .toList();
     }
 

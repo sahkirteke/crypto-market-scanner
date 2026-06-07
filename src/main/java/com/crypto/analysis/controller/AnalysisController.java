@@ -4,6 +4,7 @@ import com.crypto.analysis.dto.StrategyAnalysisResponse;
 import com.crypto.analysis.service.ResultAnalyzerService;
 import com.crypto.analysis.service.ForwardMetricsService;
 import com.crypto.api.exception.BadRequestException;
+import com.crypto.common.time.IstanbulTimeUtil;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import lombok.RequiredArgsConstructor;
@@ -28,13 +29,16 @@ public class AnalysisController {
             @RequestParam(required = false) String start,
             @RequestParam(required = false) String end
     ) {
-        log.info("ANALYSIS_SUMMARY_REQUEST limit={} start={} end={}", limit, start, end);
         if (start != null || end != null) {
             if (start == null || end == null) {
                 throw new BadRequestException("Both start and end must be provided for range analysis");
             }
-            return resultAnalyzerService.analyzeClosedTradesBetween(parseInstant(start, "start"), parseInstant(end, "end"));
+            Instant startInstant = parseInstant(start, "start");
+            Instant endInstant = parseInstant(end, "end");
+            log.info("ANALYSIS_SUMMARY_REQUEST limit={} start={} end={}", limit, IstanbulTimeUtil.format(startInstant), IstanbulTimeUtil.format(endInstant));
+            return resultAnalyzerService.analyzeClosedTradesBetween(startInstant, endInstant);
         }
+        log.info("ANALYSIS_SUMMARY_REQUEST limit={}", limit);
         if (limit != null) {
             return resultAnalyzerService.analyzeLastClosedTrades(limit);
         }
@@ -58,8 +62,10 @@ public class AnalysisController {
             @RequestParam String start,
             @RequestParam String end
     ) {
-        log.info("ANALYSIS_RANGE_REQUEST start={} end={}", start, end);
-        return resultAnalyzerService.analyzeClosedTradesBetween(parseInstant(start, "start"), parseInstant(end, "end"));
+        Instant startInstant = parseInstant(start, "start");
+        Instant endInstant = parseInstant(end, "end");
+        log.info("ANALYSIS_RANGE_REQUEST start={} end={}", IstanbulTimeUtil.format(startInstant), IstanbulTimeUtil.format(endInstant));
+        return resultAnalyzerService.analyzeClosedTradesBetween(startInstant, endInstant);
     }
 
     private Instant parseInstant(String value, String fieldName) {

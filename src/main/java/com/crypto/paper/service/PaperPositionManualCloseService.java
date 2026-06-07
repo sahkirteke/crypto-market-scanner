@@ -5,6 +5,7 @@ import com.crypto.api.exception.BadRequestException;
 import com.crypto.api.exception.ResourceNotFoundException;
 import com.crypto.binance.client.BinanceFuturesClient;
 import com.crypto.common.enums.PositionSide;
+import com.crypto.common.time.IstanbulTimeUtil;
 import com.crypto.domain.model.Ticker24h;
 import com.crypto.paper.model.PaperExitReason;
 import com.crypto.paper.model.PaperPositionStatus;
@@ -58,8 +59,8 @@ public class PaperPositionManualCloseService {
         position.setLastCheckedAt(now);
 
         PaperPositionEntity saved = paperPositionRepository.save(position);
-        log.info("PAPER_POSITION_MANUALLY_CLOSED id={} symbol={} side={} exitPrice={} pnlPct={} pnlUsdt={}",
-                saved.getId(), saved.getSymbol(), saved.getSide(), exitPrice, pnlPct, pnlUsdt);
+        log.info("PAPER_POSITION_MANUALLY_CLOSED closedAt={} id={} symbol={} side={} exitPrice={} pnlPct={} pnlUsdt={}",
+                IstanbulTimeUtil.format(saved.getClosedAt()), saved.getId(), saved.getSymbol(), saved.getSide(), exitPrice, pnlPct, pnlUsdt);
         return saved;
     }
 

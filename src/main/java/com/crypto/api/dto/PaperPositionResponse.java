@@ -7,7 +7,6 @@ import com.crypto.common.enums.PositionSide;
 import com.crypto.common.enums.RiskLevel;
 import com.crypto.paper.model.PaperPositionStatus;
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.List;
 
 public record PaperPositionResponse(
@@ -30,7 +29,7 @@ public record PaperPositionResponse(
         Boolean tp1Hit,
         Boolean tp2Hit,
         Boolean trailingActive,
-        Instant trailingActivatedAtBarCloseTime,
+        String trailingActivatedAtBarCloseTime,
         BigDecimal remainingPositionPct,
         BigDecimal highestPriceSinceEntry,
         BigDecimal lowestPriceSinceEntry,
@@ -61,7 +60,7 @@ public record PaperPositionResponse(
         String signalReason,
         List<String> reasons,
         List<String> warnings,
-        Instant openedAt,
+        String openedAt,
         BigDecimal currentPrice,
         BigDecimal highestPrice,
         BigDecimal lowestPrice,
@@ -70,17 +69,17 @@ public record PaperPositionResponse(
         Integer barsHeld,
         Integer minutesHeld,
         Integer entrySignalScore,
-        Instant lastCheckedAt,
+        String lastCheckedAt,
         BigDecimal takeProfitPct,
         BigDecimal stopLossPct,
         Integer timeStopMinutes,
-        Instant closedAt,
+        String closedAt,
         BigDecimal exitPrice,
         BigDecimal realizedPnlUsdt,
         BigDecimal realizedPnlPct,
         String exitReason,
         String exitDetail,
-        Instant createdAt,
-        Instant updatedAt
+        String createdAt,
+        String updatedAt
 ) {
 }

@@ -22,7 +22,7 @@ public class MarketScanResult {
     private Long scanRunId;
     private ScanType scanType;
     private Instant scanTimeUtc;
-    private String scanTimeIstanbulText;
+    private String scanTimeText;
     private MarketRegime marketRegime;
     private BigDecimal marketBreadthPct;
     private Integer totalSymbols;

@@ -7,6 +7,7 @@ import com.crypto.analysis.dto.RiskPerformanceResponse;
 import com.crypto.analysis.dto.StrategyAnalysisResponse;
 import com.crypto.analysis.dto.StrategyPerformanceSummaryResponse;
 import com.crypto.analysis.dto.SymbolPerformanceResponse;
+import com.crypto.common.time.IstanbulTimeUtil;
 import com.crypto.common.enums.PositionSide;
 import com.crypto.paper.model.PaperPositionStatus;
 import com.crypto.persistence.entity.PaperPositionEntity;
@@ -141,8 +142,8 @@ public class ResultAnalyzerService {
                 average(values(trades, PaperPositionEntity::getMaxAdverseMovePct)),
                 averageInteger(valuesInteger(trades, PaperPositionEntity::getMinutesHeld)),
                 averageInteger(valuesInteger(trades, PaperPositionEntity::getBarsHeld)),
-                trades.stream().map(PaperPositionEntity::getOpenedAt).filter(Objects::nonNull).min(Instant::compareTo).orElse(null),
-                trades.stream().map(PaperPositionEntity::getClosedAt).filter(Objects::nonNull).max(Instant::compareTo).orElse(null)
+                IstanbulTimeUtil.format(trades.stream().map(PaperPositionEntity::getOpenedAt).filter(Objects::nonNull).min(Instant::compareTo).orElse(null)),
+                IstanbulTimeUtil.format(trades.stream().map(PaperPositionEntity::getClosedAt).filter(Objects::nonNull).max(Instant::compareTo).orElse(null))
         );
     }
 

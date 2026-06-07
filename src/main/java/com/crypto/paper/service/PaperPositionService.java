@@ -7,6 +7,7 @@ import com.crypto.common.enums.RiskLevel;
 import com.crypto.binance.client.BinanceFuturesClient;
 import com.crypto.domain.model.BookTicker;
 import com.crypto.common.service.JsonlDecisionLogService;
+import com.crypto.common.time.IstanbulTimeUtil;
 import com.crypto.paper.model.PaperPositionEventType;
 import com.crypto.persistence.entity.PaperPositionEventEntity;
 import com.crypto.persistence.repository.PaperPositionEventRepository;
@@ -211,7 +212,8 @@ public class PaperPositionService {
         writeOpenedEvent(saved);
         markCandidateUsed(saved.getSymbol());
         log.info(
-                "POSITION_OPENED symbol={} side={} entry={} stop={} tp1={} tp2={} id={} quantity={} notionalUsdt={} leverage={}",
+                "PAPER_POSITION_OPENED openedAt={} symbol={} side={} entry={} stop={} tp1={} tp2={} id={} quantity={} notionalUsdt={} leverage={}",
+                IstanbulTimeUtil.format(saved.getOpenedAt()),
                 saved.getSymbol(),
                 saved.getSide(),
                 saved.getEntryPrice(),
@@ -315,7 +317,7 @@ public class PaperPositionService {
                     .build());
         }
         if (jsonlDecisionLogService != null) {
-            jsonlDecisionLogService.logPaper(Map.of("event", "PAPER_POSITION_OPENED", "symbol", position.getSymbol(), "side", position.getSide().name(), "positionId", position.getId() == null ? "" : position.getId(), "entryPrice", position.getEntryPrice()));
+            jsonlDecisionLogService.logPaper(Map.of("event", "PAPER_POSITION_OPENED", "time", position.getOpenedAt(), "symbol", position.getSymbol(), "side", position.getSide().name(), "positionId", position.getId() == null ? "" : position.getId(), "entryPrice", position.getEntryPrice()));
         }
     }
 

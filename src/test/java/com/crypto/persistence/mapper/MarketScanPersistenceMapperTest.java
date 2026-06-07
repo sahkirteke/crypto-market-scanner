@@ -33,7 +33,7 @@ class MarketScanPersistenceMapperTest {
         MarketScanResult result = MarketScanResult.builder()
                 .scanType(ScanType.FOUR_HOUR)
                 .scanTimeUtc(Instant.parse("2026-06-07T10:00:00Z"))
-                .scanTimeIstanbulText("2026-06-07 13:00:00 TRT")
+                .scanTimeText("2026-06-07 13:00:00 TRT")
                 .marketRegime(MarketRegime.RISK_ON)
                 .marketBreadthPct(new BigDecimal("42.12345678"))
                 .totalSymbols(100)
@@ -50,6 +50,7 @@ class MarketScanPersistenceMapperTest {
 
         assertThat(entity.getScanType()).isEqualTo(ScanType.FOUR_HOUR);
         assertThat(entity.getMarketRegime()).isEqualTo(MarketRegime.RISK_ON);
+        assertThat(entity.getScanTimeText()).isEqualTo("2026-06-07 13:00:00 TRT");
         assertThat(entity.getTotalSymbols()).isEqualTo(100);
         assertThat(entity.getPreFilterPassedCount()).isEqualTo(80);
         assertThat(entity.getStrongLongCount()).isEqualTo(2);

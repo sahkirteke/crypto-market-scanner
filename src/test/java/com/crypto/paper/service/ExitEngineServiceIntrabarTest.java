@@ -174,7 +174,9 @@ class ExitEngineServiceIntrabarTest {
                 .first()
                 .extracting(PaperPositionEventEntity::getDetailsJson)
                 .asString()
-                .contains("\"interval\":\"5m\"");
+                .contains("\"interval\":\"5m\"")
+                .contains("\"candleCloseTime\":\"2026-06-07 13:04:59 TRT\"")
+                .doesNotContain("2026-06-07T10:04:59Z");
     }
 
     @Test
