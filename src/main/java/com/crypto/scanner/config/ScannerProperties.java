@@ -21,6 +21,7 @@ public class ScannerProperties {
     private EntryCandidate entryCandidate = new EntryCandidate();
     private EntrySignal entrySignal = new EntrySignal();
     private Paper paper = new Paper();
+    private PaperExit paperExit = new PaperExit();
 
     @Getter
     @Setter
@@ -108,6 +109,18 @@ public class ScannerProperties {
         private Integer maxOpenShortPositions = 3;
         private Boolean allowMediumRisk = true;
         private Boolean allowHighRisk = false;
+    }
+
+
+    @Getter
+    @Setter
+    public static class PaperExit {
+        private Boolean enabled = true;
+        private BigDecimal takeProfitPct = new BigDecimal("1.0");
+        private BigDecimal stopLossPct = new BigDecimal("0.6");
+        private Integer timeStopMinutes = 240;
+        private Boolean timeStopCloseOnlyIfNonPositive = true;
+        private Integer barMinutes = 60;
     }
 
     @Getter

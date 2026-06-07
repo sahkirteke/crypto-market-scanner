@@ -114,6 +114,43 @@ public class PaperPositionEntity {
     @Column(name = "opened_at", nullable = false)
     private Instant openedAt;
 
+
+    @Column(name = "current_price", precision = 30, scale = 12)
+    private BigDecimal currentPrice;
+
+    @Column(name = "highest_price", precision = 30, scale = 12)
+    private BigDecimal highestPrice;
+
+    @Column(name = "lowest_price", precision = 30, scale = 12)
+    private BigDecimal lowestPrice;
+
+    @Column(name = "max_favorable_move_pct", precision = 20, scale = 8)
+    private BigDecimal maxFavorableMovePct;
+
+    @Column(name = "max_adverse_move_pct", precision = 20, scale = 8)
+    private BigDecimal maxAdverseMovePct;
+
+    @Column(name = "bars_held")
+    private Integer barsHeld;
+
+    @Column(name = "minutes_held")
+    private Integer minutesHeld;
+
+    @Column(name = "entry_signal_score")
+    private Integer entrySignalScore;
+
+    @Column(name = "last_checked_at")
+    private Instant lastCheckedAt;
+
+    @Column(name = "take_profit_pct", precision = 20, scale = 8)
+    private BigDecimal takeProfitPct;
+
+    @Column(name = "stop_loss_pct", precision = 20, scale = 8)
+    private BigDecimal stopLossPct;
+
+    @Column(name = "time_stop_minutes")
+    private Integer timeStopMinutes;
+
     @Column(name = "closed_at")
     private Instant closedAt;
 
@@ -128,6 +165,9 @@ public class PaperPositionEntity {
 
     @Column(name = "exit_reason", length = 128)
     private String exitReason;
+
+    @Column(name = "exit_detail", columnDefinition = "TEXT")
+    private String exitDetail;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
