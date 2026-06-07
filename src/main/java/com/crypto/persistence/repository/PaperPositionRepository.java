@@ -1,5 +1,6 @@
 package com.crypto.persistence.repository;
 
+import com.crypto.common.enums.PositionSide;
 import com.crypto.paper.model.PaperPositionStatus;
 import com.crypto.persistence.entity.PaperPositionEntity;
 import java.util.List;
@@ -13,6 +14,8 @@ public interface PaperPositionRepository extends JpaRepository<PaperPositionEnti
 
     List<PaperPositionEntity> findByStatus(PaperPositionStatus status);
 
+    Page<PaperPositionEntity> findByStatusOrderByOpenedAtDesc(PaperPositionStatus status, Pageable pageable);
+
     Page<PaperPositionEntity> findByStatusOrderByClosedAtDesc(PaperPositionStatus status, Pageable pageable);
 
     Optional<PaperPositionEntity> findFirstBySymbolAndStatusOrderByOpenedAtDesc(
@@ -21,6 +24,12 @@ public interface PaperPositionRepository extends JpaRepository<PaperPositionEnti
     );
 
     boolean existsBySymbolAndStatus(String symbol, PaperPositionStatus status);
+
+    Optional<PaperPositionEntity> findByIdAndStatus(Long id, PaperPositionStatus status);
+
+    long countByStatus(PaperPositionStatus status);
+
+    long countByStatusAndSide(PaperPositionStatus status, PositionSide side);
 
     Page<PaperPositionEntity> findBySymbolOrderByOpenedAtDesc(String symbol, Pageable pageable);
 
