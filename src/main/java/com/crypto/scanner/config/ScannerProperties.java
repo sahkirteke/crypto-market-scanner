@@ -159,6 +159,11 @@ public class ScannerProperties {
         private Integer timeStopMinutes = 240;
         private Boolean timeStopCloseOnlyIfNonPositive = true;
         private Integer barMinutes = 60;
+        private Boolean intrabarCheckEnabled = true;
+        private String intrabarInterval = "5m";
+        private String intrabarCron = "10 */5 * * * *";
+        private String intrabarZone = "Europe/Istanbul";
+        private Integer intrabarKlineLimit = 3;
     }
 
     @Getter

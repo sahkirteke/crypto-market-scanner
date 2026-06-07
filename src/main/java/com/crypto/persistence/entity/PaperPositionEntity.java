@@ -221,6 +221,9 @@ public class PaperPositionEntity {
     @Column(name = "last_checked_at")
     private Instant lastCheckedAt;
 
+    @Column(name = "last_exit_candle_close_time")
+    private Instant lastExitCandleCloseTime;
+
     @Column(name = "take_profit_pct", precision = 20, scale = 8)
     private BigDecimal takeProfitPct;
 
