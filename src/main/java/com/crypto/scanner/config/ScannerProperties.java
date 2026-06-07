@@ -17,6 +17,16 @@ public class ScannerProperties {
     private MarketRegime marketRegime = new MarketRegime();
     private Funding funding = new Funding();
     private Scoring scoring = new Scoring();
+    private Scheduler scheduler = new Scheduler();
+
+    @Getter
+    @Setter
+    public static class Scheduler {
+        private Boolean enabled = false;
+        private String oneHourCron = "0 2 * * * *";
+        private String fourHourCron = "0 2 3,7,11,15,19,23 * * *";
+        private String zone = "Europe/Istanbul";
+    }
 
     @Getter
     @Setter

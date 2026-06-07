@@ -36,12 +36,17 @@ scanner:
     watchlist-threshold: 65
     eliminated-threshold: 50
     direction-difference-threshold: 10
+  scheduler:
+    enabled: false
+    one-hour-cron: "0 2 * * * *"
+    four-hour-cron: "0 2 3,7,11,15,19,23 * * *"
+    zone: "Europe/Istanbul"
 
 ---
 spring:
   config:
     activate:
-      on-profile: "!db & !manual-scanner-db"
+      on-profile: "!db & !manual-scanner-db & !scheduler & !manual-scheduler"
   autoconfigure:
     exclude:
       - org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration
@@ -50,7 +55,7 @@ spring:
 spring:
   config:
     activate:
-      on-profile: "db | manual-scanner-db"
+      on-profile: "db | manual-scanner-db | scheduler | manual-scheduler"
   datasource:
     url: ${SUPABASE_DB_URL:jdbc:postgresql://aws-1-eu-central-1.pooler.supabase.com:6543/postgres?prepareThreshold=0&sslmode=require}
     username: ${SUPABASE_DB_USERNAME:postgres.wdsxcflkxixvwaqnltkk}

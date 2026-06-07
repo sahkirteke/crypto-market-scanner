@@ -12,11 +12,15 @@ import org.springframework.stereotype.Service;
 
 @Slf4j
 @Service
-@Profile({"db", "manual-scanner-db"})
+@Profile({"db", "manual-scanner-db", "scheduler", "manual-scheduler"})
 @RequiredArgsConstructor
 public class MarketScannerOrchestratorService {
     private final MarketScannerService marketScannerService;
     private final MarketScanPersistenceService marketScanPersistenceService;
+
+    public MarketScanResult runAndPersist(ScanType scanType) {
+        return runScanAndPersist(scanType);
+    }
 
     public MarketScanResult runScanAndPersist(ScanType scanType) {
         Instant scanStartTime = Instant.now();
