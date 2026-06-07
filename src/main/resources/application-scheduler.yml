@@ -1,0 +1,3 @@
+scanner:
+  scheduler:
+    enabled: true
