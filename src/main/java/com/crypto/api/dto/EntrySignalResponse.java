@@ -14,6 +14,9 @@ public record EntrySignalResponse(
         PositionSide side,
         EntryAction action,
         Integer score,
+        BigDecimal baseEntryScore,
+        BigDecimal bbScore,
+        BigDecimal finalEntryScore,
         Integer longScore,
         Integer shortScore,
         CoinClassification sourceClassification,
@@ -29,6 +32,7 @@ public record EntrySignalResponse(
         BigDecimal marketBreadthPct,
         List<ReasonTag> reasons,
         List<ReasonTag> warnings,
+        List<String> bbReasons,
         String signalReason,
         String blockReason,
         String signalTime,
@@ -42,6 +46,15 @@ public record EntrySignalResponse(
         BigDecimal previousRsi14_1h,
         BigDecimal macdHist_1h,
         BigDecimal previousMacdHist_1h,
-        BigDecimal volumeRatio_1h
+        BigDecimal volumeRatio_1h,
+        BigDecimal bbPercentB,
+        BigDecimal bbWidth,
+        BigDecimal bbUpper,
+        BigDecimal bbMiddle,
+        BigDecimal bbLower,
+        Boolean bbUpperTouched,
+        Boolean bbLowerTouched,
+        Boolean bbUpperClosedOutside,
+        Boolean bbLowerClosedOutside
 ) {
 }

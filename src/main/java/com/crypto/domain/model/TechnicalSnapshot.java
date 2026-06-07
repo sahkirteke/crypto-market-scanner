@@ -31,4 +31,13 @@ public class TechnicalSnapshot {
     private BigDecimal atr14;
     private BigDecimal volumeSma20;
     private BigDecimal volumeRatio;
+    private BigDecimal bbMiddle;
+    private BigDecimal bbUpper;
+    private BigDecimal bbLower;
+    private BigDecimal bbWidth;
+    private BigDecimal bbPercentB;
+    private Boolean bbUpperTouched;
+    private Boolean bbLowerTouched;
+    private Boolean bbUpperClosedOutside;
+    private Boolean bbLowerClosedOutside;
 }

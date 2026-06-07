@@ -1,0 +1,11 @@
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS entry_bb_score NUMERIC(20,8);
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS entry_bb_percent_b NUMERIC(20,8);
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS entry_bb_width NUMERIC(20,8);
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS entry_bb_upper NUMERIC(30,12);
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS entry_bb_middle NUMERIC(30,12);
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS entry_bb_lower NUMERIC(30,12);
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS entry_bb_upper_touched BOOLEAN;
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS entry_bb_lower_touched BOOLEAN;
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS entry_bb_upper_closed_outside BOOLEAN;
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS entry_bb_lower_closed_outside BOOLEAN;
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS entry_bb_reasons_json TEXT;

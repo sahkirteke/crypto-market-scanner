@@ -28,7 +28,7 @@ class EntrySignalServiceTest {
     void setUp() {
         scannerProperties = new ScannerProperties();
         entryCandidateService = mock(EntryCandidateService.class);
-        entrySignalService = new EntrySignalService(scannerProperties, entryCandidateService);
+        entrySignalService = new EntrySignalService(scannerProperties, entryCandidateService, new BollingerScoreService());
     }
 
     @Test

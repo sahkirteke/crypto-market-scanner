@@ -32,6 +32,9 @@ public class IndicatorService {
     private static final String FOUR_HOUR_INTERVAL = "4h";
     private static final int MIN_CLOSED_CANDLES = 220;
     private static final int VOLUME_RATIO_SCALE = 8;
+    private static final int BOLLINGER_PERIOD = 20;
+    private static final BigDecimal BOLLINGER_STD_DEV_MULTIPLIER = new BigDecimal("2");
+    private static final int BOLLINGER_SCALE = 12;
 
     public TechnicalSnapshot calculate(String symbol, String interval, List<Kline> klines) {
         try {
@@ -62,6 +65,7 @@ public class IndicatorService {
             BigDecimal volumeSma20 = toBigDecimal(volumeSma20Indicator.getValue(latestIndex));
             BigDecimal latestVolume = toBigDecimal(volumeIndicator.getValue(latestIndex));
             BigDecimal volumeRatio = calculateVolumeRatio(latestVolume, volumeSma20);
+            BollingerValues bollinger = calculateBollinger(series, latestIndex, close);
 
             TechnicalSnapshot snapshot = TechnicalSnapshot.builder()
                     .symbol(symbol)
@@ -81,10 +85,19 @@ public class IndicatorService {
                     .atr14(toBigDecimal(atr14Indicator.getValue(latestIndex)))
                     .volumeSma20(volumeSma20)
                     .volumeRatio(volumeRatio)
+                    .bbMiddle(bollinger.bbMiddle())
+                    .bbUpper(bollinger.bbUpper())
+                    .bbLower(bollinger.bbLower())
+                    .bbWidth(bollinger.bbWidth())
+                    .bbPercentB(bollinger.bbPercentB())
+                    .bbUpperTouched(bollinger.bbUpperTouched())
+                    .bbLowerTouched(bollinger.bbLowerTouched())
+                    .bbUpperClosedOutside(bollinger.bbUpperClosedOutside())
+                    .bbLowerClosedOutside(bollinger.bbLowerClosedOutside())
                     .build();
 
-            log.info("TECH_READY symbol={} interval={} close={} ema20={} rsi14={} macdHist={} volumeRatio={}",
-                    symbol, interval, close, ema20, rsi14, macdHist, volumeRatio);
+            log.info("TECH_READY symbol={} interval={} close={} ema20={} rsi14={} macdHist={} volumeRatio={} bbPercentB={} bbWidth={}",
+                    symbol, interval, close, ema20, rsi14, macdHist, volumeRatio, bollinger.bbPercentB(), bollinger.bbWidth());
             return snapshot;
         } catch (IllegalArgumentException exception) {
             log.info("TECH_NOT_READY symbol={} interval={} reason=DATA_NOT_READY message={}",
@@ -178,6 +191,77 @@ public class IndicatorService {
             return null;
         }
         return latestVolume.divide(volumeSma20, VOLUME_RATIO_SCALE, RoundingMode.HALF_UP);
+    }
+
+    public BollingerValues calculateBollingerForTest(BigDecimal close, BigDecimal high, BigDecimal low, BigDecimal bbMiddle, BigDecimal bbUpper, BigDecimal bbLower) {
+        return buildBollingerValues(close, high, low, bbMiddle, bbUpper, bbLower);
+    }
+
+    private BollingerValues calculateBollinger(BarSeries series, int latestIndex, BigDecimal close) {
+        if (series == null || latestIndex < BOLLINGER_PERIOD - 1 || close == null) {
+            return BollingerValues.empty();
+        }
+        BigDecimal sum = BigDecimal.ZERO;
+        for (int index = latestIndex - BOLLINGER_PERIOD + 1; index <= latestIndex; index++) {
+            BigDecimal value = toBigDecimal(series.getBar(index).getClosePrice());
+            if (value == null) {
+                return BollingerValues.empty();
+            }
+            sum = sum.add(value);
+        }
+        BigDecimal middle = sum.divide(BigDecimal.valueOf(BOLLINGER_PERIOD), BOLLINGER_SCALE, RoundingMode.HALF_UP);
+        BigDecimal varianceSum = BigDecimal.ZERO;
+        for (int index = latestIndex - BOLLINGER_PERIOD + 1; index <= latestIndex; index++) {
+            BigDecimal diff = toBigDecimal(series.getBar(index).getClosePrice()).subtract(middle);
+            varianceSum = varianceSum.add(diff.multiply(diff));
+        }
+        BigDecimal variance = varianceSum.divide(BigDecimal.valueOf(BOLLINGER_PERIOD), BOLLINGER_SCALE, RoundingMode.HALF_UP);
+        BigDecimal stdDev = BigDecimal.valueOf(Math.sqrt(variance.doubleValue()));
+        BigDecimal upper = middle.add(stdDev.multiply(BOLLINGER_STD_DEV_MULTIPLIER));
+        BigDecimal lower = middle.subtract(stdDev.multiply(BOLLINGER_STD_DEV_MULTIPLIER));
+        BigDecimal high = toBigDecimal(series.getBar(latestIndex).getHighPrice());
+        BigDecimal low = toBigDecimal(series.getBar(latestIndex).getLowPrice());
+        return buildBollingerValues(close, high, low, middle, upper, lower);
+    }
+
+    private BollingerValues buildBollingerValues(BigDecimal close, BigDecimal high, BigDecimal low, BigDecimal middle, BigDecimal upper, BigDecimal lower) {
+        if (close == null || middle == null || upper == null || lower == null) {
+            return BollingerValues.empty();
+        }
+        BigDecimal bandRange = upper.subtract(lower);
+        BigDecimal width = middle.compareTo(BigDecimal.ZERO) == 0
+                ? null
+                : bandRange.divide(middle, BOLLINGER_SCALE, RoundingMode.HALF_UP);
+        BigDecimal percentB = bandRange.compareTo(BigDecimal.ZERO) == 0
+                ? null
+                : close.subtract(lower).divide(bandRange, BOLLINGER_SCALE, RoundingMode.HALF_UP);
+        return new BollingerValues(
+                middle,
+                upper,
+                lower,
+                width,
+                percentB,
+                high != null && high.compareTo(upper) >= 0,
+                low != null && low.compareTo(lower) <= 0,
+                close.compareTo(upper) > 0,
+                close.compareTo(lower) < 0
+        );
+    }
+
+    public record BollingerValues(
+            BigDecimal bbMiddle,
+            BigDecimal bbUpper,
+            BigDecimal bbLower,
+            BigDecimal bbWidth,
+            BigDecimal bbPercentB,
+            Boolean bbUpperTouched,
+            Boolean bbLowerTouched,
+            Boolean bbUpperClosedOutside,
+            Boolean bbLowerClosedOutside
+    ) {
+        static BollingerValues empty() {
+            return new BollingerValues(null, null, null, null, null, false, false, false, false);
+        }
     }
 
     private BigDecimal toBigDecimal(Num num) {

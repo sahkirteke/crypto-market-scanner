@@ -66,6 +66,30 @@ class PaperPositionServiceTest {
         assertThat(captor.getValue().getQuantity()).isEqualByComparingTo(new BigDecimal("19.550342130987"));
     }
 
+
+    @Test
+    void openPositionCopiesEntryBollingerSnapshot() {
+        EntrySignal signal = signal("BTCUSDT", EntryAction.ENTER_LONG, PositionSide.LONG, "10", RiskLevel.LOW);
+        signal.setBbScore(new BigDecimal("-4"));
+        signal.setBbPercentB(new BigDecimal("0.92"));
+        signal.setBbWidth(new BigDecimal("0.20"));
+        signal.setBbUpper(new BigDecimal("11"));
+        signal.setBbMiddle(new BigDecimal("10"));
+        signal.setBbLower(new BigDecimal("9"));
+        signal.setBbUpperTouched(true);
+        signal.setBbLowerTouched(false);
+        signal.setBbUpperClosedOutside(false);
+        signal.setBbLowerClosedOutside(false);
+        signal.setBbReasons(List.of("LONG_BB_CHASE_RISK"));
+
+        PaperPositionEntity opened = service.openPosition(signal);
+
+        assertThat(opened).isNotNull();
+        assertThat(opened.getEntryBbScore()).isEqualByComparingTo("-4");
+        assertThat(opened.getEntryBbPercentB()).isEqualByComparingTo("0.92");
+        assertThat(opened.getEntryBbReasonsJson()).contains("LONG_BB_CHASE_RISK");
+    }
+
     @Test
     void noEntrySignalDoesNotOpenPosition() {
         PaperPositionEntity opened = service.openPosition(signal("BTCUSDT", EntryAction.NO_ENTRY, PositionSide.LONG, "10", RiskLevel.LOW));

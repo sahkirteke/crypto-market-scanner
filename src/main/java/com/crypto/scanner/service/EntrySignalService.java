@@ -15,11 +15,13 @@ import com.crypto.persistence.repository.PaperPositionRepository;
 import com.crypto.domain.model.EntryCandidate;
 import com.crypto.domain.model.EntrySignal;
 import com.crypto.scanner.config.ScannerProperties;
+import com.crypto.scanner.model.BollingerScoreResult;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.LinkedHashMap;
 import java.util.ArrayList;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +34,7 @@ import org.springframework.stereotype.Service;
 public class EntrySignalService {
     private final ScannerProperties scannerProperties;
     private final EntryCandidateService entryCandidateService;
+    private final BollingerScoreService bollingerScoreService;
 
     @Autowired(required = false)
     private BinanceFuturesClient binanceFuturesClient;
@@ -84,11 +87,13 @@ public class EntrySignalService {
         if (candidate.getSide() == null) {
             return blocked(signal, "SIDE_MISSING");
         }
-        if (score(candidate) < intValue(config.getMinEnterScore(), 75)) {
+        applyTechnicalSnapshot(signal);
+        applyBollingerScore(signal);
+        if (entryScoreValue(signal) < intValue(config.getMinEnterScore(), 75)) {
             return blocked(signal, "ENTRY_SCORE_TOO_LOW");
         }
         if (isStrong(candidate.getSourceClassification())
-                && score(candidate) < intValue(config.getMinStrongEnterScore(), 80)) {
+                && entryScoreValue(signal) < intValue(config.getMinStrongEnterScore(), 80)) {
             return blocked(signal, "STRONG_SCORE_TOO_LOW");
         }
         if (candidate.getSourceClassification() == CoinClassification.WATCHLIST) {
@@ -112,7 +117,6 @@ public class EntrySignalService {
         if (greaterThan(candidate.getSpreadPct(), bigDecimalValue(config.getMaxSpreadPct(), "0.08"))) {
             return blocked(signal, "SPREAD_TOO_HIGH");
         }
-        applyTechnicalSnapshot(signal);
         if (lessThan(candidate.getQuoteVolume24h(), bigDecimalValue(config.getMinQuoteVolume24h(), "30000000"))) {
             return blocked(signal, "VOLUME_TOO_LOW");
         }
@@ -177,6 +181,9 @@ public class EntrySignalService {
                 .side(candidate.getSide())
                 .action(EntryAction.NO_ENTRY)
                 .score(candidate.getScore())
+                .baseEntryScore(BigDecimal.valueOf(score(candidate)))
+                .bbScore(BigDecimal.ZERO)
+                .finalEntryScore(BigDecimal.valueOf(score(candidate)))
                 .longScore(candidate.getLongScore())
                 .shortScore(candidate.getShortScore())
                 .sourceClassification(candidate.getSourceClassification())
@@ -202,13 +209,18 @@ public class EntrySignalService {
 
     private EntrySignal ready(EntrySignal signal) {
         log.info(
-                "ENTRY_SIGNAL_EVALUATED symbol={} side={} action={} trigger={} blockReason={} score={} reason={}",
+                "ENTRY_SIGNAL_EVALUATED symbol={} side={} action={} trigger={} blockReason={} score={} baseEntryScore={} bbScore={} finalEntryScore={} bbPercentB={} bbReasons={} reason={}",
                 signal.getSymbol(),
                 signal.getSide(),
                 signal.getAction(),
                 signal.getEntryTrigger(),
                 signal.getBlockReason(),
                 signal.getScore(),
+                signal.getBaseEntryScore(),
+                signal.getBbScore(),
+                signal.getFinalEntryScore(),
+                signal.getBbPercentB(),
+                signal.getBbReasons(),
                 signal.getSignalReason()
         );
         writeSignalDecision(signal);
@@ -219,13 +231,18 @@ public class EntrySignalService {
         signal.setAction(EntryAction.NO_ENTRY);
         signal.setBlockReason(blockReason);
         log.info(
-                "ENTRY_SIGNAL_EVALUATED symbol={} side={} action={} trigger={} blockReason={} score={}",
+                "ENTRY_SIGNAL_EVALUATED symbol={} side={} action={} trigger={} blockReason={} score={} baseEntryScore={} bbScore={} finalEntryScore={} bbPercentB={} bbReasons={}",
                 signal.getSymbol(),
                 signal.getSide(),
                 signal.getAction(),
                 signal.getEntryTrigger(),
                 blockReason,
-                signal.getScore()
+                signal.getScore(),
+                signal.getBaseEntryScore(),
+                signal.getBbScore(),
+                signal.getFinalEntryScore(),
+                signal.getBbPercentB(),
+                signal.getBbReasons()
         );
         writeSignalDecision(signal);
         return signal;
@@ -233,7 +250,28 @@ public class EntrySignalService {
 
     private void writeSignalDecision(EntrySignal signal) {
         if (jsonlDecisionLogService != null && signal != null && signal.getSymbol() != null) {
-            jsonlDecisionLogService.logEntry(Map.of("event", "ENTRY_SIGNAL_EVALUATED", "symbol", signal.getSymbol(), "side", signal.getSide() == null ? "" : signal.getSide().name(), "action", signal.getAction() == null ? "" : signal.getAction().name(), "reason", signal.getSignalReason() == null ? "" : signal.getSignalReason(), "blockReason", signal.getBlockReason() == null ? "" : signal.getBlockReason(), "score", signal.getScore() == null ? 0 : signal.getScore()));
+            Map<String, Object> event = new LinkedHashMap<>();
+            event.put("event", "ENTRY_SIGNAL_EVALUATED");
+            event.put("symbol", signal.getSymbol());
+            event.put("side", signal.getSide() == null ? "" : signal.getSide().name());
+            event.put("action", signal.getAction() == null ? "" : signal.getAction().name());
+            event.put("reason", signal.getSignalReason() == null ? "" : signal.getSignalReason());
+            event.put("blockReason", signal.getBlockReason() == null ? "" : signal.getBlockReason());
+            event.put("score", signal.getScore() == null ? 0 : signal.getScore());
+            event.put("baseEntryScore", signal.getBaseEntryScore());
+            event.put("bbScore", signal.getBbScore());
+            event.put("finalEntryScore", signal.getFinalEntryScore());
+            event.put("bbReasons", signal.getBbReasons());
+            event.put("bbPercentB", signal.getBbPercentB());
+            event.put("bbWidth", signal.getBbWidth());
+            event.put("bbUpper", signal.getBbUpper());
+            event.put("bbMiddle", signal.getBbMiddle());
+            event.put("bbLower", signal.getBbLower());
+            event.put("bbUpperTouched", signal.getBbUpperTouched());
+            event.put("bbLowerTouched", signal.getBbLowerTouched());
+            event.put("bbUpperClosedOutside", signal.getBbUpperClosedOutside());
+            event.put("bbLowerClosedOutside", signal.getBbLowerClosedOutside());
+            jsonlDecisionLogService.logEntry(event);
         }
     }
 
@@ -274,9 +312,60 @@ public class EntrySignalService {
             signal.setPreviousMacdHist_1h(snapshot.getPreviousMacdHist());
             signal.setVolumeRatio_1h(snapshot.getVolumeRatio());
             signal.setAtr14_1h(snapshot.getAtr14());
+            signal.setBbPercentB(snapshot.getBbPercentB());
+            signal.setBbWidth(snapshot.getBbWidth());
+            signal.setBbUpper(snapshot.getBbUpper());
+            signal.setBbMiddle(snapshot.getBbMiddle());
+            signal.setBbLower(snapshot.getBbLower());
+            signal.setBbUpperTouched(snapshot.getBbUpperTouched());
+            signal.setBbLowerTouched(snapshot.getBbLowerTouched());
+            signal.setBbUpperClosedOutside(snapshot.getBbUpperClosedOutside());
+            signal.setBbLowerClosedOutside(snapshot.getBbLowerClosedOutside());
         } catch (Exception exception) {
             log.warn("ENTRY_SIGNAL_TECHNICAL_UNAVAILABLE symbol={} reason={}", signal.getSymbol(), exception.getMessage());
         }
+    }
+
+    private void applyBollingerScore(EntrySignal signal) {
+        if (signal == null) {
+            return;
+        }
+        TechnicalSnapshot current = TechnicalSnapshot.builder()
+                .close(signal.getClose1h())
+                .ema20(signal.getEma20_1h())
+                .rsi14(signal.getRsi14_1h())
+                .macdHist(signal.getMacdHist_1h())
+                .bbPercentB(signal.getBbPercentB())
+                .bbWidth(signal.getBbWidth())
+                .bbUpper(signal.getBbUpper())
+                .bbMiddle(signal.getBbMiddle())
+                .bbLower(signal.getBbLower())
+                .bbUpperTouched(signal.getBbUpperTouched())
+                .bbLowerTouched(signal.getBbLowerTouched())
+                .bbUpperClosedOutside(signal.getBbUpperClosedOutside())
+                .bbLowerClosedOutside(signal.getBbLowerClosedOutside())
+                .build();
+        TechnicalSnapshot previous = TechnicalSnapshot.builder()
+                .rsi14(signal.getPreviousRsi14_1h())
+                .macdHist(signal.getPreviousMacdHist_1h())
+                .build();
+        BollingerScoreResult bb = bollingerScoreService.calculate(signal.getSide(), signal.getMarketRegime(), current, previous);
+        BigDecimal base = signal.getBaseEntryScore() == null ? BigDecimal.valueOf(signal.getScore() == null ? 0 : signal.getScore()) : signal.getBaseEntryScore();
+        BigDecimal bbScore = bb.getBbScore() == null ? BigDecimal.ZERO : bb.getBbScore();
+        BigDecimal finalScore = base.add(bbScore);
+        signal.setBbScore(bbScore);
+        signal.setFinalEntryScore(finalScore);
+        signal.setScore(finalScore.intValue());
+        signal.setBbReasons(new ArrayList<>(bb.getBbReasons() == null ? List.of() : bb.getBbReasons()));
+        signal.setBbPercentB(bb.getBbPercentB());
+        signal.setBbWidth(bb.getBbWidth());
+        signal.setBbUpper(bb.getBbUpper());
+        signal.setBbMiddle(bb.getBbMiddle());
+        signal.setBbLower(bb.getBbLower());
+        signal.setBbUpperTouched(bb.getBbUpperTouched());
+        signal.setBbLowerTouched(bb.getBbLowerTouched());
+        signal.setBbUpperClosedOutside(bb.getBbUpperClosedOutside());
+        signal.setBbLowerClosedOutside(bb.getBbLowerClosedOutside());
     }
 
     private String validateLongTrigger(EntrySignal signal) {
@@ -368,6 +457,10 @@ public class EntrySignalService {
 
     private int score(EntryCandidate candidate) {
         return intValue(candidate.getScore(), 0);
+    }
+
+    private int entryScoreValue(EntrySignal signal) {
+        return signal == null || signal.getFinalEntryScore() == null ? 0 : signal.getFinalEntryScore().intValue();
     }
 
     private int intValue(Integer value, int defaultValue) {
