@@ -11,6 +11,7 @@ import java.util.List;
 import com.crypto.common.enums.ScanType;
 import com.crypto.domain.model.MarketScanResult;
 import com.crypto.paper.service.PaperPositionService;
+import com.crypto.paper.service.PaperPositionService.PaperOpenSummary;
 import com.crypto.scanner.config.ScannerProperties;
 import com.crypto.scanner.service.MarketScannerOrchestratorService;
 import com.crypto.scanner.service.ScanLockService;
@@ -30,7 +31,9 @@ class MarketScanSchedulerTest {
         scanLockService = mock(ScanLockService.class);
         scannerProperties = new ScannerProperties();
         paperPositionService = mock(PaperPositionService.class);
-        when(paperPositionService.openPositionsFromLatestSignals()).thenReturn(List.of());
+        when(paperPositionService.openPositionsFromScanRun(100L)).thenReturn(emptySummary());
+        when(paperPositionService.openPositionsFromScanRun(101L)).thenReturn(emptySummary());
+        when(paperPositionService.openPositionsFromScanRun(102L)).thenReturn(emptySummary());
         marketScanScheduler = new MarketScanScheduler(
                 marketScannerOrchestratorService,
                 scanLockService,
@@ -70,7 +73,8 @@ class MarketScanSchedulerTest {
 
         marketScanScheduler.runOneHourScheduledScan();
 
-        verify(paperPositionService).openPositionsFromLatestSignals();
+        verify(paperPositionService).openPositionsFromScanRun(100L);
+        verify(paperPositionService, never()).openPositionsFromLatestSignals();
     }
 
     @Test
@@ -84,6 +88,7 @@ class MarketScanSchedulerTest {
         marketScanScheduler.runOneHourScheduledScan();
 
         verify(paperPositionService, never()).openPositionsFromLatestSignals();
+        verify(paperPositionService, never()).openPositionsFromScanRun(100L);
     }
 
     @Test
@@ -130,5 +135,8 @@ class MarketScanSchedulerTest {
         marketScanScheduler.runFourHourScheduledScan();
 
         verify(marketScannerOrchestratorService).runAndPersist(ScanType.FOUR_HOUR);
+    }
+    private PaperOpenSummary emptySummary() {
+        return new PaperOpenSummary(0, 0, 0, 0, 0, 0, 0, 0, List.of());
     }
 }

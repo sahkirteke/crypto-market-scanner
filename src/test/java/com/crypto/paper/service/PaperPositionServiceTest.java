@@ -194,6 +194,27 @@ class PaperPositionServiceTest {
         verify(repository).save(any(PaperPositionEntity.class));
     }
 
+
+    @Test
+    void openPositionsFromScanRunReturnsPaperOpenSummary() {
+        EntrySignal enterLong = signal("BTCUSDT", EntryAction.ENTER_LONG, PositionSide.LONG, "10", RiskLevel.LOW);
+        EntrySignal noEntry = signal("ETHUSDT", EntryAction.NO_ENTRY, PositionSide.SHORT, "20", RiskLevel.LOW);
+        when(entrySignalService.generateSignalsFromScanRun(77L)).thenReturn(List.of(enterLong, noEntry));
+
+        PaperPositionService.PaperOpenSummary summary = service.openPositionsFromScanRun(77L);
+
+        assertThat(summary.candidateCount()).isEqualTo(2);
+        assertThat(summary.signalCount()).isEqualTo(2);
+        assertThat(summary.enterLongCount()).isEqualTo(1);
+        assertThat(summary.enterShortCount()).isZero();
+        assertThat(summary.noEntryCount()).isEqualTo(1);
+        assertThat(summary.openedCount()).isEqualTo(1);
+        assertThat(summary.skippedCount()).isEqualTo(1);
+        assertThat(summary.openPositionsAfter()).isZero();
+        assertThat(summary.openedPositions()).hasSize(1);
+        verify(entrySignalService).generateSignalsFromScanRun(77L);
+    }
+
     @Test
     void openPositionsOnlyOpensEnterLongAndEnterShortSignals() {
         List<EntrySignal> signals = List.of(

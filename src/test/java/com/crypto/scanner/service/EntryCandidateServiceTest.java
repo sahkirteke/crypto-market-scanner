@@ -6,18 +6,22 @@ import static org.mockito.Mockito.when;
 
 import com.crypto.common.enums.CoinClassification;
 import com.crypto.common.enums.DirectionBias;
+import com.crypto.common.enums.MarketRegime;
 import com.crypto.common.enums.PositionSide;
 import com.crypto.common.enums.ReasonTag;
 import com.crypto.common.enums.RiskLevel;
 import com.crypto.domain.model.CoinScanResult;
 import com.crypto.domain.model.EntryCandidate;
 import com.crypto.domain.model.MarketScanResult;
+import com.crypto.persistence.entity.CoinScanResultEntity;
+import com.crypto.persistence.entity.MarketScanRunEntity;
 import com.crypto.persistence.mapper.JsonTextMapper;
 import com.crypto.persistence.repository.CoinScanResultRepository;
 import com.crypto.persistence.repository.MarketScanRunRepository;
 import com.crypto.scanner.config.ScannerProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -185,6 +189,39 @@ class EntryCandidateServiceTest {
         assertThat(candidates).isEmpty();
     }
 
+
+    @Test
+    void selectCandidatesFromScanRunUsesScanRunSnapshotWithoutReadingResultLazyRelation() {
+        Long scanRunId = 42L;
+        MarketScanRunEntity scanRun = scanRun(scanRunId);
+        CoinScanResultEntity result = coinEntity(
+                "BTCUSDT",
+                CoinClassification.STRONG_LONG,
+                DirectionBias.LONG,
+                91,
+                RiskLevel.LOW
+        );
+        result.setScanRun(null);
+        when(marketScanRunRepository.findById(scanRunId)).thenReturn(Optional.of(scanRun));
+        when(coinScanResultRepository.findByScanRunIdWithScanRun(scanRunId)).thenReturn(List.of(result));
+
+        List<EntryCandidate> candidates = entryCandidateService.selectCandidatesFromScanRun(scanRunId);
+
+        assertThat(candidates).hasSize(1);
+        assertThat(candidates.getFirst().getScanRunId()).isEqualTo(scanRunId);
+        assertThat(candidates.getFirst().getMarketRegime()).isEqualTo(MarketRegime.RISK_ON);
+        assertThat(candidates.getFirst().getMarketBreadthPct()).isEqualByComparingTo("62.5");
+    }
+
+    @Test
+    void selectCandidatesFromScanRunReturnsEmptyWhenScanRunDoesNotExist() {
+        when(marketScanRunRepository.findById(404L)).thenReturn(Optional.empty());
+
+        List<EntryCandidate> candidates = entryCandidateService.selectCandidatesFromScanRun(404L);
+
+        assertThat(candidates).isEmpty();
+    }
+
     private MarketScanResult scanResult(
             List<CoinScanResult> strongLong,
             List<CoinScanResult> strongShort,
@@ -195,6 +232,40 @@ class EntryCandidateServiceTest {
                 .strongShort(strongShort)
                 .watchlist(watchlist)
                 .build();
+    }
+
+    private MarketScanRunEntity scanRun(Long scanRunId) {
+        MarketScanRunEntity scanRun = new MarketScanRunEntity();
+        scanRun.setId(scanRunId);
+        scanRun.setMarketRegime(MarketRegime.RISK_ON);
+        scanRun.setMarketBreadthPct(new BigDecimal("62.5"));
+        scanRun.setScanTimeUtc(Instant.parse("2026-06-07T21:02:00Z"));
+        return scanRun;
+    }
+
+    private CoinScanResultEntity coinEntity(
+            String symbol,
+            CoinClassification classification,
+            DirectionBias directionBias,
+            int score,
+            RiskLevel riskLevel
+    ) {
+        CoinScanResultEntity entity = new CoinScanResultEntity();
+        entity.setSymbol(symbol);
+        entity.setClassification(classification);
+        entity.setDirectionBias(directionBias);
+        entity.setScore(score);
+        entity.setLongScore(score);
+        entity.setShortScore(score);
+        entity.setRiskLevel(riskLevel);
+        entity.setLastPrice(new BigDecimal("100"));
+        entity.setQuoteVolume24h(new BigDecimal("1000000"));
+        entity.setSpreadPct(new BigDecimal("0.02"));
+        entity.setMarketBreadthPct(null);
+        entity.setReasonsJson("[\"MARKET_BREADTH_OK\"]");
+        entity.setWarningsJson("[]");
+        entity.setCreatedAt(Instant.parse("2026-06-07T21:02:05Z"));
+        return entity;
     }
 
     private CoinScanResult coin(
