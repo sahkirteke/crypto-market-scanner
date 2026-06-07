@@ -165,10 +165,7 @@ public class ExitEngineService {
             position.setTp1Hit(true);
             position.setTrailingActive(true);
             position.setTrailingActivatedAtBarCloseTime(candle.getCloseTime());
-            BigDecimal feeBuffer = position.getEntryPrice().multiply(scannerProperties.getPaperRisk().getFeeBufferPct());
-            position.setCurrentStop(position.getSide() == PositionSide.SHORT
-                    ? position.getEntryPrice().subtract(feeBuffer)
-                    : position.getEntryPrice().add(feeBuffer));
+            updateBreakEvenStop(position, candle.getCloseTime(), context);
             partialClose(position, position.getTp1(), scannerProperties.getPaperRisk().getTp1ClosePct(),
                     PaperPositionEventType.PARTIAL_TP1, candle.getCloseTime(), context);
         }
@@ -221,8 +218,7 @@ public class ExitEngineService {
             position.setTp1Hit(true);
             position.setTrailingActive(true);
             position.setTrailingActivatedAtBarCloseTime(candleCloseTime);
-            BigDecimal feeBuffer = position.getEntryPrice().multiply(scannerProperties.getPaperRisk().getFeeBufferPct());
-            position.setCurrentStop(position.getSide() == PositionSide.SHORT ? position.getEntryPrice().subtract(feeBuffer) : position.getEntryPrice().add(feeBuffer));
+            updateBreakEvenStop(position, candleCloseTime, null);
         }
         if (tp2Hit(position, candleHigh, candleLow)) {
             partialClose(position, position.getTp2(), scannerProperties.getPaperRisk().getTp2ClosePct(), PaperPositionEventType.PARTIAL_TP2, candleCloseTime);
@@ -348,6 +344,18 @@ public class ExitEngineService {
         mergeRealized(p, realized, price);
         writeEvent(p, type, time, price, adjustedExit(p.getSide(), price), closePct, realized, type.name(), context);
         log.info("{} positionId={} symbol={} closedPct={} remainingPct={} price={}", type, p.getId(), p.getSymbol(), closePct, remaining, price);
+    }
+
+    private void updateBreakEvenStop(PaperPositionEntity p, Instant time, IntrabarEventContext context) {
+        BigDecimal oldStop = p.getCurrentStop();
+        BigDecimal feeBuffer = p.getEntryPrice().multiply(scannerProperties.getPaperRisk().getFeeBufferPct());
+        BigDecimal newStop = p.getSide() == PositionSide.SHORT
+                ? p.getEntryPrice().subtract(feeBuffer)
+                : p.getEntryPrice().add(feeBuffer);
+        p.setCurrentStop(newStop);
+        if (oldStop == null || newStop.compareTo(oldStop) != 0) {
+            writeEvent(p, PaperPositionEventType.STOP_UPDATED, time, newStop, null, null, null, "STOP_UPDATED", context);
+        }
     }
 
     private void updateTrailing(PaperPositionEntity p, BigDecimal high, BigDecimal low, BigDecimal atr14, Instant candleCloseTime) {

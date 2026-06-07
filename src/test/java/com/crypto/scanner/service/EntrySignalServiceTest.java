@@ -47,7 +47,7 @@ class EntrySignalServiceTest {
     }
 
     @Test
-    void watchlistLongCandidateWithScore75ProducesEnterLongWhenWatchlistAllowed() {
+    void watchlistLongCandidateProducesNoEntryEvenWhenWatchlistAllowed() {
         scannerProperties.getEntrySignal().setAllowWatchlistEntry(true);
 
         EntrySignal signal = entrySignalService.generateSignal(candidate(
@@ -59,8 +59,8 @@ class EntrySignalServiceTest {
                 RiskLevel.LOW
         ));
 
-        assertThat(signal.getAction()).isEqualTo(EntryAction.ENTER_LONG);
-        assertThat(signal.getSignalReason()).isEqualTo("WATCHLIST_LONG_ENTRY");
+        assertThat(signal.getAction()).isEqualTo(EntryAction.NO_ENTRY);
+        assertThat(signal.getBlockReason()).isEqualTo("WATCHLIST_NOT_ENTRY_ELIGIBLE");
     }
 
     @Test
@@ -77,7 +77,7 @@ class EntrySignalServiceTest {
         ));
 
         assertThat(signal.getAction()).isEqualTo(EntryAction.NO_ENTRY);
-        assertThat(signal.getBlockReason()).isEqualTo("WATCHLIST_ENTRY_DISABLED");
+        assertThat(signal.getBlockReason()).isEqualTo("WATCHLIST_NOT_ENTRY_ELIGIBLE");
     }
 
     @Test

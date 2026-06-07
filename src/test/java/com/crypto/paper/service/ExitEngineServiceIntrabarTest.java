@@ -6,6 +6,7 @@ import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.when;
 
 import com.crypto.binance.client.BinanceFuturesClient;
 import com.crypto.common.enums.EntryAction;
@@ -152,10 +153,13 @@ class ExitEngineServiceIntrabarTest {
     @Test
     void writesPaperPositionEvent() {
         PaperPositionEventRepository events = mock(PaperPositionEventRepository.class);
+        when(events.save(any(PaperPositionEventEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
         ExitEngineService service = service(events, null);
 
         service.evaluatePositionWithCandle(position(PositionSide.LONG), candle("102", "100", "101"), "5m");
 
+        verify(events, atLeastOnce()).save(any(PaperPositionEventEntity.class));
         ArgumentCaptor<PaperPositionEventEntity> captor = ArgumentCaptor.forClass(PaperPositionEventEntity.class);
         verify(events, atLeastOnce()).save(captor.capture());
         assertThat(captor.getAllValues()).extracting(PaperPositionEventEntity::getEventType)
