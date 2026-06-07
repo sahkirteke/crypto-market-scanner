@@ -1,5 +1,7 @@
 package com.crypto.domain.model;
 
+import com.crypto.common.enums.CoinClassification;
+import com.crypto.common.enums.DirectionBias;
 import com.crypto.common.enums.MarketRegime;
 import com.crypto.common.enums.PositionSide;
 import com.crypto.common.enums.ReasonTag;
@@ -25,10 +27,22 @@ public class EntryCandidate {
     private String symbol;
     private PositionSide side;
     private Integer score;
+    private Integer longScore;
+    private Integer shortScore;
     private Integer entryPriorityScore;
+    private CoinClassification sourceClassification;
+    private DirectionBias directionBias;
     private RiskLevel riskLevel;
     private MarketRegime marketRegime;
+    private BigDecimal lastPrice;
+    private BigDecimal priceChange24hPct;
+    private BigDecimal quoteVolume24h;
+    private BigDecimal spreadPct;
+    private BigDecimal fundingRate;
+    private BigDecimal openInterest;
     private BigDecimal marketBreadthPct;
+    private String candidateReason;
+    private Instant createdAt;
     private Instant validFromUtc;
     private Instant validUntilUtc;
     @Builder.Default

@@ -61,6 +61,15 @@ scanner:
     one-hour-cron: "0 2 * * * *"
     four-hour-cron: "0 2 3,7,11,15,19,23 * * *"
     zone: "Europe/Istanbul"
+  entry-candidate:
+    enabled: true
+    max-candidates: 10
+    min-score: 70
+    allow-watchlist: true
+    allow-neutral-watchlist: false
+    allow-high-risk: false
+    max-long-candidates: 5
+    max-short-candidates: 5
 
 ---
 spring:

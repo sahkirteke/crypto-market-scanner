@@ -18,6 +18,7 @@ public class ScannerProperties {
     private Funding funding = new Funding();
     private Scoring scoring = new Scoring();
     private Scheduler scheduler = new Scheduler();
+    private EntryCandidate entryCandidate = new EntryCandidate();
 
     @Getter
     @Setter
@@ -61,6 +62,19 @@ public class ScannerProperties {
         private Integer watchlistThreshold = 65;
         private Integer eliminatedThreshold = 50;
         private Integer directionDifferenceThreshold = 10;
+    }
+
+    @Getter
+    @Setter
+    public static class EntryCandidate {
+        private Boolean enabled = true;
+        private Integer maxCandidates = 10;
+        private Integer minScore = 70;
+        private Boolean allowWatchlist = true;
+        private Boolean allowNeutralWatchlist = false;
+        private Boolean allowHighRisk = false;
+        private Integer maxLongCandidates = 5;
+        private Integer maxShortCandidates = 5;
     }
 
     @Getter
