@@ -2,6 +2,7 @@ package com.crypto.persistence.entity;
 
 import com.crypto.common.enums.MarketRegime;
 import com.crypto.common.enums.ScanType;
+import com.crypto.common.time.IstanbulTimeUtil;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -33,6 +34,9 @@ public class MarketScanRunEntity {
 
     @Column(name = "scan_time_istanbul_text", length = 64)
     private String scanTimeIstanbulText;
+
+    @Column(name = "scan_time_text", length = 64)
+    private String scanTimeText;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "scan_type", nullable = false, length = 32)
@@ -90,10 +94,16 @@ public class MarketScanRunEntity {
         if (updatedAt == null) {
             updatedAt = now;
         }
+        syncTextFields();
     }
 
     @PreUpdate
     void preUpdate() {
         updatedAt = Instant.now();
+        syncTextFields();
+    }
+
+    private void syncTextFields() {
+        scanTimeText = IstanbulTimeUtil.format(scanTimeUtc);
     }
 }

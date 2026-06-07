@@ -1,5 +1,6 @@
 package com.crypto.paper.scheduler;
 
+import com.crypto.common.time.IstanbulTimeUtil;
 import com.crypto.paper.model.PaperExitEvaluationResult;
 import com.crypto.paper.service.ExitEngineService;
 import com.crypto.paper.service.PaperTradeLockService;
@@ -32,10 +33,10 @@ public class PaperExitIntrabarScheduler {
         }
         String interval = paperExit.getIntrabarInterval() == null ? "5m" : paperExit.getIntrabarInterval();
         try {
-            log.info("PAPER_INTRABAR_EXIT_CHECK_STARTED interval={}", interval);
+            log.info("PAPER_INTRABAR_EXIT_CHECK_STARTED time={} interval={}", IstanbulTimeUtil.nowText(), interval);
             PaperExitEvaluationResult result = exitEngineService.evaluateOpenPositionsWithInterval(interval);
-            log.info("PAPER_INTRABAR_EXIT_CHECK_COMPLETED checked={} events={} closed={}",
-                    result.getCheckedCount(), result.getEventCount(), result.getClosedCount());
+            log.info("PAPER_INTRABAR_EXIT_CHECK_COMPLETED time={} checked={} events={} closed={}",
+                    IstanbulTimeUtil.nowText(), result.getCheckedCount(), result.getEventCount(), result.getClosedCount());
         } catch (Exception exception) {
             log.error("PAPER_INTRABAR_EXIT_CHECK_FAILED message={}", exception.getMessage(), exception);
         } finally {

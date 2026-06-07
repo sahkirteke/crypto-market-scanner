@@ -4,8 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import com.crypto.common.time.IstanbulTimeUtil;
+import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -27,17 +28,27 @@ public class JsonlDecisionLogService {
     public void append(String directory, String prefix, Map<String, Object> event) {
         try {
             Files.createDirectories(Path.of(directory));
-            String day = LocalDate.now(ZoneOffset.UTC).format(DATE_FORMAT);
+            String day = LocalDate.now(IstanbulTimeUtil.ISTANBUL_ZONE).format(DATE_FORMAT);
             Path file = Path.of(directory, prefix + "-" + day + ".jsonl");
             Map<String, Object> payload = new LinkedHashMap<>();
-            payload.put("time", java.time.Instant.now().toString());
             if (event != null) {
-                payload.putAll(event);
+                event.forEach((key, value) -> payload.put(key, formatValue(value)));
             }
+            payload.remove("timeUtc");
+            payload.remove("timeIstanbul");
+            payload.remove("timeIstanbulText");
+            payload.put("time", event != null && event.get("time") instanceof Instant instant
+                    ? IstanbulTimeUtil.format(instant)
+                    : IstanbulTimeUtil.nowText());
             Files.writeString(file, objectMapper.writeValueAsString(payload) + System.lineSeparator(),
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (Exception exception) {
             log.warn("JSONL_DECISION_LOG_WRITE_FAILED directory={} prefix={} reason={}", directory, prefix, exception.getMessage());
         }
     }
+
+    private Object formatValue(Object value) {
+        return value instanceof Instant instant ? IstanbulTimeUtil.format(instant) : value;
+    }
 }
+

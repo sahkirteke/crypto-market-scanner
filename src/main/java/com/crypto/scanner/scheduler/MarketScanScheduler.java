@@ -1,6 +1,7 @@
 package com.crypto.scanner.scheduler;
 
 import com.crypto.common.enums.ScanType;
+import com.crypto.common.time.IstanbulTimeUtil;
 import com.crypto.domain.model.MarketScanResult;
 import com.crypto.paper.service.PaperPositionService;
 import com.crypto.paper.service.PaperPositionService.PaperOpenSummary;
@@ -51,10 +52,11 @@ public class MarketScanScheduler {
         }
 
         try {
-            log.info("SCHEDULED_SCAN_STARTED scanType={}", scanType);
+            String startedAt = IstanbulTimeUtil.nowText();
+            log.info("SCHEDULED_SCAN_STARTED scanType={} startedAt={}", scanType, startedAt);
             MarketScanResult result = marketScannerOrchestratorService.runAndPersist(scanType);
             tryOpenPaperPositionsAfterScan(scanType, result.getScanRunId());
-            log.info("SCHEDULED_SCAN_COMPLETED scanType={} scanRunId={}", scanType, result.getScanRunId());
+            log.info("SCHEDULED_SCAN_COMPLETED scanType={} scanRunId={} scanTime={}", scanType, result.getScanRunId(), IstanbulTimeUtil.format(result.getScanTimeUtc()));
         } catch (RuntimeException exception) {
             log.error("SCHEDULED_SCAN_FAILED scanType={} message={}", scanType, exception.getMessage(), exception);
         } finally {
@@ -75,9 +77,10 @@ public class MarketScanScheduler {
             log.info("AUTO_PAPER_OPEN_AFTER_SCAN_STARTED scanType={} scanRunId={}", scanType, scanRunId);
             PaperOpenSummary summary = paperPositionService.openPositionsFromScanRun(scanRunId);
             log.info(
-                    "AUTO_PAPER_OPEN_AFTER_SCAN_SUMMARY scanType={} scanRunId={} candidateCount={} signalCount={} enterLong={} enterShort={} noEntry={} newPaperEntries={} skipped={} openPositionsAfter={}",
+                    "AUTO_PAPER_OPEN_AFTER_SCAN_SUMMARY scanType={} scanRunId={} time={} candidateCount={} signalCount={} enterLong={} enterShort={} noEntry={} newPaperEntries={} skipped={} openPositionsAfter={}",
                     scanType,
                     scanRunId,
+                    IstanbulTimeUtil.nowText(),
                     summary.candidateCount(),
                     summary.signalCount(),
                     summary.enterLongCount(),

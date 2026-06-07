@@ -1,7 +1,6 @@
 package com.crypto.analysis.dto;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 
 public record StrategyPerformanceSummaryResponse(
         Integer totalTrades,
@@ -21,7 +20,7 @@ public record StrategyPerformanceSummaryResponse(
         BigDecimal avgMaxAdverseMovePct,
         BigDecimal avgMinutesHeld,
         BigDecimal avgBarsHeld,
-        Instant firstTradeTime,
-        Instant lastTradeTime
+        String firstTradeTime,
+        String lastTradeTime
 ) {
 }

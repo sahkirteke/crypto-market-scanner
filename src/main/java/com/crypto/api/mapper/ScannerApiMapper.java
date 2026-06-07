@@ -3,6 +3,7 @@ package com.crypto.api.mapper;
 import com.crypto.api.dto.CoinScanResultResponse;
 import com.crypto.api.dto.MarketScanRunResponse;
 import com.crypto.common.enums.DirectionBias;
+import com.crypto.common.time.IstanbulTimeUtil;
 import com.crypto.persistence.entity.CoinScanResultEntity;
 import com.crypto.persistence.entity.MarketScanRunEntity;
 import com.crypto.persistence.mapper.JsonTextMapper;
@@ -61,8 +62,7 @@ public class ScannerApiMapper {
         }
         return new MarketScanRunResponse(
                 entity.getId(),
-                entity.getScanTimeUtc(),
-                entity.getScanTimeIstanbulText(),
+                IstanbulTimeUtil.format(entity.getScanTimeUtc()),
                 enumName(entity.getScanType()),
                 enumName(entity.getMarketRegime()),
                 entity.getMarketBreadthPct(),
@@ -76,7 +76,7 @@ public class ScannerApiMapper {
                 entity.getErrorMessage(),
                 jsonTextMapper.toStringList(entity.getReasonsJson()),
                 jsonTextMapper.toStringList(entity.getWarningsJson()),
-                entity.getCreatedAt()
+                IstanbulTimeUtil.format(entity.getCreatedAt())
         );
     }
 
@@ -119,7 +119,7 @@ public class ScannerApiMapper {
                 selectedDirectionReasons,
                 jsonTextMapper.toStringList(entity.getWarningsJson()),
                 enumName(entity.getEliminatedReason()),
-                entity.getCreatedAt()
+                IstanbulTimeUtil.format(entity.getCreatedAt())
         );
     }
 

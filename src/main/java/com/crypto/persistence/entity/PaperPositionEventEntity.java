@@ -1,6 +1,7 @@
 package com.crypto.persistence.entity;
 
 import com.crypto.paper.model.PaperPositionEventType;
+import com.crypto.common.time.IstanbulTimeUtil;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -20,6 +21,8 @@ public class PaperPositionEventEntity {
     private PaperPositionEntity position;
     @Column(nullable = false)
     private Instant eventTimeUtc;
+    @Column(name = "event_time_text", length = 64)
+    private String eventTimeText;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 64)
     private PaperPositionEventType eventType;
     @Column(precision = 30, scale = 12)
@@ -45,5 +48,9 @@ public class PaperPositionEventEntity {
     private String detailsJson;
     @Column(nullable = false)
     private Instant createdAt;
-    @PrePersist void prePersist(){ if(createdAt==null)createdAt=Instant.now(); if(eventTimeUtc==null)eventTimeUtc=createdAt; }
+    @Column(name = "created_at_text", length = 64)
+    private String createdAtText;
+    @PrePersist void prePersist(){ if(createdAt==null)createdAt=Instant.now(); if(eventTimeUtc==null)eventTimeUtc=createdAt; syncTextFields(); }
+    @PreUpdate void preUpdate(){ syncTextFields(); }
+    private void syncTextFields(){ eventTimeText=IstanbulTimeUtil.format(eventTimeUtc); createdAtText=IstanbulTimeUtil.format(createdAt); }
 }

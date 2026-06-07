@@ -1,5 +1,6 @@
 package com.crypto.persistence.mapper;
 
+import com.crypto.common.time.IstanbulTimeUtil;
 import com.crypto.domain.model.CoinScanResult;
 import com.crypto.domain.model.MarketScanResult;
 import com.crypto.persistence.entity.CoinScanResultEntity;
@@ -15,7 +16,7 @@ public class MarketScanPersistenceMapper {
     public MarketScanRunEntity toRunEntity(MarketScanResult result, String status) {
         MarketScanRunEntity entity = new MarketScanRunEntity();
         entity.setScanTimeUtc(result.getScanTimeUtc());
-        entity.setScanTimeIstanbulText(result.getScanTimeIstanbulText());
+        entity.setScanTimeText(result.getScanTimeText() == null ? IstanbulTimeUtil.format(result.getScanTimeUtc()) : result.getScanTimeText());
         entity.setScanType(result.getScanType());
         entity.setMarketRegime(result.getMarketRegime());
         entity.setMarketBreadthPct(result.getMarketBreadthPct());

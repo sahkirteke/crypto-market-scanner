@@ -102,6 +102,20 @@ class ScannerApiMapperTest {
         assertThat(response.selectedDirectionReasons()).containsExactly("UNKNOWN_REASON", "TREND_4H_NEGATIVE");
     }
 
+
+    @Test
+    void toRunResponseUsesSingleIstanbulFormattedScanTime() {
+        MarketScanRunEntity entity = new MarketScanRunEntity();
+        entity.setId(1L);
+        entity.setScanTimeUtc(Instant.parse("2026-06-07T20:25:10Z"));
+        entity.setCreatedAt(Instant.parse("2026-06-07T20:25:10Z"));
+
+        var response = mapper.toRunResponse(entity);
+
+        assertThat(response.scanTime()).isEqualTo("2026-06-07 23:25:10 TRT");
+        assertThat(response.createdAt()).isEqualTo("2026-06-07 23:25:10 TRT");
+    }
+
     private CoinScanResultEntity coin(DirectionBias directionBias, String reasonsJson) {
         MarketScanRunEntity scanRun = new MarketScanRunEntity();
         scanRun.setId(1L);

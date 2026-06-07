@@ -8,6 +8,7 @@ import com.crypto.common.enums.MarketRegime;
 import com.crypto.common.enums.ReasonTag;
 import com.crypto.common.enums.RiskLevel;
 import com.crypto.common.enums.ScanType;
+import com.crypto.common.time.IstanbulTimeUtil;
 import com.crypto.domain.model.BookTicker;
 import com.crypto.domain.model.CoinScanResult;
 import com.crypto.domain.model.FilterDecision;
@@ -23,8 +24,6 @@ import com.crypto.scanner.model.CoinScoringInput;
 import com.crypto.scanner.model.MarketRegimeResult;
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -47,10 +46,6 @@ public class MarketScannerService {
     private static final String BTCUSDT = "BTCUSDT";
     private static final String ETHUSDT = "ETHUSDT";
     private static final int KLINE_NOT_READY_LOG_LIMIT = 10;
-    private static final ZoneId ISTANBUL_ZONE = ZoneId.of("Europe/Istanbul");
-    private static final DateTimeFormatter ISTANBUL_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss z")
-            .withZone(ISTANBUL_ZONE);
-
     private final SymbolUniverseService symbolUniverseService;
     private final BinanceFuturesClient binanceFuturesClient;
     private final PreFilterService preFilterService;
@@ -71,7 +66,7 @@ public class MarketScannerService {
 
     public MarketScanResult runScan(ScanType scanType) {
         Instant scanStartTime = Instant.now();
-        log.info("SCAN_STARTED scanType={}", scanType);
+        log.info("SCAN_STARTED scanType={} startedAt={}", scanType, IstanbulTimeUtil.format(scanStartTime));
 
         try {
             List<SymbolInfo> tradableSymbols = symbolUniverseService.loadTradableSymbols();
@@ -141,8 +136,8 @@ public class MarketScannerService {
                     result.getStrongLongCount(), result.getStrongShortCount(), result.getWatchlistCount(),
                     result.getEliminatedCount());
             logConsistency(totalSymbols, preFilterResult, klineLoadResult, indicatorResult, scoringResult, result);
-            log.info("SCAN_COMPLETED scanType={} regime={} strongLong={} strongShort={} watchlist={} eliminated={}",
-                    scanType, result.getMarketRegime(), result.getStrongLongCount(), result.getStrongShortCount(),
+            log.info("SCAN_COMPLETED scanType={} scanTime={} regime={} strongLong={} strongShort={} watchlist={} eliminated={}",
+                    scanType, IstanbulTimeUtil.format(scanStartTime), result.getMarketRegime(), result.getStrongLongCount(), result.getStrongShortCount(),
                     result.getWatchlistCount(), result.getEliminatedCount());
             return result;
         } catch (RuntimeException exception) {
@@ -464,7 +459,7 @@ public class MarketScannerService {
                 .scanRunId(null)
                 .scanType(scanType)
                 .scanTimeUtc(scanStartTime)
-                .scanTimeIstanbulText(ISTANBUL_FORMATTER.format(scanStartTime))
+                .scanTimeText(IstanbulTimeUtil.format(scanStartTime))
                 .marketRegime(marketRegimeResult.getMarketRegime())
                 .marketBreadthPct(marketRegimeResult.getMarketBreadthPct())
                 .totalSymbols(size(tradableSymbols))

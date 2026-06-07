@@ -1,7 +1,6 @@
 package com.crypto.api.dto;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.List;
 
 public record CoinScanResultResponse(
@@ -28,6 +27,6 @@ public record CoinScanResultResponse(
         List<String> selectedDirectionReasons,
         List<String> warnings,
         String eliminatedReason,
-        Instant createdAt
+        String createdAt
 ) {
 }

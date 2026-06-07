@@ -2,12 +2,11 @@ package com.crypto.api.dto;
 
 import com.crypto.paper.model.PaperPositionEventType;
 import java.math.BigDecimal;
-import java.time.Instant;
 
 public record PaperPositionEventResponse(
         Long id,
         Long positionId,
-        Instant eventTimeUtc,
+        String eventTime,
         PaperPositionEventType eventType,
         BigDecimal price,
         BigDecimal adjustedPrice,
@@ -20,5 +19,5 @@ public record PaperPositionEventResponse(
         Integer leverage,
         String reason,
         String detailsJson,
-        Instant createdAt
+        String createdAt
 ) {}

@@ -7,7 +7,6 @@ import com.crypto.common.enums.PositionSide;
 import com.crypto.common.enums.ReasonTag;
 import com.crypto.common.enums.RiskLevel;
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.List;
 
 public record EntrySignalResponse(
@@ -32,7 +31,7 @@ public record EntrySignalResponse(
         List<ReasonTag> warnings,
         String signalReason,
         String blockReason,
-        Instant signalTime,
+        String signalTime,
         String entryTrigger,
         BigDecimal close1h,
         BigDecimal previousClose1h,

@@ -3,6 +3,7 @@ package com.crypto.api.mapper;
 import com.crypto.api.dto.PaperPositionResponse;
 import com.crypto.persistence.entity.PaperPositionEntity;
 import com.crypto.persistence.mapper.JsonTextMapper;
+import com.crypto.common.time.IstanbulTimeUtil;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -36,7 +37,7 @@ public class PaperPositionApiMapper {
                 entity.getTp1Hit(),
                 entity.getTp2Hit(),
                 entity.getTrailingActive(),
-                entity.getTrailingActivatedAtBarCloseTime(),
+                IstanbulTimeUtil.format(entity.getTrailingActivatedAtBarCloseTime()),
                 entity.getRemainingPositionPct(),
                 entity.getHighestPriceSinceEntry(),
                 entity.getLowestPriceSinceEntry(),
@@ -67,7 +68,7 @@ public class PaperPositionApiMapper {
                 entity.getSignalReason(),
                 jsonTextMapper.toStringList(entity.getReasonsJson()),
                 jsonTextMapper.toStringList(entity.getWarningsJson()),
-                entity.getOpenedAt(),
+                IstanbulTimeUtil.format(entity.getOpenedAt()),
                 entity.getCurrentPrice(),
                 entity.getHighestPrice(),
                 entity.getLowestPrice(),
@@ -76,18 +77,18 @@ public class PaperPositionApiMapper {
                 entity.getBarsHeld(),
                 entity.getMinutesHeld(),
                 entity.getEntrySignalScore(),
-                entity.getLastCheckedAt(),
+                IstanbulTimeUtil.format(entity.getLastCheckedAt()),
                 entity.getTakeProfitPct(),
                 entity.getStopLossPct(),
                 entity.getTimeStopMinutes(),
-                entity.getClosedAt(),
+                IstanbulTimeUtil.format(entity.getClosedAt()),
                 entity.getExitPrice(),
                 entity.getRealizedPnlUsdt(),
                 entity.getRealizedPnlPct(),
                 entity.getExitReason(),
                 entity.getExitDetail(),
-                entity.getCreatedAt(),
-                entity.getUpdatedAt()
+                IstanbulTimeUtil.format(entity.getCreatedAt()),
+                IstanbulTimeUtil.format(entity.getUpdatedAt())
         );
     }
 

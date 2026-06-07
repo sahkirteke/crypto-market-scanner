@@ -1,7 +1,7 @@
 package com.crypto.api.exception;
 
 import com.crypto.api.dto.ApiErrorResponse;
-import java.time.Instant;
+import com.crypto.common.time.IstanbulTimeUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -35,6 +35,6 @@ public class ApiExceptionHandler {
 
     private ResponseEntity<ApiErrorResponse> error(HttpStatus status, String message, String code) {
         return ResponseEntity.status(status)
-                .body(new ApiErrorResponse(false, message, code, Instant.now()));
+                .body(new ApiErrorResponse(false, message, code, IstanbulTimeUtil.nowText()));
     }
 }

@@ -6,6 +6,7 @@ import com.crypto.common.enums.EntryAction;
 import com.crypto.common.enums.PositionSide;
 import com.crypto.common.enums.RiskLevel;
 import com.crypto.paper.model.PaperPositionStatus;
+import com.crypto.common.time.IstanbulTimeUtil;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -114,6 +115,9 @@ public class PaperPositionEntity {
     @Column(name = "opened_at", nullable = false)
     private Instant openedAt;
 
+    @Column(name = "opened_at_text", length = 64)
+    private String openedAtText;
+
 
     @Column(name = "bid_price", precision = 30, scale = 12)
     private BigDecimal bidPrice;
@@ -221,6 +225,9 @@ public class PaperPositionEntity {
     @Column(name = "last_checked_at")
     private Instant lastCheckedAt;
 
+    @Column(name = "last_checked_at_text", length = 64)
+    private String lastCheckedAtText;
+
     @Column(name = "last_exit_candle_close_time")
     private Instant lastExitCandleCloseTime;
 
@@ -235,6 +242,9 @@ public class PaperPositionEntity {
 
     @Column(name = "closed_at")
     private Instant closedAt;
+
+    @Column(name = "closed_at_text", length = 64)
+    private String closedAtText;
 
     @Column(name = "exit_price", precision = 30, scale = 12)
     private BigDecimal exitPrice;
@@ -254,8 +264,14 @@ public class PaperPositionEntity {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    @Column(name = "created_at_text", length = 64)
+    private String createdAtText;
+
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+
+    @Column(name = "updated_at_text", length = 64)
+    private String updatedAtText;
 
     @PrePersist
     void prePersist() {
@@ -266,10 +282,20 @@ public class PaperPositionEntity {
         if (updatedAt == null) {
             updatedAt = now;
         }
+        syncTextFields();
     }
 
     @PreUpdate
     void preUpdate() {
         updatedAt = Instant.now();
+        syncTextFields();
+    }
+
+    private void syncTextFields() {
+        openedAtText = IstanbulTimeUtil.format(openedAt);
+        closedAtText = IstanbulTimeUtil.format(closedAt);
+        lastCheckedAtText = IstanbulTimeUtil.format(lastCheckedAt);
+        createdAtText = IstanbulTimeUtil.format(createdAt);
+        updatedAtText = IstanbulTimeUtil.format(updatedAt);
     }
 }

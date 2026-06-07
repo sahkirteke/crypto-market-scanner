@@ -2,6 +2,7 @@ package com.crypto.api.controller;
 
 import com.crypto.api.dto.EntryCandidateResponse;
 import com.crypto.api.dto.EntrySignalResponse;
+import com.crypto.common.time.IstanbulTimeUtil;
 import com.crypto.domain.model.EntryCandidate;
 import com.crypto.domain.model.EntrySignal;
 import com.crypto.scanner.service.EntryCandidateService;
@@ -53,7 +54,7 @@ public class EntryCandidateController {
                 candidate.getReasons(),
                 candidate.getWarnings(),
                 candidate.getCandidateReason(),
-                candidate.getCreatedAt()
+                IstanbulTimeUtil.format(candidate.getCreatedAt())
         );
     }
 
@@ -80,7 +81,7 @@ public class EntryCandidateController {
                 signal.getWarnings(),
                 signal.getSignalReason(),
                 signal.getBlockReason(),
-                signal.getSignalTime(),
+                IstanbulTimeUtil.format(signal.getSignalTime()),
                 signal.getEntryTrigger(),
                 signal.getClose1h(),
                 signal.getPreviousClose1h(),
