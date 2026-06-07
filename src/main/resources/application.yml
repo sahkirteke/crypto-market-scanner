@@ -70,6 +70,19 @@ scanner:
     allow-high-risk: false
     max-long-candidates: 5
     max-short-candidates: 5
+  entry-signal:
+    enabled: true
+    min-enter-score: 75
+    min-strong-enter-score: 80
+    allow-watchlist-entry: true
+    allow-medium-risk-entry: true
+    allow-high-risk-entry: false
+    max-spread-pct: 0.08
+    max-long-24h-change-pct: 18
+    max-short-24h-dump-pct: -18
+    min-quote-volume-24h: 30000000
+    block-market-chop: false
+    require-volume-confirmed: false
 
 ---
 spring:

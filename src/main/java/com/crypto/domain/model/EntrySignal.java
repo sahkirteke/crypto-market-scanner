@@ -1,5 +1,7 @@
 package com.crypto.domain.model;
 
+import com.crypto.common.enums.CoinClassification;
+import com.crypto.common.enums.DirectionBias;
 import com.crypto.common.enums.EntryAction;
 import com.crypto.common.enums.MarketRegime;
 import com.crypto.common.enums.PositionSide;
@@ -24,12 +26,31 @@ public class EntrySignal {
     private String symbol;
     private PositionSide side;
     private EntryAction action;
+    private Integer score;
+    private Integer longScore;
+    private Integer shortScore;
+    private CoinClassification sourceClassification;
+    private DirectionBias directionBias;
+    private RiskLevel riskLevel;
+    private BigDecimal entryPrice;
+    private BigDecimal lastPrice;
+    private BigDecimal spreadPct;
+    private BigDecimal priceChange24hPct;
+    private BigDecimal quoteVolume24h;
+    private BigDecimal fundingRate;
+    private BigDecimal openInterest;
+    private BigDecimal marketBreadthPct;
+    @Builder.Default
+    private List<ReasonTag> reasons = new ArrayList<>();
+    @Builder.Default
+    private List<ReasonTag> warnings = new ArrayList<>();
+    private String signalReason;
     private String blockReason;
+    private Instant signalTime;
+
     private Integer entryPriorityScore;
     private Integer scannerScore;
-    private RiskLevel riskLevel;
     private MarketRegime marketRegime;
-    private BigDecimal marketBreadthPct;
     private BigDecimal close1h;
     private BigDecimal ema20_1h;
     private BigDecimal macdHist_1h;
@@ -37,12 +58,4 @@ public class EntrySignal {
     private BigDecimal rsi14_1h;
     private BigDecimal previousRsi14_1h;
     private BigDecimal volumeRatio_1h;
-    private BigDecimal fundingRate;
-    private BigDecimal spreadPct;
-    private BigDecimal priceChange24hPct;
-    @Builder.Default
-    private List<ReasonTag> reasons = new ArrayList<>();
-    @Builder.Default
-    private List<ReasonTag> warnings = new ArrayList<>();
-    private Instant signalTime;
 }
