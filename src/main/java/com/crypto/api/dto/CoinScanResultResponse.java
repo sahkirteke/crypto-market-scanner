@@ -22,6 +22,10 @@ public record CoinScanResultResponse(
         BigDecimal openInterest,
         BigDecimal marketBreadthPct,
         List<String> reasons,
+        List<String> longReasons,
+        List<String> shortReasons,
+        List<String> commonReasons,
+        List<String> selectedDirectionReasons,
         List<String> warnings,
         String eliminatedReason,
         Instant createdAt
