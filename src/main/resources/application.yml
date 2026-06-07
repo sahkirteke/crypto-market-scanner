@@ -135,3 +135,8 @@ scanner:
     time-stop-minutes: 240
     time-stop-close-only-if-non-positive: true
     bar-minutes: 60
+    intrabar-check-enabled: true
+    intrabar-interval: "5m"
+    intrabar-cron: "10 */5 * * * *"
+    intrabar-zone: "Europe/Istanbul"
+    intrabar-kline-limit: 3
