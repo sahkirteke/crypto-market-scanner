@@ -10,7 +10,7 @@ Example Windows PowerShell setup:
 
 ```powershell
 $env:SUPABASE_DB_URL="jdbc:postgresql://aws-1-eu-central-1.pooler.supabase.com:6543/postgres?prepareThreshold=0&sslmode=require"
-$env:SUPABASE_DB_USERNAME="postgres"
+$env:SUPABASE_DB_USERNAME="postgres.wdsxcflkxixvwaqnltkk"
 $env:SUPABASE_DB_PASSWORD="PASSWORD"
 ```
 

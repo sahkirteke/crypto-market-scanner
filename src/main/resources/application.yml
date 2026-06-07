@@ -53,7 +53,7 @@ spring:
       on-profile: "db | manual-scanner-db"
   datasource:
     url: ${SUPABASE_DB_URL:jdbc:postgresql://aws-1-eu-central-1.pooler.supabase.com:6543/postgres?prepareThreshold=0&sslmode=require}
-    username: ${SUPABASE_DB_USERNAME:postgres}
+    username: ${SUPABASE_DB_USERNAME:postgres.wdsxcflkxixvwaqnltkk}
     password: ${SUPABASE_DB_PASSWORD:}
     hikari:
       maximum-pool-size: 5
