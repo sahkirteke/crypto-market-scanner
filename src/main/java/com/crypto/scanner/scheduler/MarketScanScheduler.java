@@ -3,6 +3,7 @@ package com.crypto.scanner.scheduler;
 import com.crypto.common.enums.ScanType;
 import com.crypto.domain.model.MarketScanResult;
 import com.crypto.paper.service.PaperPositionService;
+import com.crypto.paper.service.PaperPositionService.PaperOpenSummary;
 import com.crypto.scanner.config.ScannerProperties;
 import com.crypto.scanner.service.MarketScannerOrchestratorService;
 import com.crypto.scanner.service.ScanLockService;
@@ -72,8 +73,20 @@ public class MarketScanScheduler {
 
         try {
             log.info("AUTO_PAPER_OPEN_AFTER_SCAN_STARTED scanType={} scanRunId={}", scanType, scanRunId);
-            int openedCount = paperPositionService.openPositionsFromLatestSignals().size();
-            log.info("AUTO_PAPER_OPEN_AFTER_SCAN_COMPLETED scanType={} opened={}", scanType, openedCount);
+            PaperOpenSummary summary = paperPositionService.openPositionsFromScanRun(scanRunId);
+            log.info(
+                    "AUTO_PAPER_OPEN_AFTER_SCAN_SUMMARY scanType={} scanRunId={} candidateCount={} signalCount={} enterLong={} enterShort={} noEntry={} newPaperEntries={} skipped={} openPositionsAfter={}",
+                    scanType,
+                    scanRunId,
+                    summary.candidateCount(),
+                    summary.signalCount(),
+                    summary.enterLongCount(),
+                    summary.enterShortCount(),
+                    summary.noEntryCount(),
+                    summary.openedCount(),
+                    summary.skippedCount(),
+                    summary.openPositionsAfter()
+            );
         } catch (RuntimeException exception) {
             log.error(
                     "AUTO_PAPER_OPEN_AFTER_SCAN_FAILED scanType={} scanRunId={} message={}",

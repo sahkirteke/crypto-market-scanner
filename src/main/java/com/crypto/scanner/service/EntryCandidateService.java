@@ -2,6 +2,7 @@ package com.crypto.scanner.service;
 
 import com.crypto.common.enums.CoinClassification;
 import com.crypto.common.enums.DirectionBias;
+import com.crypto.common.enums.MarketRegime;
 import com.crypto.common.enums.PositionSide;
 import com.crypto.common.enums.ReasonTag;
 import com.crypto.common.enums.RiskLevel;
@@ -18,6 +19,7 @@ import com.crypto.persistence.repository.EntryCandidateRepository;
 import com.crypto.persistence.repository.MarketScanRunRepository;
 import com.crypto.scanner.config.ScannerProperties;
 import com.crypto.scanner.model.EntryCandidateStatus;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -75,18 +77,22 @@ public class EntryCandidateService {
             return finish(List.of());
         }
 
-        List<CoinScanResultEntity> entities = new ArrayList<>();
-        entities.addAll(coinScanResultRepository.findByScanRun_IdAndClassificationOrderByScoreDesc(
-                scanRunId,
-                CoinClassification.STRONG_LONG
-        ));
-        entities.addAll(coinScanResultRepository.findByScanRun_IdAndClassificationOrderByScoreDesc(
-                scanRunId,
-                CoinClassification.STRONG_SHORT
-        ));
+        MarketScanRunEntity scanRun = marketScanRunRepository.findById(scanRunId).orElse(null);
+        if (scanRun == null) {
+            log.warn("ENTRY_CANDIDATES_SCAN_RUN_NOT_FOUND scanRunId={}", scanRunId);
+            return finish(List.of());
+        }
+
+        MarketRegime marketRegime = scanRun.getMarketRegime();
+        BigDecimal marketBreadthPct = scanRun.getMarketBreadthPct();
+        Instant scanTime = scanRun.getScanTimeUtc();
+
+        List<CoinScanResultEntity> entities = coinScanResultRepository.findByScanRunIdWithScanRun(scanRunId);
 
         List<EntryCandidate> eligibleCandidates = entities.stream()
-                .map(this::toCoinScanResult)
+                .filter(entity -> entity.getClassification() == CoinClassification.STRONG_LONG
+                        || entity.getClassification() == CoinClassification.STRONG_SHORT)
+                .map(entity -> toCoinScanResult(entity, scanRunId, marketRegime, marketBreadthPct, scanTime))
                 .map(this::toEligibleCandidate)
                 .flatMap(List::stream)
                 .toList();
@@ -298,9 +304,15 @@ public class EntryCandidateService {
         log.info("ENTRY_CANDIDATE_CREATED symbol={} side={} scanRunId={} validUntil={}", candidate.getSymbol(), candidate.getSide(), candidate.getScanRunId(), validUntil);
     }
 
-    private CoinScanResult toCoinScanResult(CoinScanResultEntity entity) {
+    private CoinScanResult toCoinScanResult(
+            CoinScanResultEntity entity,
+            Long scanRunId,
+            MarketRegime marketRegime,
+            BigDecimal marketBreadthPct,
+            Instant scanTime
+    ) {
         return CoinScanResult.builder()
-                .scanRunId(entity.getScanRun() == null ? null : entity.getScanRun().getId())
+                .scanRunId(scanRunId)
                 .symbol(entity.getSymbol())
                 .directionBias(entity.getDirectionBias())
                 .classification(entity.getClassification())
@@ -314,12 +326,12 @@ public class EntryCandidateService {
                 .spreadPct(entity.getSpreadPct())
                 .fundingRate(entity.getFundingRate())
                 .openInterest(entity.getOpenInterest())
-                .marketBreadthPct(entity.getMarketBreadthPct())
-                .marketRegime(entity.getScanRun() == null ? null : entity.getScanRun().getMarketRegime())
+                .marketBreadthPct(entity.getMarketBreadthPct() == null ? marketBreadthPct : entity.getMarketBreadthPct())
+                .marketRegime(marketRegime)
                 .eliminatedReason(entity.getEliminatedReason())
                 .reasons(parseReasonTags(entity.getReasonsJson(), entity.getSymbol(), "reasons"))
                 .warnings(parseReasonTags(entity.getWarningsJson(), entity.getSymbol(), "warnings"))
-                .scanTime(entity.getCreatedAt())
+                .scanTime(scanTime == null ? entity.getCreatedAt() : scanTime)
                 .build();
     }
 

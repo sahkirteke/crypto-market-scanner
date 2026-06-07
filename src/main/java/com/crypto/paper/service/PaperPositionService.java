@@ -51,11 +51,21 @@ public class PaperPositionService {
     private JsonlDecisionLogService jsonlDecisionLogService;
 
     public List<PaperPositionEntity> openPositionsFromLatestSignals() {
-        List<EntrySignal> latestSignals = entrySignalService.generateSignalsFromLatestScan();
-        List<EntrySignal> signals = (latestSignals == null ? List.<EntrySignal>of() : latestSignals).stream()
+        return openPositionsFromSignals(entrySignalService.generateSignalsFromLatestScan()).openedPositions();
+    }
+
+    public PaperOpenSummary openPositionsFromScanRun(Long scanRunId) {
+        return openPositionsFromSignals(entrySignalService.generateSignalsFromScanRun(scanRunId));
+    }
+
+    private PaperOpenSummary openPositionsFromSignals(List<EntrySignal> generatedSignals) {
+        List<EntrySignal> safeGeneratedSignals = generatedSignals == null ? List.of() : generatedSignals;
+        List<EntrySignal> strongSignals = safeGeneratedSignals.stream()
                 .filter(this::isStrongSignal)
                 .toList();
-        return openPositions(signals);
+        List<PaperPositionEntity> opened = openPositions(strongSignals);
+        int openPositionsAfter = getOpenPositionsForValidation().size();
+        return PaperOpenSummary.from(safeGeneratedSignals, strongSignals, opened, openPositionsAfter);
     }
 
     public List<PaperPositionEntity> openPositions(List<EntrySignal> signals) {
@@ -230,6 +240,50 @@ public class PaperPositionService {
     }
 
     public record RiskLevels(BigDecimal initialStop, BigDecimal riskPerUnit, BigDecimal tp1, BigDecimal tp2) {}
+
+    public record PaperOpenSummary(
+            int candidateCount,
+            int signalCount,
+            long enterLongCount,
+            long enterShortCount,
+            long noEntryCount,
+            int openedCount,
+            int skippedCount,
+            int openPositionsAfter,
+            List<PaperPositionEntity> openedPositions
+    ) {
+        private static PaperOpenSummary from(
+                List<EntrySignal> generatedSignals,
+                List<EntrySignal> strongSignals,
+                List<PaperPositionEntity> openedPositions,
+                int openPositionsAfter
+        ) {
+            List<EntrySignal> safeGeneratedSignals = generatedSignals == null ? List.of() : generatedSignals;
+            List<EntrySignal> safeStrongSignals = strongSignals == null ? List.of() : strongSignals;
+            List<PaperPositionEntity> safeOpenedPositions = openedPositions == null ? List.of() : openedPositions;
+            long enterLongCount = safeGeneratedSignals.stream()
+                    .filter(signal -> signal.getAction() == EntryAction.ENTER_LONG)
+                    .count();
+            long enterShortCount = safeGeneratedSignals.stream()
+                    .filter(signal -> signal.getAction() == EntryAction.ENTER_SHORT)
+                    .count();
+            long noEntryCount = safeGeneratedSignals.stream()
+                    .filter(signal -> signal.getAction() == EntryAction.NO_ENTRY)
+                    .count();
+            return new PaperOpenSummary(
+                    safeGeneratedSignals.size(),
+                    safeStrongSignals.size(),
+                    enterLongCount,
+                    enterShortCount,
+                    noEntryCount,
+                    safeOpenedPositions.size(),
+                    Math.max(0, safeStrongSignals.size() - safeOpenedPositions.size()),
+                    openPositionsAfter,
+                    safeOpenedPositions
+            );
+        }
+    }
+
 
     private BookTicker resolveBookTicker(EntrySignal signal) {
         if (binanceFuturesClient == null || signal == null || signal.getSymbol() == null) {
