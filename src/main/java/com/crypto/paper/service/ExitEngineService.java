@@ -454,12 +454,7 @@ public class ExitEngineService {
     private void writeEvent(PaperPositionEntity p, PaperPositionEventType type, Instant time, BigDecimal price, BigDecimal adjusted, BigDecimal closePct, Realized r, String reason, IntrabarEventContext context) {
         lastEvaluationEventCount++;
         Map<String, Object> details = eventDetails(p, type, reason, r, context);
-        if (eventRepository != null) {
-            eventRepository.save(PaperPositionEventEntity.builder().position(p).eventTimeUtc(time).eventType(type).price(price).adjustedPrice(adjusted)
-                    .positionPctClosed(closePct).rawPnlPct(r == null ? null : r.raw()).netPnlPct(r == null ? null : r.net()).leveragedNetPnlPct(r == null ? null : r.leveraged())
-                    .feePct(costConfig().getTakerFeePct().multiply(BigDecimal.valueOf(200))).slippagePct(costConfig().getSlippagePct().multiply(BigDecimal.valueOf(200))).leverage(costConfig().getLeverage()).reason(reason)
-                    .detailsJson(toJson(details)).build());
-        }
+        saveEvent(p, type, time, price, adjusted, closePct, r, reason, details);
         if (jsonlDecisionLogService != null) {
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("event", type.name());
@@ -471,6 +466,30 @@ public class ExitEngineService {
             payload.putAll(details);
             jsonlDecisionLogService.logPaper(payload);
         }
+    }
+
+    private PaperPositionEventEntity saveEvent(PaperPositionEntity p, PaperPositionEventType type, Instant time, BigDecimal price, BigDecimal adjusted, BigDecimal closePct, Realized r, String reason, Map<String, Object> details) {
+        PaperPositionEventEntity event = PaperPositionEventEntity.builder()
+                .position(p)
+                .eventTimeUtc(time == null ? Instant.now() : time)
+                .eventType(type)
+                .price(price)
+                .adjustedPrice(adjusted)
+                .positionPctClosed(closePct)
+                .rawPnlPct(r == null ? null : r.raw())
+                .netPnlPct(r == null ? null : r.net())
+                .leveragedNetPnlPct(r == null ? null : r.leveraged())
+                .feePct(costConfig().getTakerFeePct().multiply(BigDecimal.valueOf(200)))
+                .slippagePct(costConfig().getSlippagePct().multiply(BigDecimal.valueOf(200)))
+                .leverage(costConfig().getLeverage())
+                .reason(reason)
+                .detailsJson(toJson(details))
+                .build();
+        if (eventRepository == null) {
+            return event;
+        }
+        PaperPositionEventEntity saved = eventRepository.save(event);
+        return saved == null ? event : saved;
     }
 
     private Map<String, Object> eventDetails(PaperPositionEntity p, PaperPositionEventType type, String reason, Realized r, IntrabarEventContext context) {
@@ -505,11 +524,36 @@ public class ExitEngineService {
     private String toJson(Map<String, Object> details) {
         if (details == null || details.isEmpty()) return null;
         try {
-            ObjectMapper mapper = objectMapper == null ? new ObjectMapper().findAndRegisterModules() : objectMapper;
+            ObjectMapper mapper = (objectMapper == null ? new ObjectMapper() : objectMapper.copy()).findAndRegisterModules();
             return mapper.writeValueAsString(details);
         } catch (Exception exception) {
-            return null;
+            return toSimpleJson(details);
         }
+    }
+
+    private String toSimpleJson(Map<String, Object> details) {
+        StringBuilder json = new StringBuilder("{");
+        boolean first = true;
+        for (Map.Entry<String, Object> entry : details.entrySet()) {
+            if (!first) {
+                json.append(',');
+            }
+            first = false;
+            json.append('\"').append(escapeJson(entry.getKey())).append("\":");
+            Object value = entry.getValue();
+            if (value == null) {
+                json.append("null");
+            } else if (value instanceof Number || value instanceof Boolean) {
+                json.append(value);
+            } else {
+                json.append('\"').append(escapeJson(value.toString())).append('\"');
+            }
+        }
+        return json.append('}').toString();
+    }
+
+    private String escapeJson(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     private void updateStatus(PaperPositionEntity p) {
