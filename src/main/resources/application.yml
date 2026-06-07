@@ -83,6 +83,16 @@ scanner:
     min-quote-volume-24h: 30000000
     block-market-chop: false
     require-volume-confirmed: false
+  paper:
+    enabled: true
+    default-notional-usdt: 100
+    leverage: 3
+    allow-multiple-open-same-symbol: false
+    max-open-positions: 5
+    max-open-long-positions: 3
+    max-open-short-positions: 3
+    allow-medium-risk: true
+    allow-high-risk: false
 
 ---
 spring:

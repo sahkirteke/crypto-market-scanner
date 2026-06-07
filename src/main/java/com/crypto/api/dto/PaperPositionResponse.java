@@ -1,0 +1,47 @@
+package com.crypto.api.dto;
+
+import com.crypto.common.enums.CoinClassification;
+import com.crypto.common.enums.DirectionBias;
+import com.crypto.common.enums.EntryAction;
+import com.crypto.common.enums.PositionSide;
+import com.crypto.common.enums.RiskLevel;
+import com.crypto.paper.model.PaperPositionStatus;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
+
+public record PaperPositionResponse(
+        Long id,
+        String symbol,
+        PositionSide side,
+        PaperPositionStatus status,
+        EntryAction entryAction,
+        BigDecimal entryPrice,
+        BigDecimal quantity,
+        BigDecimal notionalUsdt,
+        Integer leverage,
+        Integer entryScore,
+        Integer longScore,
+        Integer shortScore,
+        CoinClassification sourceClassification,
+        DirectionBias directionBias,
+        RiskLevel riskLevel,
+        BigDecimal fundingRate,
+        BigDecimal openInterest,
+        BigDecimal marketBreadthPct,
+        BigDecimal priceChange24hPct,
+        BigDecimal spreadPct,
+        String entryReason,
+        String signalReason,
+        List<String> reasons,
+        List<String> warnings,
+        Instant openedAt,
+        Instant closedAt,
+        BigDecimal exitPrice,
+        BigDecimal realizedPnlUsdt,
+        BigDecimal realizedPnlPct,
+        String exitReason,
+        Instant createdAt,
+        Instant updatedAt
+) {
+}
