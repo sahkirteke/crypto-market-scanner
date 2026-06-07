@@ -11,6 +11,10 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface PaperPositionRepository extends JpaRepository<PaperPositionEntity, Long> {
     List<PaperPositionEntity> findByStatusOrderByOpenedAtDesc(PaperPositionStatus status);
 
+    List<PaperPositionEntity> findByStatus(PaperPositionStatus status);
+
+    Page<PaperPositionEntity> findByStatusOrderByClosedAtDesc(PaperPositionStatus status, Pageable pageable);
+
     Optional<PaperPositionEntity> findFirstBySymbolAndStatusOrderByOpenedAtDesc(
             String symbol,
             PaperPositionStatus status

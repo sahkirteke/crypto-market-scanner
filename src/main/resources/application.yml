@@ -93,6 +93,13 @@ scanner:
     max-open-short-positions: 5
     allow-medium-risk: true
     allow-high-risk: false
+  paper-exit:
+    enabled: true
+    take-profit-pct: 1.0
+    stop-loss-pct: 0.6
+    time-stop-minutes: 240
+    time-stop-close-only-if-non-positive: true
+    bar-minutes: 60
 
 ---
 spring:

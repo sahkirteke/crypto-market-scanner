@@ -93,8 +93,12 @@ public class PaperPositionService {
             return reject(signal, "MAX_OPEN_SHORT_REACHED");
         }
 
+        ScannerProperties.PaperExit exitConfig = scannerProperties.getPaperExit() == null
+                ? new ScannerProperties.PaperExit()
+                : scannerProperties.getPaperExit();
         BigDecimal notionalUsdt = bigDecimalValue(config.getDefaultNotionalUsdt(), "100");
         BigDecimal quantity = notionalUsdt.divide(signal.getEntryPrice(), QUANTITY_SCALE, RoundingMode.DOWN);
+        Instant openedAt = Instant.now();
         PaperPositionEntity position = PaperPositionEntity.builder()
                 .symbol(signal.getSymbol())
                 .side(signal.getSide())
@@ -105,6 +109,7 @@ public class PaperPositionService {
                 .notionalUsdt(notionalUsdt)
                 .leverage(intValue(config.getLeverage(), 3))
                 .entryScore(signal.getScore())
+                .entrySignalScore(signal.getScore())
                 .longScore(signal.getLongScore())
                 .shortScore(signal.getShortScore())
                 .sourceClassification(signal.getSourceClassification())
@@ -119,7 +124,18 @@ public class PaperPositionService {
                 .signalReason(signal.getSignalReason())
                 .reasonsJson(jsonTextMapper.toJson(signal.getReasons()))
                 .warningsJson(jsonTextMapper.toJson(signal.getWarnings()))
-                .openedAt(Instant.now())
+                .openedAt(openedAt)
+                .currentPrice(signal.getEntryPrice())
+                .highestPrice(signal.getEntryPrice())
+                .lowestPrice(signal.getEntryPrice())
+                .maxFavorableMovePct(BigDecimal.ZERO)
+                .maxAdverseMovePct(BigDecimal.ZERO)
+                .barsHeld(0)
+                .minutesHeld(0)
+                .lastCheckedAt(openedAt)
+                .takeProfitPct(bigDecimalValue(exitConfig.getTakeProfitPct(), "1.0"))
+                .stopLossPct(bigDecimalValue(exitConfig.getStopLossPct(), "0.6"))
+                .timeStopMinutes(intValue(exitConfig.getTimeStopMinutes(), 240))
                 .build();
 
         PaperPositionEntity saved = paperPositionRepository.save(position);
