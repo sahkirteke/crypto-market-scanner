@@ -315,18 +315,14 @@ public class MarketScannerService {
                 results.add(missingTechnicalResult(symbol, pair, klineNotReadyMap.get(symbol), scanStartTime));
                 continue;
             }
-            if (tickerMap.get(symbol) == null) {
+
+            Ticker24h ticker = tickerMap.get(symbol);
+            BookTicker bookTicker = bookTickerMap.get(symbol);
+            if (pair.getOneHour() == null || pair.getFourHour() == null || ticker == null || bookTicker == null) {
                 skippedCount++;
-                log.info("SCAN_SCORING_SKIPPED symbol={} reason={}", symbol, "MISSING_TICKER");
-                results.add(dataNotReadyResult(symbol, List.of(ReasonTag.MISSING_TICKER), List.of(),
-                        EliminationReason.MISSING_TICKER, null, null, scanStartTime));
-                continue;
-            }
-            if (bookTickerMap.get(symbol) == null) {
-                skippedCount++;
-                log.info("SCAN_SCORING_SKIPPED symbol={} reason={}", symbol, "MISSING_BOOK_TICKER");
-                results.add(dataNotReadyResult(symbol, List.of(ReasonTag.MISSING_BOOK_TICKER), List.of(),
-                        EliminationReason.MISSING_BOOK_TICKER, null, null, scanStartTime));
+                log.info("SCAN_SCORING_SKIPPED symbol={} reason={}", symbol, "MISSING_SCORING_INPUT");
+                results.add(dataNotReadyResult(symbol, List.of(ReasonTag.DATA_NOT_READY), safeList(pair.getWarnings()),
+                        EliminationReason.DATA_NOT_READY, null, null, scanStartTime));
                 continue;
             }
 
@@ -334,11 +330,18 @@ public class MarketScannerService {
                     .symbol(symbol)
                     .oneHour(pair.getOneHour())
                     .fourHour(pair.getFourHour())
-                    .ticker24h(tickerMap.get(symbol))
-                    .bookTicker(bookTickerMap.get(symbol))
+                    .ticker24h(ticker)
+                    .bookTicker(bookTicker)
                     .futuresSnapshot(futuresMap.get(symbol))
                     .marketRegimeResult(marketRegimeResult)
                     .build();
+            if (input == null) {
+                skippedCount++;
+                log.info("SCAN_SCORING_SKIPPED symbol={} reason={}", symbol, "MISSING_SCORING_INPUT");
+                results.add(dataNotReadyResult(symbol, List.of(ReasonTag.DATA_NOT_READY), safeList(pair.getWarnings()),
+                        EliminationReason.DATA_NOT_READY, null, null, scanStartTime));
+                continue;
+            }
             try {
                 CoinScanResult result = coinScoringService.score(input);
                 results.add(result);
@@ -346,8 +349,8 @@ public class MarketScannerService {
             } catch (RuntimeException exception) {
                 skippedCount++;
                 log.warn("SCAN_SCORING_SKIPPED symbol={} reason={}", symbol, "SCORING_ERROR", exception);
-                results.add(dataNotReadyResult(symbol, pair.getReasons(), pair.getWarnings(), EliminationReason.DATA_ERROR,
-                        null, null, scanStartTime));
+                results.add(dataNotReadyResult(symbol, List.of(ReasonTag.DATA_NOT_READY), safeList(pair.getWarnings()),
+                        EliminationReason.DATA_ERROR, null, null, scanStartTime));
             }
         }
         return new ScoringResult(results, scoredCount, skippedCount);

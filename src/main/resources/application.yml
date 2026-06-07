@@ -1,17 +1,6 @@
 spring:
   application:
     name: crypto-market-scanner
-  datasource:
-    url: jdbc:postgresql://aws-1-eu-central-1.pooler.supabase.com:5432/postgres?prepareThreshold=0&ssl=true&sslmode=require
-    username: postgres.wdsxcflkxixvwaqnltkk
-    password: DhlDi1wQn4XqC749
-    hikari:
-      maximum-pool-size: 5
-      minimum-idle: 1
-      connection-timeout: 30000
-      idle-timeout: 600000
-      max-lifetime: 1800000
-
 
 binance:
   futures-base-url: https://fapi.binance.com
@@ -47,3 +36,38 @@ scanner:
     watchlist-threshold: 65
     eliminated-threshold: 50
     direction-difference-threshold: 10
+
+---
+spring:
+  config:
+    activate:
+      on-profile: "!db & !manual-scanner-db"
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration
+
+---
+spring:
+  config:
+    activate:
+      on-profile: "db | manual-scanner-db"
+  datasource:
+    url: ${SUPABASE_DB_URL:jdbc:postgresql://aws-1-eu-central-1.pooler.supabase.com:6543/postgres?prepareThreshold=0&sslmode=require}
+    username: ${SUPABASE_DB_USERNAME:postgres.wdsxcflkxixvwaqnltkk}
+    password: ${SUPABASE_DB_PASSWORD:DhlDi1wQn4XqC749}
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
