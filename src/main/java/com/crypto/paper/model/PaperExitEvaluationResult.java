@@ -11,5 +11,6 @@ public class PaperExitEvaluationResult {
     private final int checkedCount;
     private final int eventCount;
     private final int closedCount;
+    private final int skippedErrorCount;
     private final List<PaperPositionEntity> closedPositions;
 }

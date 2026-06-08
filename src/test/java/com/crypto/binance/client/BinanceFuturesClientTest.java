@@ -5,8 +5,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.crypto.domain.model.BookTicker;
 import com.crypto.domain.model.Kline;
 import com.crypto.domain.model.SymbolInfo;
+import java.lang.reflect.Method;
+import java.net.SocketException;
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -16,6 +19,38 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 class BinanceFuturesClientTest {
+
+
+    @Test
+    void classifiesNestedConnectionResetAsTransientNetworkError() throws Exception {
+        BinanceFuturesClient client = clientWithJson("[]");
+        Method method = BinanceFuturesClient.class.getDeclaredMethod("isTransientNetworkError", Throwable.class);
+        method.setAccessible(true);
+
+        boolean transientNetworkError = (boolean) method.invoke(client,
+                new RuntimeException("wrapper", new SocketException("Connection reset")));
+
+        assertThat(transientNetworkError).isTrue();
+    }
+
+    @Test
+    void getKlinesRetriesTransientConnectionResetBeforeFailing() {
+        AtomicInteger attempts = new AtomicInteger();
+        ExchangeFunction exchangeFunction = request -> {
+            attempts.incrementAndGet();
+            return Mono.error(new SocketException("Connection reset"));
+        };
+        WebClient webClient = WebClient.builder()
+                .baseUrl("http://localhost")
+                .exchangeFunction(exchangeFunction)
+                .build();
+        BinanceFuturesClient client = new BinanceFuturesClient(webClient);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> client.getKlines("BTCUSDT", "1h", 1))
+                .isInstanceOf(BinanceClientException.class)
+                .hasMessageContaining("klines");
+        assertThat(attempts.get()).isEqualTo(3);
+    }
 
     @Test
     void getAllBookTickersMapsPricesAndCalculatesMidPriceAndSpreadPct() {

@@ -144,3 +144,8 @@ scanner:
 logging:
   pattern:
     dateformat: "yyyy-MM-dd HH:mm:ss.SSS,Europe/Istanbul"
+  level:
+    reactor.netty.http.client.HttpClientConnect: ERROR
+    reactor.netty.resources.DefaultPooledConnectionProvider: ERROR
+    reactor.netty.channel.FluxReceive: ERROR
+    org.springframework.web.reactive.function.client.ExchangeFunctions: ERROR
