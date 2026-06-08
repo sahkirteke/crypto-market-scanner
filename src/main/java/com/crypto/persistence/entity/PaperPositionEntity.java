@@ -3,6 +3,7 @@ package com.crypto.persistence.entity;
 import com.crypto.common.enums.CoinClassification;
 import com.crypto.common.enums.DirectionBias;
 import com.crypto.common.enums.EntryAction;
+import com.crypto.common.enums.MarketRegime;
 import com.crypto.common.enums.PositionSide;
 import com.crypto.common.enums.RiskLevel;
 import com.crypto.paper.model.PaperPositionStatus;
@@ -66,6 +67,10 @@ public class PaperPositionEntity {
 
     @Column(name = "entry_score")
     private Integer entryScore;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "market_regime", length = 32)
+    private MarketRegime marketRegime;
 
     @Column(name = "entry_bb_score", precision = 20, scale = 8)
     private BigDecimal entryBbScore;
@@ -305,6 +310,12 @@ public class PaperPositionEntity {
 
     @Column(name = "updated_at_text", length = 64)
     private String updatedAtText;
+
+    @Column(name = "symbol_trade_entry_logged")
+    private Boolean symbolTradeEntryLogged;
+
+    @Column(name = "symbol_trade_exit_logged")
+    private Boolean symbolTradeExitLogged;
 
     @PrePersist
     void prePersist() {

@@ -8,6 +8,8 @@ import com.crypto.common.service.JsonlDecisionLogService;
 import com.crypto.common.time.IstanbulTimeUtil;
 import com.crypto.domain.model.Kline;
 import com.crypto.domain.model.TechnicalSnapshot;
+import com.crypto.paper.log.SymbolTradeJsonlLogService;
+import com.crypto.paper.log.SymbolTradeJsonlLogService.PaperExitContext;
 import com.crypto.paper.model.KlineCandle;
 import com.crypto.paper.model.PaperExitEvaluationResult;
 import com.crypto.paper.model.PaperExitReason;
@@ -54,6 +56,7 @@ public class ExitEngineService {
     @Autowired(required = false) private MarketScanRunRepository marketScanRunRepository;
     @Autowired(required = false) private CoinScanResultRepository coinScanResultRepository;
     @Autowired(required = false) private ObjectMapper objectMapper;
+    @Autowired(required = false) private SymbolTradeJsonlLogService symbolTradeJsonlLogService;
 
     private int lastEvaluationEventCount;
     private int lastEvaluationSkippedErrors;
@@ -499,7 +502,28 @@ public class ExitEngineService {
         writeEvent(p, PaperPositionEventType.valueOf(reason.name()), closeTime, exitPrice, p.getExitPriceAdjusted(), closePct, realized, reason.name(), context);
         writeEvent(p, PaperPositionEventType.CLOSED, closeTime, exitPrice, p.getExitPriceAdjusted(), closePct, realized, reason.name(), context);
         writeExitTradeLog(p, exitPrice, closePct, reason, context);
+        writeSymbolTradeExit(p, exitPrice, reason, context);
         log.info("PAPER_POSITION_CLOSED closedAt={} id={} symbol={} side={} exitReason={} exitPrice={} pnlPct={}", IstanbulTimeUtil.format(p.getClosedAt()), p.getId(), p.getSymbol(), p.getSide(), reason, exitPrice, p.getRealizedPnlPct());
+    }
+
+    private void writeSymbolTradeExit(PaperPositionEntity p, BigDecimal exitPrice, PaperExitReason reason, IntrabarEventContext context) {
+        if (symbolTradeJsonlLogService == null || p.getStatus() != PaperPositionStatus.CLOSED || Boolean.TRUE.equals(p.getSymbolTradeExitLogged())) {
+            return;
+        }
+        PaperExitContext exitContext = PaperExitContext.builder()
+                .exitPrice(exitPrice)
+                .firstHit(firstHit(reason))
+                .exitTrigger(exitTrigger(reason, context))
+                .interval(context == null ? "1h" : context.interval())
+                .candleOpenTime(context == null ? null : context.candle().getOpenTime())
+                .candleCloseTime(context == null ? null : context.candle().getCloseTime())
+                .candleHigh(context == null ? null : context.candle().getHigh())
+                .candleLow(context == null ? null : context.candle().getLow())
+                .candleClose(context == null ? null : context.candle().getClose())
+                .build();
+        if (symbolTradeJsonlLogService.logExit(p, exitContext)) {
+            p.setSymbolTradeExitLogged(true);
+        }
     }
 
     private void writeExitTradeLog(PaperPositionEntity p, BigDecimal exitPrice, BigDecimal closePct, PaperExitReason reason, IntrabarEventContext context) {
