@@ -187,17 +187,19 @@ public class ExitEngineService {
         if (tp1Hit(position, candle.getHigh(), candle.getLow(), tp1HitBefore)) {
             IntrabarEventContext tp1Context = new IntrabarEventContext(position, candle, effectiveInterval);
             position.setTp1Hit(true);
-            partialClose(position, position.getTp1(), scannerProperties.getPaperRisk().getTp1ClosePct(),
+            PartialCloseResult partial = partialClose(position, position.getTp1(), scannerProperties.getPaperRisk().getTp1ClosePct(),
                     PaperPositionEventType.PARTIAL_TP1, candle.getCloseTime(), tp1Context);
             position.setTrailingActive(true);
             position.setTrailingActivatedAtBarCloseTime(candle.getCloseTime());
             updateBreakEvenStop(position, candle.getCloseTime(), new IntrabarEventContext(position, candle, effectiveInterval));
+            writeSymbolTradePartialExit(position, partial, PaperExitReason.PARTIAL_TP1, tp1Context);
         }
         if (tp2Hit(position, candle.getHigh(), candle.getLow(), tp2HitBefore)) {
             IntrabarEventContext tp2Context = new IntrabarEventContext(position, candle, effectiveInterval);
             position.setTp2Hit(true);
-            partialClose(position, position.getTp2(), scannerProperties.getPaperRisk().getTp2ClosePct(),
+            PartialCloseResult partial = partialClose(position, position.getTp2(), scannerProperties.getPaperRisk().getTp2ClosePct(),
                     PaperPositionEventType.PARTIAL_TP2, candle.getCloseTime(), tp2Context);
+            writeSymbolTradePartialExit(position, partial, PaperExitReason.PARTIAL_TP2, tp2Context);
         }
         updateStatus(position);
         updateTrailing(position, candle.getHigh(), candle.getLow(), fallbackAtr(position), candle.getCloseTime(),
@@ -243,15 +245,19 @@ public class ExitEngineService {
             return position;
         }
         if (tp1Hit(position, candleHigh, candleLow)) {
-            partialClose(position, position.getTp1(), scannerProperties.getPaperRisk().getTp1ClosePct(), PaperPositionEventType.PARTIAL_TP1, candleCloseTime);
+            IntrabarEventContext tp1Context = null;
             position.setTp1Hit(true);
+            PartialCloseResult partial = partialClose(position, position.getTp1(), scannerProperties.getPaperRisk().getTp1ClosePct(), PaperPositionEventType.PARTIAL_TP1, candleCloseTime);
             position.setTrailingActive(true);
             position.setTrailingActivatedAtBarCloseTime(candleCloseTime);
             updateBreakEvenStop(position, candleCloseTime, null);
+            writeSymbolTradePartialExit(position, partial, PaperExitReason.PARTIAL_TP1, tp1Context);
         }
         if (tp2Hit(position, candleHigh, candleLow)) {
-            partialClose(position, position.getTp2(), scannerProperties.getPaperRisk().getTp2ClosePct(), PaperPositionEventType.PARTIAL_TP2, candleCloseTime);
+            IntrabarEventContext tp2Context = null;
             position.setTp2Hit(true);
+            PartialCloseResult partial = partialClose(position, position.getTp2(), scannerProperties.getPaperRisk().getTp2ClosePct(), PaperPositionEventType.PARTIAL_TP2, candleCloseTime);
+            writeSymbolTradePartialExit(position, partial, PaperExitReason.PARTIAL_TP2, tp2Context);
         }
         updateStatus(position);
         updateTrailing(position, candleHigh, candleLow, atr14, candleCloseTime);
@@ -377,17 +383,25 @@ public class ExitEngineService {
         return !alreadyHit && p.getTp2() != null && (p.getSide() == PositionSide.SHORT ? le(low, p.getTp2()) : ge(high, p.getTp2()));
     }
 
-    private void partialClose(PaperPositionEntity p, BigDecimal price, BigDecimal closePct, PaperPositionEventType type, Instant time) {
-        partialClose(p, price, closePct, type, time, null);
+    private PartialCloseResult partialClose(PaperPositionEntity p, BigDecimal price, BigDecimal closePct, PaperPositionEventType type, Instant time) {
+        return partialClose(p, price, closePct, type, time, null);
     }
 
-    private void partialClose(PaperPositionEntity p, BigDecimal price, BigDecimal closePct, PaperPositionEventType type, Instant time, IntrabarEventContext context) {
-        BigDecimal remaining = defaultBigDecimal(p.getRemainingPositionPct(), new BigDecimal("100")).subtract(closePct).max(BigDecimal.ZERO);
+    private PartialCloseResult partialClose(PaperPositionEntity p, BigDecimal price, BigDecimal closePct, PaperPositionEventType type, Instant time, IntrabarEventContext context) {
+        BigDecimal remainingBefore = defaultBigDecimal(p.getRemainingPositionPct(), new BigDecimal("100"));
+        Boolean tp1HitBefore = context == null ? (type == PaperPositionEventType.PARTIAL_TP1 ? false : p.getTp1Hit()) : context.tp1HitBefore();
+        Boolean tp2HitBefore = context == null ? (type == PaperPositionEventType.PARTIAL_TP2 ? false : p.getTp2Hit()) : context.tp2HitBefore();
+        Boolean trailingActiveBefore = context == null ? p.getTrailingActive() : context.trailingActiveBefore();
+        BigDecimal remaining = remainingBefore.subtract(closePct).max(BigDecimal.ZERO);
         p.setRemainingPositionPct(remaining);
         Realized realized = realized(p, price, closePct);
         mergeRealized(p, realized, price);
-        writeEvent(p, type, time, price, adjustedExit(p.getSide(), price), closePct, realized, type.name(), context);
+        Instant eventTime = time == null ? Instant.now() : time;
+        BigDecimal adjusted = adjustedExit(p.getSide(), price);
+        writeEvent(p, type, eventTime, price, adjusted, closePct, realized, type.name(), context);
         log.info("{} positionId={} symbol={} closedPct={} remainingPct={} price={}", type, p.getId(), p.getSymbol(), closePct, remaining, price);
+        return new PartialCloseResult(price, adjusted, closePct, remainingBefore, remaining, realized, eventTime,
+                tp1HitBefore, tp2HitBefore, trailingActiveBefore);
     }
 
     private void updateBreakEvenStop(PaperPositionEntity p, Instant time, IntrabarEventContext context) {
@@ -502,19 +516,41 @@ public class ExitEngineService {
         writeEvent(p, PaperPositionEventType.valueOf(reason.name()), closeTime, exitPrice, p.getExitPriceAdjusted(), closePct, realized, reason.name(), context);
         writeEvent(p, PaperPositionEventType.CLOSED, closeTime, exitPrice, p.getExitPriceAdjusted(), closePct, realized, reason.name(), context);
         writeExitTradeLog(p, exitPrice, closePct, reason, context);
-        writeSymbolTradeExit(p, exitPrice, reason, context);
+        writeSymbolTradeExit(p, exitPrice, closePct, realized, reason, context);
         log.info("PAPER_POSITION_CLOSED closedAt={} id={} symbol={} side={} exitReason={} exitPrice={} pnlPct={}", IstanbulTimeUtil.format(p.getClosedAt()), p.getId(), p.getSymbol(), p.getSide(), reason, exitPrice, p.getRealizedPnlPct());
     }
 
-    private void writeSymbolTradeExit(PaperPositionEntity p, BigDecimal exitPrice, PaperExitReason reason, IntrabarEventContext context) {
-        if (symbolTradeJsonlLogService == null || p.getStatus() != PaperPositionStatus.CLOSED || Boolean.TRUE.equals(p.getSymbolTradeExitLogged())) {
+    private void writeSymbolTradeExit(PaperPositionEntity p, BigDecimal exitPrice, BigDecimal closePct, Realized realized, PaperExitReason reason, IntrabarEventContext context) {
+        if (symbolTradeJsonlLogService == null || p.getStatus() != PaperPositionStatus.CLOSED || Boolean.TRUE.equals(p.getSymbolTradeFinalExitLogged()) || Boolean.TRUE.equals(p.getSymbolTradeExitLogged())) {
             return;
         }
+        backfillSymbolTradeEntryIfMissing(p);
+        BigDecimal closedPct = defaultBigDecimal(closePct, context == null ? ONE_HUNDRED : defaultBigDecimal(context.remainingPositionPctBefore(), ONE_HUNDRED));
+        BigDecimal realizedNetWeighted = realized == null ? netWeightedForClose(p, exitPrice, closedPct) : realized.netWeighted();
+        BigDecimal realizedPnlUsdt = calculateRealizedPnlUsdt(p, realizedNetWeighted);
         PaperExitContext exitContext = PaperExitContext.builder()
                 .exitPrice(exitPrice)
+                .exitPriceAdjusted(p.getExitPriceAdjusted())
+                .exitTime(p.getClosedAt())
+                .exitSeq(nextSymbolTradeExitSeq(p))
+                .exitReason(reason.name())
                 .firstHit(firstHit(reason))
                 .exitTrigger(exitTrigger(reason, context))
                 .interval(context == null ? "1h" : context.interval())
+                .closedPositionPct(closedPct)
+                .remainingPositionPctBefore(context == null ? closedPct : context.remainingPositionPctBefore())
+                .remainingPositionPctAfter(p.getRemainingPositionPct())
+                .realizedPnlUsdt(realizedPnlUsdt)
+                .realizedPnlPct(realizedNetWeighted)
+                .rawRealizedPnlPct(realized == null ? rawWeightedForClose(p, exitPrice, closedPct) : realized.rawWeighted())
+                .netRealizedPnlPct(realizedNetWeighted)
+                .leveragedNetRealizedPnlPct(realized == null ? leveragedWeightedForClose(p, exitPrice, closedPct) : realized.leveragedWeighted())
+                .tp1HitBefore(context == null ? p.getTp1Hit() : context.tp1HitBefore())
+                .tp1HitAfter(p.getTp1Hit())
+                .tp2HitBefore(context == null ? p.getTp2Hit() : context.tp2HitBefore())
+                .tp2HitAfter(p.getTp2Hit())
+                .trailingActiveBefore(context == null ? p.getTrailingActive() : context.trailingActiveBefore())
+                .trailingActiveAfter(p.getTrailingActive())
                 .candleOpenTime(context == null ? null : context.candle().getOpenTime())
                 .candleCloseTime(context == null ? null : context.candle().getCloseTime())
                 .candleHigh(context == null ? null : context.candle().getHigh())
@@ -522,8 +558,74 @@ public class ExitEngineService {
                 .candleClose(context == null ? null : context.candle().getClose())
                 .build();
         if (symbolTradeJsonlLogService.logExit(p, exitContext)) {
+            p.setSymbolTradeFinalExitLogged(true);
             p.setSymbolTradeExitLogged(true);
         }
+    }
+
+    private void writeSymbolTradePartialExit(PaperPositionEntity p, PartialCloseResult partial, PaperExitReason reason, IntrabarEventContext context) {
+        if (symbolTradeJsonlLogService == null || partial == null) {
+            return;
+        }
+        if ((reason == PaperExitReason.PARTIAL_TP1 && Boolean.TRUE.equals(p.getSymbolTradeTp1ExitLogged()))
+                || (reason == PaperExitReason.PARTIAL_TP2 && Boolean.TRUE.equals(p.getSymbolTradeTp2ExitLogged()))) {
+            return;
+        }
+        backfillSymbolTradeEntryIfMissing(p);
+        PaperExitContext exitContext = PaperExitContext.builder()
+                .exitPrice(partial.price())
+                .exitPriceAdjusted(partial.adjustedPrice())
+                .exitTime(partial.exitTime())
+                .exitSeq(nextSymbolTradeExitSeq(p))
+                .exitReason(reason.name())
+                .firstHit(firstHit(reason))
+                .exitTrigger(exitTrigger(reason, context))
+                .interval(context == null ? "1h" : context.interval())
+                .closedPositionPct(partial.closePct())
+                .remainingPositionPctBefore(partial.remainingBefore())
+                .remainingPositionPctAfter(partial.remainingAfter())
+                .realizedPnlUsdt(calculateRealizedPnlUsdt(p, partial.realized().netWeighted()))
+                .realizedPnlPct(partial.realized().netWeighted())
+                .rawRealizedPnlPct(partial.realized().rawWeighted())
+                .netRealizedPnlPct(partial.realized().netWeighted())
+                .leveragedNetRealizedPnlPct(partial.realized().leveragedWeighted())
+                .tp1HitBefore(partial.tp1HitBefore())
+                .tp1HitAfter(p.getTp1Hit())
+                .tp2HitBefore(partial.tp2HitBefore())
+                .tp2HitAfter(p.getTp2Hit())
+                .trailingActiveBefore(partial.trailingActiveBefore())
+                .trailingActiveAfter(p.getTrailingActive())
+                .candleOpenTime(context == null ? null : context.candle().getOpenTime())
+                .candleCloseTime(context == null ? null : context.candle().getCloseTime())
+                .candleHigh(context == null ? null : context.candle().getHigh())
+                .candleLow(context == null ? null : context.candle().getLow())
+                .candleClose(context == null ? null : context.candle().getClose())
+                .build();
+        if (symbolTradeJsonlLogService.logExit(p, exitContext)) {
+            if (reason == PaperExitReason.PARTIAL_TP1) {
+                p.setSymbolTradeTp1ExitLogged(true);
+            } else if (reason == PaperExitReason.PARTIAL_TP2) {
+                p.setSymbolTradeTp2ExitLogged(true);
+            }
+        }
+    }
+
+    private void backfillSymbolTradeEntryIfMissing(PaperPositionEntity p) {
+        if (symbolTradeJsonlLogService == null || Boolean.TRUE.equals(p.getSymbolTradeEntryLogged())) {
+            return;
+        }
+        if (symbolTradeJsonlLogService.logEntry(p)) {
+            p.setSymbolTradeEntryLogged(true);
+            log.info("SYMBOL_TRADE_ENTRY_BACKFILLED_BEFORE_EXIT symbol={} positionId={}", p.getSymbol(), p.getId());
+        }
+    }
+
+    private int nextSymbolTradeExitSeq(PaperPositionEntity p) {
+        int seq = 1;
+        if (Boolean.TRUE.equals(p.getSymbolTradeTp1ExitLogged())) seq++;
+        if (Boolean.TRUE.equals(p.getSymbolTradeTp2ExitLogged())) seq++;
+        if (Boolean.TRUE.equals(p.getSymbolTradeFinalExitLogged()) || Boolean.TRUE.equals(p.getSymbolTradeExitLogged())) seq++;
+        return seq;
     }
 
     private void writeExitTradeLog(PaperPositionEntity p, BigDecimal exitPrice, BigDecimal closePct, PaperExitReason reason, IntrabarEventContext context) {
@@ -616,14 +718,37 @@ public class ExitEngineService {
         p.setRealizedPnlUsdt(calculateRealizedPnlUsdt(p, p.getNetRealizedPnlPct()));
     }
 
+    private BigDecimal rawWeightedForClose(PaperPositionEntity p, BigDecimal exitPrice, BigDecimal pctClosed) {
+        return rawPnlPct(p.getSide(), p.getEntryPrice(), exitPrice).multiply(weight(pctClosed));
+    }
+
+    private BigDecimal netWeightedForClose(PaperPositionEntity p, BigDecimal exitPrice, BigDecimal pctClosed) {
+        return calculateNetPnlPct(p, exitPrice).multiply(weight(pctClosed));
+    }
+
+    private BigDecimal leveragedWeightedForClose(PaperPositionEntity p, BigDecimal exitPrice, BigDecimal pctClosed) {
+        return calculateNetPnlPct(p, exitPrice)
+                .multiply(BigDecimal.valueOf(intValue(costConfig().getLeverage(), 3)))
+                .setScale(PCT_SCALE, RoundingMode.HALF_UP)
+                .multiply(weight(pctClosed));
+    }
+
     private Realized realized(PaperPositionEntity p, BigDecimal exitPrice, BigDecimal pctClosed) {
         BigDecimal raw = rawPnlPct(p.getSide(), p.getEntryPrice(), exitPrice);
         BigDecimal net = calculateNetPnlPct(p, exitPrice);
         BigDecimal leveraged = net.multiply(BigDecimal.valueOf(intValue(costConfig().getLeverage(), 3))).setScale(PCT_SCALE, RoundingMode.HALF_UP);
-        BigDecimal weight = pctClosed.divide(ONE_HUNDRED, PCT_SCALE + 4, RoundingMode.HALF_UP);
+        BigDecimal weight = weight(pctClosed);
         return new Realized(raw, net, leveraged, raw.multiply(weight), net.multiply(weight), leveraged.multiply(weight));
     }
+
+    private BigDecimal weight(BigDecimal pctClosed) {
+        return pctClosed.divide(ONE_HUNDRED, PCT_SCALE + 4, RoundingMode.HALF_UP);
+    }
+
     private record Realized(BigDecimal raw, BigDecimal net, BigDecimal leveraged, BigDecimal rawWeighted, BigDecimal netWeighted, BigDecimal leveragedWeighted) {}
+    private record PartialCloseResult(BigDecimal price, BigDecimal adjustedPrice, BigDecimal closePct, BigDecimal remainingBefore,
+                                      BigDecimal remainingAfter, Realized realized, Instant exitTime,
+                                      Boolean tp1HitBefore, Boolean tp2HitBefore, Boolean trailingActiveBefore) {}
 
     private void writeEvent(PaperPositionEntity p, PaperPositionEventType type, Instant time, BigDecimal price, BigDecimal adjusted, BigDecimal closePct, Realized r, String reason) {
         writeEvent(p, type, time, price, adjusted, closePct, r, reason, null);

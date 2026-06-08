@@ -72,6 +72,68 @@ class SymbolTradeJsonlLogServiceTest {
         assertThat(lines).extracting(line -> line.get("type")).containsExactly("ENTRY", "EXIT");
     }
 
+
+    @Test
+    void logsMultipleExitRowsForPartialLifecycle() throws Exception {
+        SymbolTradeJsonlLogService service = service();
+        PaperPositionEntity position = shortPosition();
+
+        assertThat(service.logEntry(position)).isTrue();
+        position.setSymbolTradeEntryLogged(true);
+        position.setTp1Hit(true);
+        position.setTrailingActive(true);
+        position.setRemainingPositionPct(new BigDecimal("50"));
+        position.setRealizedPnlUsdt(new BigDecimal("0.45"));
+        position.setRealizedPnlPct(new BigDecimal("0.45"));
+        assertThat(service.logExit(position, PaperExitContext.builder()
+                .exitPrice(new BigDecimal("106.43"))
+                .exitPriceAdjusted(new BigDecimal("106.483215"))
+                .exitTime(EXIT_TIME)
+                .exitSeq(1)
+                .exitReason("PARTIAL_TP1")
+                .firstHit("TP_FIRST")
+                .exitTrigger("TP1_5M")
+                .interval("5m")
+                .closedPositionPct(new BigDecimal("50"))
+                .remainingPositionPctBefore(new BigDecimal("100"))
+                .remainingPositionPctAfter(new BigDecimal("50"))
+                .realizedPnlUsdt(new BigDecimal("0.45"))
+                .tp1HitBefore(false)
+                .tp1HitAfter(true)
+                .tp2HitBefore(false)
+                .tp2HitAfter(false)
+                .trailingActiveBefore(false)
+                .trailingActiveAfter(true)
+                .build())).isTrue();
+        position.setSymbolTradeTp1ExitLogged(true);
+        position.setStatus(PaperPositionStatus.CLOSED);
+        position.setClosedAt(EXIT_TIME.plusSeconds(300));
+        position.setExitPrice(new BigDecimal("105.90"));
+        position.setExitReason("TRAILING_STOP");
+        position.setRemainingPositionPct(BigDecimal.ZERO);
+        position.setRealizedPnlUsdt(new BigDecimal("0.70"));
+        assertThat(service.logExit(position, PaperExitContext.builder()
+                .exitPrice(new BigDecimal("105.90"))
+                .exitTime(EXIT_TIME.plusSeconds(300))
+                .exitSeq(2)
+                .exitReason("TRAILING_STOP")
+                .firstHit("TRAILING_FIRST")
+                .exitTrigger("TRAILING_5M")
+                .interval("5m")
+                .closedPositionPct(new BigDecimal("50"))
+                .remainingPositionPctBefore(new BigDecimal("50"))
+                .remainingPositionPctAfter(BigDecimal.ZERO)
+                .realizedPnlUsdt(new BigDecimal("0.25"))
+                .build())).isTrue();
+
+        List<Map<String, Object>> lines = readLines("AAVEUSDT");
+        assertThat(lines).hasSize(3);
+        assertThat(lines).extracting(line -> line.get("type")).containsExactly("ENTRY", "EXIT", "EXIT");
+        assertThat(lines).extracting(line -> line.get("exitReason")).containsExactly(null, "PARTIAL_TP1", "TRAILING_STOP");
+        assertThat(lines.get(1)).containsEntry("closedPositionPct", 50).containsEntry("remainingPositionPctAfter", 50);
+        assertThat(lines.get(2)).containsEntry("exitSeq", 2).containsEntry("remainingPositionPctAfter", 0);
+    }
+
     @Test
     void skipsDuplicateEntryAndExitWhenFlagsAreAlreadySet() {
         SymbolTradeJsonlLogService service = service();
@@ -83,6 +145,27 @@ class SymbolTradeJsonlLogServiceTest {
         assertThat(service.logExit(position)).isFalse();
 
         assertThat(Files.exists(tempDir.resolve("AAVEUSDT.jsonl"))).isFalse();
+    }
+
+
+    @Test
+    void skipsDuplicatePartialExitByPartialFlagOnly() throws Exception {
+        SymbolTradeJsonlLogService service = service();
+        PaperPositionEntity position = shortPosition();
+        position.setSymbolTradeTp1ExitLogged(true);
+
+        assertThat(service.logExit(position, PaperExitContext.builder()
+                .exitReason("PARTIAL_TP1")
+                .exitSeq(1)
+                .build())).isFalse();
+        assertThat(service.logExit(position, PaperExitContext.builder()
+                .exitReason("PARTIAL_TP2")
+                .exitSeq(2)
+                .build())).isTrue();
+
+        List<Map<String, Object>> lines = readLines("AAVEUSDT");
+        assertThat(lines).hasSize(1);
+        assertThat(lines.get(0)).containsEntry("type", "EXIT").containsEntry("exitReason", "PARTIAL_TP2");
     }
 
     @Test
