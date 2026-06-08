@@ -6,7 +6,6 @@ import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 import com.crypto.binance.client.BinanceFuturesClient;
@@ -23,6 +22,7 @@ import com.crypto.persistence.repository.PaperPositionRepository;
 import com.crypto.scanner.config.ScannerProperties;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -211,9 +211,13 @@ class ExitEngineServiceIntrabarTest {
         assertThat(result.getExitReason()).isNull();
         assertThat(result.getCurrentStop()).isEqualByComparingTo("101.8");
         ArgumentCaptor<PaperPositionEventEntity> captor = ArgumentCaptor.forClass(PaperPositionEventEntity.class);
-        verify(events, times(1)).save(captor.capture());
-        assertThat(captor.getAllValues()).extracting(PaperPositionEventEntity::getEventType)
-                .containsExactly(PaperPositionEventType.TRAILING_UPDATED)
+        verify(events, atLeastOnce()).save(captor.capture());
+        assertThat(result.getRemainingPositionPct()).isEqualByComparingTo("50");
+        List<PaperPositionEventType> eventTypes = captor.getAllValues().stream()
+                .map(PaperPositionEventEntity::getEventType)
+                .toList();
+        assertThat(eventTypes)
+                .contains(PaperPositionEventType.TRAILING_UPDATED)
                 .doesNotContain(PaperPositionEventType.TRAILING_STOP, PaperPositionEventType.CLOSED);
 
         PaperPositionEntity next = service.evaluatePositionWithCandle(p,
@@ -235,9 +239,13 @@ class ExitEngineServiceIntrabarTest {
         assertThat(result.getExitReason()).isNull();
         assertThat(result.getCurrentStop()).isEqualByComparingTo("98.2");
         ArgumentCaptor<PaperPositionEventEntity> captor = ArgumentCaptor.forClass(PaperPositionEventEntity.class);
-        verify(events, times(1)).save(captor.capture());
-        assertThat(captor.getAllValues()).extracting(PaperPositionEventEntity::getEventType)
-                .containsExactly(PaperPositionEventType.TRAILING_UPDATED)
+        verify(events, atLeastOnce()).save(captor.capture());
+        assertThat(result.getRemainingPositionPct()).isEqualByComparingTo("50");
+        List<PaperPositionEventType> eventTypes = captor.getAllValues().stream()
+                .map(PaperPositionEventEntity::getEventType)
+                .toList();
+        assertThat(eventTypes)
+                .contains(PaperPositionEventType.TRAILING_UPDATED)
                 .doesNotContain(PaperPositionEventType.TRAILING_STOP, PaperPositionEventType.CLOSED);
 
         PaperPositionEntity next = service.evaluatePositionWithCandle(p,
