@@ -47,10 +47,11 @@ public class SymbolTradeJsonlLogService {
     }
 
     public boolean logExit(PaperPositionEntity position, PaperExitContext exitContext) {
-        if (position == null || Boolean.TRUE.equals(position.getSymbolTradeExitLogged())) {
+        PaperExitContext context = exitContext == null ? PaperExitContext.builder().build() : exitContext;
+        if (position == null || exitAlreadyLogged(position, context.exitReason())) {
             return false;
         }
-        return append(position, "EXIT", exitPayload(position, exitContext == null ? PaperExitContext.builder().build() : exitContext));
+        return append(position, "EXIT", exitPayload(position, context));
     }
 
     public boolean logExit(PaperPositionEntity position) {
@@ -129,44 +130,60 @@ public class SymbolTradeJsonlLogService {
     private Map<String, Object> exitPayload(PaperPositionEntity p, PaperExitContext context) {
         Map<String, Object> payload = new LinkedHashMap<>();
         BigDecimal exitPrice = context.exitPrice() == null ? p.getExitPrice() : context.exitPrice();
+        Instant exitTime = context.exitTime() == null ? p.getClosedAt() : context.exitTime();
+        String exitReason = context.exitReason() == null ? p.getExitReason() : context.exitReason();
+        BigDecimal closedPositionPct = context.closedPositionPct();
+        BigDecimal remainingBefore = context.remainingPositionPctBefore();
+        BigDecimal remainingAfter = context.remainingPositionPctAfter() == null ? p.getRemainingPositionPct() : context.remainingPositionPctAfter();
+        BigDecimal closedQty = closedPositionPct == null || p.getQuantity() == null
+                ? null
+                : p.getQuantity().multiply(closedPositionPct).divide(BigDecimal.valueOf(100));
+        BigDecimal realizedPnl = context.realizedPnlUsdt() == null ? realizedPnl(p, exitPrice) : context.realizedPnlUsdt();
         payload.put("type", "EXIT");
         payload.put("positionId", p.getId());
         payload.put("symbol", p.getSymbol());
-        payload.put("time", format(p.getClosedAt()));
+        payload.put("time", format(exitTime));
         payload.put("side", enumName(p.getSide()));
+        payload.put("exitSeq", context.exitSeq());
+        payload.put("exitReason", exitReason);
+        payload.put("exitTrigger", context.exitTrigger());
+        payload.put("firstHit", context.firstHit());
+        payload.put("interval", context.interval());
         payload.put("entryPrice", p.getEntryPrice());
         payload.put("entryPriceAdjusted", p.getEntryPriceAdjusted());
         payload.put("exitPrice", exitPrice);
-        payload.put("exitPriceAdjusted", p.getExitPriceAdjusted());
+        payload.put("exitPriceAdjusted", context.exitPriceAdjusted() == null ? p.getExitPriceAdjusted() : context.exitPriceAdjusted());
         payload.put("qty", p.getQuantity());
         payload.put("quantity", p.getQuantity());
+        payload.put("closedQty", closedQty);
+        payload.put("closedPositionPct", closedPositionPct);
+        payload.put("remainingPositionPctBefore", remainingBefore);
+        payload.put("remainingPositionPctAfter", remainingAfter);
         payload.put("notionalUsdt", p.getNotionalUsdt());
         payload.put("leverage", p.getLeverage());
-        BigDecimal realizedPnl = realizedPnl(p, exitPrice);
         payload.put("realizedPnl", realizedPnl);
         payload.put("realizedPnlUsdt", realizedPnl);
-        payload.put("realizedPnlPct", p.getRealizedPnlPct());
-        payload.put("rawRealizedPnlPct", p.getRawRealizedPnlPct());
-        payload.put("netRealizedPnlPct", p.getNetRealizedPnlPct());
-        payload.put("leveragedNetRealizedPnlPct", p.getLeveragedNetRealizedPnlPct());
+        payload.put("realizedPnlPct", context.realizedPnlPct() == null ? p.getRealizedPnlPct() : context.realizedPnlPct());
+        payload.put("rawRealizedPnlPct", context.rawRealizedPnlPct() == null ? p.getRawRealizedPnlPct() : context.rawRealizedPnlPct());
+        payload.put("netRealizedPnlPct", context.netRealizedPnlPct() == null ? p.getNetRealizedPnlPct() : context.netRealizedPnlPct());
+        payload.put("leveragedNetRealizedPnlPct", context.leveragedNetRealizedPnlPct() == null ? p.getLeveragedNetRealizedPnlPct() : context.leveragedNetRealizedPnlPct());
+        payload.put("cumulativeRealizedPnlUsdt", p.getRealizedPnlUsdt());
+        payload.put("cumulativeRealizedPnlPct", p.getRealizedPnlPct());
         payload.put("totalFeePct", p.getTotalFeePct());
         payload.put("totalSlippagePct", p.getTotalSlippagePct());
-        payload.put("exitReason", p.getExitReason());
         payload.put("exitDetail", p.getExitDetail());
-        payload.put("firstHit", context.firstHit());
-        payload.put("exitTrigger", context.exitTrigger());
-        payload.put("interval", context.interval());
-        putExitState(payload, p);
+        putExitState(payload, p, context);
         putCandle(payload, context);
         putDevelopment(payload, p);
         payload.put("openedAt", format(p.getOpenedAt()));
         payload.put("closedAt", format(p.getClosedAt()));
+        payload.put("exitTime", format(exitTime));
         payload.put("lastCheckedAt", format(p.getLastCheckedAt()));
         putStrategy(payload, p, null);
         return payload;
     }
 
-    private void putExitState(Map<String, Object> payload, PaperPositionEntity p) {
+    private void putExitState(Map<String, Object> payload, PaperPositionEntity p, PaperExitContext context) {
         payload.put("tp1", p.getTp1());
         payload.put("tp2", p.getTp2());
         payload.put("slPrice", p.getCurrentStop());
@@ -176,6 +193,12 @@ public class SymbolTradeJsonlLogService {
         payload.put("tp1Hit", p.getTp1Hit());
         payload.put("tp2Hit", p.getTp2Hit());
         payload.put("trailingActive", p.getTrailingActive());
+        payload.put("tp1HitBefore", context.tp1HitBefore());
+        payload.put("tp1HitAfter", context.tp1HitAfter() == null ? p.getTp1Hit() : context.tp1HitAfter());
+        payload.put("tp2HitBefore", context.tp2HitBefore());
+        payload.put("tp2HitAfter", context.tp2HitAfter() == null ? p.getTp2Hit() : context.tp2HitAfter());
+        payload.put("trailingActiveBefore", context.trailingActiveBefore());
+        payload.put("trailingActiveAfter", context.trailingActiveAfter() == null ? p.getTrailingActive() : context.trailingActiveAfter());
         payload.put("trailingActivatedAtBarCloseTime", format(p.getTrailingActivatedAtBarCloseTime()));
         payload.put("remainingPositionPct", p.getRemainingPositionPct());
     }
@@ -279,6 +302,16 @@ public class SymbolTradeJsonlLogService {
         return Math.toIntExact(Math.min(minutes, Integer.MAX_VALUE));
     }
 
+    private boolean exitAlreadyLogged(PaperPositionEntity position, String exitReason) {
+        if ("PARTIAL_TP1".equals(exitReason)) {
+            return Boolean.TRUE.equals(position.getSymbolTradeTp1ExitLogged());
+        }
+        if ("PARTIAL_TP2".equals(exitReason)) {
+            return Boolean.TRUE.equals(position.getSymbolTradeTp2ExitLogged());
+        }
+        return Boolean.TRUE.equals(position.getSymbolTradeFinalExitLogged()) || Boolean.TRUE.equals(position.getSymbolTradeExitLogged());
+    }
+
     private String format(Instant instant) {
         return IstanbulTimeUtil.format(instant);
     }
@@ -290,9 +323,27 @@ public class SymbolTradeJsonlLogService {
     @Builder
     public record PaperExitContext(
             BigDecimal exitPrice,
+            BigDecimal exitPriceAdjusted,
+            Instant exitTime,
+            Integer exitSeq,
+            String exitReason,
             String firstHit,
             String exitTrigger,
             String interval,
+            BigDecimal closedPositionPct,
+            BigDecimal remainingPositionPctBefore,
+            BigDecimal remainingPositionPctAfter,
+            BigDecimal realizedPnlUsdt,
+            BigDecimal realizedPnlPct,
+            BigDecimal rawRealizedPnlPct,
+            BigDecimal netRealizedPnlPct,
+            BigDecimal leveragedNetRealizedPnlPct,
+            Boolean tp1HitBefore,
+            Boolean tp1HitAfter,
+            Boolean tp2HitBefore,
+            Boolean tp2HitAfter,
+            Boolean trailingActiveBefore,
+            Boolean trailingActiveAfter,
             Instant candleOpenTime,
             Instant candleCloseTime,
             BigDecimal candleHigh,

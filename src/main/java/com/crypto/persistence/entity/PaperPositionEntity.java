@@ -317,6 +317,15 @@ public class PaperPositionEntity {
     @Column(name = "symbol_trade_exit_logged")
     private Boolean symbolTradeExitLogged;
 
+    @Column(name = "symbol_trade_tp1_exit_logged")
+    private Boolean symbolTradeTp1ExitLogged;
+
+    @Column(name = "symbol_trade_tp2_exit_logged")
+    private Boolean symbolTradeTp2ExitLogged;
+
+    @Column(name = "symbol_trade_final_exit_logged")
+    private Boolean symbolTradeFinalExitLogged;
+
     @PrePersist
     void prePersist() {
         Instant now = Instant.now();
