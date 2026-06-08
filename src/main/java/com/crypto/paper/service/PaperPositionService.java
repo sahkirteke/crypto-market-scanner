@@ -23,6 +23,7 @@ import com.crypto.scanner.service.EntrySignalService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -330,6 +331,7 @@ public class PaperPositionService {
         }
         if (jsonlDecisionLogService != null) {
             jsonlDecisionLogService.logPaper(openedDetails(position));
+            jsonlDecisionLogService.logPaperTrade(entryTradeLog(position));
         }
     }
 
@@ -359,6 +361,33 @@ public class PaperPositionService {
                 Map.entry("bbUpperClosedOutside", nullToEmpty(position.getEntryBbUpperClosedOutside())),
                 Map.entry("bbLowerClosedOutside", nullToEmpty(position.getEntryBbLowerClosedOutside()))
         );
+    }
+
+
+    private Map<String, Object> entryTradeLog(PaperPositionEntity position) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("type", "ENTRY");
+        payload.put("positionId", position.getId() == null ? "" : position.getId());
+        payload.put("symbol", position.getSymbol());
+        payload.put("time", position.getOpenedAt());
+        payload.put("side", position.getSide().name());
+        payload.put("entryPrice", position.getEntryPrice());
+        payload.put("qty", position.getQuantity());
+        payload.put("tp1", position.getTp1());
+        payload.put("tp2", position.getTp2());
+        payload.put("slPrice", position.getCurrentStop() == null ? position.getInitialStop() : position.getCurrentStop());
+        payload.put("matchedSetup", nullToEmpty(position.getEntryReason()));
+        payload.put("entryReason", nullToEmpty(position.getEntryReason()));
+        payload.put("marketRegime", "");
+        payload.put("entryScore", nullToEmpty(position.getEntryScore()));
+        payload.put("longScore", nullToEmpty(position.getLongScore()));
+        payload.put("shortScore", nullToEmpty(position.getShortScore()));
+        payload.put("riskLevel", position.getRiskLevel() == null ? "" : position.getRiskLevel().name());
+        payload.put("leverage", nullToEmpty(position.getLeverage()));
+        payload.put("notionalUsdt", nullToEmpty(position.getNotionalUsdt()));
+        payload.put("reasons", jsonTextMapper.toStringList(position.getReasonsJson()));
+        payload.put("warnings", jsonTextMapper.toStringList(position.getWarningsJson()));
+        return payload;
     }
 
     private Object nullToEmpty(Object value) {

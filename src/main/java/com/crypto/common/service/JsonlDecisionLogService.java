@@ -24,6 +24,7 @@ public class JsonlDecisionLogService {
     public void logScanner(Map<String, Object> event) { append("logs/scanner", "scan-decisions", event); }
     public void logEntry(Map<String, Object> event) { append("logs/entry", "entry-decisions", event); }
     public void logPaper(Map<String, Object> event) { append("logs/paper", "position-events", event); }
+    public void logPaperTrade(Map<String, Object> event) { append("logs/paper", "trades", event); }
 
     public void append(String directory, String prefix, Map<String, Object> event) {
         try {
