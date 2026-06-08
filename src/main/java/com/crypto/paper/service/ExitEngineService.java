@@ -158,39 +158,47 @@ public class ExitEngineService {
         position.setLastCheckedAt(now);
         updateUnrealized(position, candle.getClose());
 
-        IntrabarEventContext context = new IntrabarEventContext(position, candle, effectiveInterval);
-        boolean stopTouched = stopHit(position, candle.getHigh(), candle.getLow());
-        boolean tpTouched = tp1Hit(position, candle.getHigh(), candle.getLow()) || tp2Hit(position, candle.getHigh(), candle.getLow());
+        IntrabarEventContext candleStartContext = new IntrabarEventContext(position, candle, effectiveInterval);
+        BigDecimal stopBefore = position.getCurrentStop();
+        boolean tp1HitBefore = Boolean.TRUE.equals(position.getTp1Hit());
+        boolean tp2HitBefore = Boolean.TRUE.equals(position.getTp2Hit());
+        boolean trailingActiveBefore = Boolean.TRUE.equals(position.getTrailingActive());
+        boolean stopTouched = stopHit(position, candle.getHigh(), candle.getLow(), stopBefore);
+        boolean tpTouched = tp1Hit(position, candle.getHigh(), candle.getLow(), tp1HitBefore)
+                || tp2Hit(position, candle.getHigh(), candle.getLow(), tp2HitBefore);
         if (stopTouched) {
             if (tpTouched) {
                 log.info("PAPER_EXIT_CONSERVATIVE_STOP_FIRST id={} symbol={} interval={}",
                         position.getId(), position.getSymbol(), effectiveInterval);
             }
-            PaperExitReason reason = Boolean.TRUE.equals(position.getTrailingActive()) && Boolean.TRUE.equals(position.getTp1Hit())
+            PaperExitReason reason = trailingActiveBefore && tp1HitBefore
                     ? PaperExitReason.TRAILING_STOP
                     : PaperExitReason.STOP_LOSS;
-            closeRemaining(position, defaultBigDecimal(position.getCurrentStop(), candle.getClose()), reason, candle.getCloseTime(), context);
+            closeRemaining(position, defaultBigDecimal(stopBefore, candle.getClose()), reason, candle.getCloseTime(), candleStartContext);
             position.setLastExitCandleCloseTime(candle.getCloseTime());
             log.info("PAPER_POSITION_EVALUATED id={} symbol={} interval={} candleHigh={} candleLow={} status={} remainingPct={}",
                     position.getId(), position.getSymbol(), effectiveInterval, candle.getHigh(), candle.getLow(), position.getStatus(), position.getRemainingPositionPct());
             return position;
         }
 
-        if (tp1Hit(position, candle.getHigh(), candle.getLow())) {
+        if (tp1Hit(position, candle.getHigh(), candle.getLow(), tp1HitBefore)) {
+            IntrabarEventContext tp1Context = new IntrabarEventContext(position, candle, effectiveInterval);
             position.setTp1Hit(true);
+            partialClose(position, position.getTp1(), scannerProperties.getPaperRisk().getTp1ClosePct(),
+                    PaperPositionEventType.PARTIAL_TP1, candle.getCloseTime(), tp1Context);
             position.setTrailingActive(true);
             position.setTrailingActivatedAtBarCloseTime(candle.getCloseTime());
-            updateBreakEvenStop(position, candle.getCloseTime(), context);
-            partialClose(position, position.getTp1(), scannerProperties.getPaperRisk().getTp1ClosePct(),
-                    PaperPositionEventType.PARTIAL_TP1, candle.getCloseTime(), context);
+            updateBreakEvenStop(position, candle.getCloseTime(), new IntrabarEventContext(position, candle, effectiveInterval));
         }
-        if (tp2Hit(position, candle.getHigh(), candle.getLow())) {
+        if (tp2Hit(position, candle.getHigh(), candle.getLow(), tp2HitBefore)) {
+            IntrabarEventContext tp2Context = new IntrabarEventContext(position, candle, effectiveInterval);
             position.setTp2Hit(true);
             partialClose(position, position.getTp2(), scannerProperties.getPaperRisk().getTp2ClosePct(),
-                    PaperPositionEventType.PARTIAL_TP2, candle.getCloseTime(), context);
+                    PaperPositionEventType.PARTIAL_TP2, candle.getCloseTime(), tp2Context);
         }
         updateStatus(position);
-        updateTrailing(position, candle.getHigh(), candle.getLow(), fallbackAtr(position), candle.getCloseTime(), context);
+        updateTrailing(position, candle.getHigh(), candle.getLow(), fallbackAtr(position), candle.getCloseTime(),
+                new IntrabarEventContext(position, candle, effectiveInterval));
         position.setLastExitCandleCloseTime(candle.getCloseTime());
         log.info("PAPER_POSITION_EVALUATED id={} symbol={} interval={} candleHigh={} candleLow={} status={} remainingPct={}",
                 position.getId(), position.getSymbol(), effectiveInterval, candle.getHigh(), candle.getLow(), position.getStatus(), position.getRemainingPositionPct());
@@ -342,14 +350,28 @@ public class ExitEngineService {
     }
 
     private boolean stopHit(PaperPositionEntity p, BigDecimal high, BigDecimal low) {
-        if (p.getCurrentStop() == null) return false;
-        return p.getSide() == PositionSide.SHORT ? ge(high, p.getCurrentStop()) : le(low, p.getCurrentStop());
+        return stopHit(p, high, low, p.getCurrentStop());
     }
+
+    private boolean stopHit(PaperPositionEntity p, BigDecimal high, BigDecimal low, BigDecimal stop) {
+        if (stop == null) return false;
+        return p.getSide() == PositionSide.SHORT ? ge(high, stop) : le(low, stop);
+    }
+
     private boolean tp1Hit(PaperPositionEntity p, BigDecimal high, BigDecimal low) {
-        return !Boolean.TRUE.equals(p.getTp1Hit()) && p.getTp1() != null && (p.getSide() == PositionSide.SHORT ? le(low, p.getTp1()) : ge(high, p.getTp1()));
+        return tp1Hit(p, high, low, Boolean.TRUE.equals(p.getTp1Hit()));
     }
+
+    private boolean tp1Hit(PaperPositionEntity p, BigDecimal high, BigDecimal low, boolean alreadyHit) {
+        return !alreadyHit && p.getTp1() != null && (p.getSide() == PositionSide.SHORT ? le(low, p.getTp1()) : ge(high, p.getTp1()));
+    }
+
     private boolean tp2Hit(PaperPositionEntity p, BigDecimal high, BigDecimal low) {
-        return !Boolean.TRUE.equals(p.getTp2Hit()) && p.getTp2() != null && (p.getSide() == PositionSide.SHORT ? le(low, p.getTp2()) : ge(high, p.getTp2()));
+        return tp2Hit(p, high, low, Boolean.TRUE.equals(p.getTp2Hit()));
+    }
+
+    private boolean tp2Hit(PaperPositionEntity p, BigDecimal high, BigDecimal low, boolean alreadyHit) {
+        return !alreadyHit && p.getTp2() != null && (p.getSide() == PositionSide.SHORT ? le(low, p.getTp2()) : ge(high, p.getTp2()));
     }
 
     private void partialClose(PaperPositionEntity p, BigDecimal price, BigDecimal closePct, PaperPositionEventType type, Instant time) {
@@ -383,7 +405,6 @@ public class ExitEngineService {
 
     private void updateTrailing(PaperPositionEntity p, BigDecimal high, BigDecimal low, BigDecimal atr14, Instant candleCloseTime, IntrabarEventContext context) {
         if (!Boolean.TRUE.equals(p.getTrailingActive())) return;
-        boolean sameCandle = p.getTrailingActivatedAtBarCloseTime() != null && !candleCloseTime.isAfter(p.getTrailingActivatedAtBarCloseTime());
         BigDecimal trailingDistance = defaultBigDecimal(atr14, fallbackAtr(p)).multiply(scannerProperties.getPaperRisk().getTrailingAtrMultiplier());
         BigDecimal oldStop = p.getCurrentStop();
         if (p.getSide() == PositionSide.SHORT) {
@@ -397,9 +418,6 @@ public class ExitEngineService {
         }
         if (oldStop == null || p.getCurrentStop().compareTo(oldStop) != 0) {
             writeEvent(p, PaperPositionEventType.TRAILING_UPDATED, candleCloseTime, p.getCurrentStop(), null, null, null, "TRAILING_UPDATED", context);
-        }
-        if (!sameCandle && stopHit(p, high, low)) {
-            closeRemaining(p, p.getCurrentStop(), PaperExitReason.TRAILING_STOP, candleCloseTime, context);
         }
     }
 
