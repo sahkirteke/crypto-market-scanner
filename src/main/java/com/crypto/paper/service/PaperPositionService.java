@@ -8,6 +8,7 @@ import com.crypto.binance.client.BinanceFuturesClient;
 import com.crypto.domain.model.BookTicker;
 import com.crypto.common.service.JsonlDecisionLogService;
 import com.crypto.common.time.IstanbulTimeUtil;
+import com.crypto.paper.log.SymbolTradeJsonlLogService;
 import com.crypto.paper.model.PaperPositionEventType;
 import com.crypto.persistence.entity.PaperPositionEventEntity;
 import com.crypto.persistence.repository.PaperPositionEventRepository;
@@ -51,6 +52,8 @@ public class PaperPositionService {
     private EntryCandidateRepository entryCandidateRepository;
     @Autowired(required = false)
     private JsonlDecisionLogService jsonlDecisionLogService;
+    @Autowired(required = false)
+    private SymbolTradeJsonlLogService symbolTradeJsonlLogService;
 
     public List<PaperPositionEntity> openPositionsFromLatestSignals() {
         return openPositionsFromSignals(entrySignalService.generateSignalsFromLatestScan()).openedPositions();
@@ -165,6 +168,7 @@ public class PaperPositionService {
                 .notionalUsdt(notionalUsdt)
                 .leverage(intValue(costConfig.getLeverage(), intValue(config.getLeverage(), 3)))
                 .entryScore(signal.getScore())
+                .marketRegime(signal.getMarketRegime())
                 .entrySignalScore(signal.getScore())
                 .entryBbScore(signal.getBbScore())
                 .entryBbPercentB(signal.getBbPercentB())
@@ -222,6 +226,7 @@ public class PaperPositionService {
 
         PaperPositionEntity saved = paperPositionRepository.save(position);
         writeOpenedEvent(saved);
+        writeSymbolTradeEntry(saved, signal);
         markCandidateUsed(saved.getSymbol());
         log.info(
                 "PAPER_POSITION_OPENED openedAt={} symbol={} side={} entry={} stop={} tp1={} tp2={} id={} quantity={} notionalUsdt={} leverage={}",
@@ -332,6 +337,16 @@ public class PaperPositionService {
         if (jsonlDecisionLogService != null) {
             jsonlDecisionLogService.logPaper(openedDetails(position));
             jsonlDecisionLogService.logPaperTrade(entryTradeLog(position));
+        }
+    }
+
+    private void writeSymbolTradeEntry(PaperPositionEntity position, EntrySignal signal) {
+        if (symbolTradeJsonlLogService == null || Boolean.TRUE.equals(position.getSymbolTradeEntryLogged())) {
+            return;
+        }
+        if (symbolTradeJsonlLogService.logEntry(position, signal)) {
+            position.setSymbolTradeEntryLogged(true);
+            paperPositionRepository.save(position);
         }
     }
 
