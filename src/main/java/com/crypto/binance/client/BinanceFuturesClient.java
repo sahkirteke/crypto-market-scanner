@@ -13,16 +13,19 @@ import com.crypto.domain.model.SymbolInfo;
 import com.crypto.domain.model.Ticker24h;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.net.SocketException;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.TimeoutException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
 import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 
@@ -35,6 +38,8 @@ public class BinanceFuturesClient {
     private static final BigDecimal TWO = BigDecimal.valueOf(2);
     private static final BigDecimal ONE_HUNDRED = BigDecimal.valueOf(100);
     private static final int CALCULATION_SCALE = 10;
+    private static final int MAX_TRANSIENT_ATTEMPTS = 3;
+    private static final long[] TRANSIENT_RETRY_BACKOFF_MILLIS = {300L, 700L};
 
     private final WebClient binanceWebClient;
 
@@ -104,7 +109,7 @@ public class BinanceFuturesClient {
     }
 
     public List<Kline> getKlines(String symbol, String interval, int limit) {
-        return execute("klines for symbol " + symbol, () -> {
+        return execute("klines", () -> {
             List<List<Object>> response = binanceWebClient.get()
                     .uri(uriBuilder -> uriBuilder
                             .path("/fapi/v1/klines")
@@ -124,7 +129,13 @@ public class BinanceFuturesClient {
                     .toList();
             log.info("BINANCE_KLINES_READY symbol={} interval={} count={}", symbol, interval, klines.size());
             return klines;
-        });
+        },
+                exception -> log.warn("BINANCE_KLINES_TRANSIENT_ERROR symbol={} interval={} limit={} message={}",
+                        symbol, interval, limit, rootMessage(exception)),
+                exception -> log.error("BINANCE_KLINES_ERROR symbol={} interval={} limit={} message={}",
+                        symbol, interval, limit, exception.getMessage(), exception),
+                (exception, attempt) -> log.debug("BINANCE_KLINES_RETRY symbol={} interval={} attempt={} message={}",
+                        symbol, interval, attempt, rootMessage(exception)));
     }
 
     public List<BinanceFundingRateDto> getFundingRate(String symbol) {
@@ -309,20 +320,105 @@ public class BinanceFuturesClient {
     }
 
     private <T> T execute(String operation, BinanceOperation<T> operationCallback) {
-        try {
-            return operationCallback.execute();
-        } catch (BinanceClientException exception) {
-            log.error("Binance client error while fetching {}", operation, exception);
-            throw exception;
-        } catch (Exception exception) {
-            Throwable rootCause = Exceptions.unwrap(exception);
-            log.error("Binance client error while fetching {}", operation, rootCause);
-            throw new BinanceClientException("Binance client error while fetching " + operation, rootCause);
+        return execute(operation,
+                operationCallback,
+                exception -> log.warn("BINANCE_HTTP_TRANSIENT_ERROR operation={} message={}", operation, rootMessage(exception)),
+                exception -> log.error("BINANCE_HTTP_ERROR operation={} message={}", operation, exception.getMessage(), exception),
+                (exception, attempt) -> log.debug("BINANCE_HTTP_RETRY operation={} attempt={} message={}",
+                        operation, attempt, rootMessage(exception)));
+    }
+
+    private <T> T execute(String operation, BinanceOperation<T> operationCallback, ErrorLogger transientLogger,
+            ErrorLogger errorLogger, RetryLogger retryLogger) {
+        int attempt = 1;
+        while (true) {
+            try {
+                return operationCallback.execute();
+            } catch (Exception exception) {
+                Throwable unwrapped = Exceptions.unwrap(exception);
+                Throwable logException = unwrapped == null ? exception : unwrapped;
+                boolean transientNetworkError = isTransientNetworkError(exception) || isTransientNetworkError(logException);
+                if (transientNetworkError && attempt < MAX_TRANSIENT_ATTEMPTS) {
+                    int nextAttempt = attempt + 1;
+                    retryLogger.log(logException, nextAttempt);
+                    sleepBeforeRetry(attempt);
+                    attempt = nextAttempt;
+                    continue;
+                }
+                if (transientNetworkError) {
+                    transientLogger.log(logException);
+                } else {
+                    errorLogger.log(logException);
+                }
+                if (exception instanceof BinanceClientException binanceClientException) {
+                    throw binanceClientException;
+                }
+                throw new BinanceClientException("Binance client error while fetching " + operation, logException);
+            }
         }
+    }
+
+    private void sleepBeforeRetry(int failedAttempt) {
+        int backoffIndex = Math.min(failedAttempt - 1, TRANSIENT_RETRY_BACKOFF_MILLIS.length - 1);
+        try {
+            Thread.sleep(TRANSIENT_RETRY_BACKOFF_MILLIS[backoffIndex]);
+        } catch (InterruptedException interruptedException) {
+            Thread.currentThread().interrupt();
+            throw new BinanceClientException("Interrupted while retrying Binance request", interruptedException);
+        }
+    }
+
+    private boolean isTransientNetworkError(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof SocketException
+                    || current instanceof WebClientRequestException
+                    || current instanceof TimeoutException
+                    || "reactor.netty.http.client.PrematureCloseException".equals(current.getClass().getName())) {
+                return true;
+            }
+            String message = current.getMessage();
+            if (message != null) {
+                String lower = message.toLowerCase();
+                if (lower.contains("connection reset")
+                        || lower.contains("connection prematurely closed")
+                        || lower.contains("prematurely closed")
+                        || lower.contains("read timed out")
+                        || lower.contains("connection timed out")) {
+                    return true;
+                }
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private String rootMessage(Throwable throwable) {
+        Throwable current = throwable;
+        Throwable root = throwable;
+        while (current != null) {
+            root = current;
+            current = current.getCause();
+        }
+        String message = root == null ? null : root.getMessage();
+        if (message == null || message.isBlank()) {
+            message = throwable == null ? null : throwable.getMessage();
+        }
+        return message == null || message.isBlank() ? "unknown" : message;
     }
 
     @FunctionalInterface
     private interface BinanceOperation<T> {
         T execute();
+    }
+
+    @FunctionalInterface
+    private interface ErrorLogger {
+        void log(Throwable exception);
+    }
+
+    @FunctionalInterface
+    private interface RetryLogger {
+        void log(Throwable exception, int attempt);
     }
 }

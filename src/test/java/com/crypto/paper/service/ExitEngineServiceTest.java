@@ -9,12 +9,15 @@ import static org.mockito.Mockito.when;
 import com.crypto.binance.client.BinanceFuturesClient;
 import com.crypto.common.enums.EntryAction;
 import com.crypto.common.enums.PositionSide;
+import com.crypto.domain.model.Kline;
 import com.crypto.domain.model.Ticker24h;
+import com.crypto.paper.model.PaperExitEvaluationResult;
 import com.crypto.paper.model.PaperPositionStatus;
 import com.crypto.persistence.entity.PaperPositionEntity;
 import com.crypto.persistence.repository.PaperPositionRepository;
 import com.crypto.scanner.config.ScannerProperties;
 import java.math.BigDecimal;
+import java.net.SocketException;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -163,6 +166,62 @@ class ExitEngineServiceTest {
         verify(repository, never()).save(position);
     }
 
+
+    @Test
+    void intrabarEvaluationSkipsPositionWhenKlinesThrowException() {
+        PaperPositionRepository repository = mock(PaperPositionRepository.class);
+        BinanceFuturesClient client = mock(BinanceFuturesClient.class);
+        PaperPositionEntity position = position(PositionSide.LONG);
+        when(repository.findByStatusInOrderByOpenedAtDesc(List.of(
+                PaperPositionStatus.OPEN,
+                PaperPositionStatus.PARTIALLY_CLOSED
+        ))).thenReturn(List.of(position));
+        when(client.getKlines("BTCUSDT", "5m", 3))
+                .thenThrow(new RuntimeException(new SocketException("Connection reset")));
+        ExitEngineService service = service(repository, client);
+
+        PaperExitEvaluationResult result = service.evaluateOpenPositionsWithInterval("5m");
+
+        assertThat(result.getSkippedErrorCount()).isEqualTo(1);
+        assertThat(result.getCheckedCount()).isZero();
+        assertThat(result.getClosedCount()).isZero();
+        assertThat(position.getStatus()).isEqualTo(PaperPositionStatus.OPEN);
+        assertThat(position.getLastCheckedAt()).isNull();
+        assertThat(position.getLastExitCandleCloseTime()).isNull();
+        verify(repository, never()).save(position);
+    }
+
+    @Test
+    void intrabarEvaluationContinuesWithOtherPositionsAfterTransientKlineError() {
+        PaperPositionRepository repository = mock(PaperPositionRepository.class);
+        BinanceFuturesClient client = mock(BinanceFuturesClient.class);
+        PaperPositionEntity btc = position(PositionSide.LONG);
+        btc.setSymbol("BTCUSDT");
+        PaperPositionEntity eth = position(PositionSide.LONG);
+        eth.setId(2L);
+        eth.setSymbol("ETHUSDT");
+        when(repository.findByStatusInOrderByOpenedAtDesc(List.of(
+                PaperPositionStatus.OPEN,
+                PaperPositionStatus.PARTIALLY_CLOSED
+        ))).thenReturn(List.of(btc, eth));
+        when(client.getKlines("BTCUSDT", "5m", 3))
+                .thenThrow(new RuntimeException(new SocketException("Connection reset")));
+        when(client.getKlines("ETHUSDT", "5m", 3)).thenReturn(List.of(kline("ETHUSDT")));
+        when(repository.save(eth)).thenReturn(eth);
+        ExitEngineService service = service(repository, client);
+
+        PaperExitEvaluationResult result = service.evaluateOpenPositionsWithInterval("5m");
+
+        assertThat(result.getSkippedErrorCount()).isEqualTo(1);
+        assertThat(result.getCheckedCount()).isEqualTo(1);
+        assertThat(result.getClosedCount()).isZero();
+        assertThat(btc.getStatus()).isEqualTo(PaperPositionStatus.OPEN);
+        assertThat(btc.getLastCheckedAt()).isNull();
+        assertThat(eth.getLastCheckedAt()).isNotNull();
+        verify(repository, never()).save(btc);
+        verify(repository).save(eth);
+    }
+
     private ExitEngineService service(PaperPositionRepository repository, BinanceFuturesClient client) {
         return new ExitEngineService(repository, client, properties());
     }
@@ -177,6 +236,22 @@ class ExitEngineServiceTest {
         paperExit.setBarMinutes(60);
         properties.setPaperExit(paperExit);
         return properties;
+    }
+
+
+    private Kline kline(String symbol) {
+        Instant openTime = Instant.now().minusSeconds(600);
+        return Kline.builder()
+                .symbol(symbol)
+                .interval("5m")
+                .openTime(openTime)
+                .closeTime(openTime.plusSeconds(300))
+                .open(new BigDecimal("100"))
+                .high(new BigDecimal("100.2"))
+                .low(new BigDecimal("99.8"))
+                .close(new BigDecimal("100.1"))
+                .closed(true)
+                .build();
     }
 
     private PaperPositionEntity position(PositionSide side) {

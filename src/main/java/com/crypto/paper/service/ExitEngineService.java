@@ -31,7 +31,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -57,19 +56,25 @@ public class ExitEngineService {
     @Autowired(required = false) private ObjectMapper objectMapper;
 
     private int lastEvaluationEventCount;
+    private int lastEvaluationSkippedErrors;
 
     public List<PaperPositionEntity> evaluateOpenPositions() {
         if (!booleanValue(paperExitConfig().getEnabled(), true)) {
             log.info("PAPER_EXIT_DISABLED");
             return List.of();
         }
+        lastEvaluationSkippedErrors = 0;
         List<PaperPositionEntity> openPositions = paperPositionRepository.findByStatusInOrderByOpenedAtDesc(activeStatuses());
-        List<PaperPositionEntity> evaluated = openPositions.stream()
-                .map(this::evaluateWithLastClosedCandle)
-                .filter(Objects::nonNull)
-                .map(paperPositionRepository::save)
-                .toList();
-        log.info("PAPER_EXIT_EVALUATION_DONE openChecked={} closed={}", openPositions.size(), evaluated.stream().filter(p -> p.getStatus() == PaperPositionStatus.CLOSED).count());
+        List<PaperPositionEntity> evaluated = new ArrayList<>();
+        for (PaperPositionEntity position : openPositions) {
+            PaperPositionEntity evaluatedPosition = evaluateWithLastClosedCandle(position);
+            if (evaluatedPosition != null) {
+                evaluated.add(paperPositionRepository.save(evaluatedPosition));
+            }
+        }
+        long closedCount = evaluated.stream().filter(p -> p.getStatus() == PaperPositionStatus.CLOSED).count();
+        log.info("PAPER_EXIT_EVALUATION_DONE openChecked={} closed={} skippedErrors={}",
+                openPositions.size(), closedCount, lastEvaluationSkippedErrors);
         return evaluated.stream().filter(p -> p.getStatus() == PaperPositionStatus.CLOSED).toList();
     }
 
@@ -80,6 +85,7 @@ public class ExitEngineService {
                     .checkedCount(0)
                     .eventCount(0)
                     .closedCount(0)
+                    .skippedErrorCount(0)
                     .closedPositions(List.of())
                     .build();
         }
@@ -91,6 +97,7 @@ public class ExitEngineService {
         List<PaperPositionEntity> openPositions = paperPositionRepository.findByStatusInOrderByOpenedAtDesc(activeStatuses());
         List<PaperPositionEntity> closedPositions = new ArrayList<>();
         int checked = 0;
+        int skippedErrors = 0;
         for (PaperPositionEntity position : openPositions) {
             try {
                 List<Kline> rawKlines = binanceFuturesClient.getKlines(position.getSymbol(), effectiveInterval, limit);
@@ -114,14 +121,18 @@ public class ExitEngineService {
                     closedPositions.add(evaluated);
                 }
             } catch (Exception exception) {
+                skippedErrors++;
                 log.warn("PAPER_EXIT_INTRABAR_POSITION_FAILED id={} symbol={} interval={} reason={}",
                         position.getId(), position.getSymbol(), effectiveInterval, exception.getMessage());
             }
         }
+        log.info("AUTO_PAPER_EXIT_EVALUATION_COMPLETED checked={} closed={} skippedErrors={}",
+                checked, closedPositions.size(), skippedErrors);
         return PaperExitEvaluationResult.builder()
                 .checkedCount(checked)
                 .eventCount(lastEvaluationEventCount)
                 .closedCount(closedPositions.size())
+                .skippedErrorCount(skippedErrors)
                 .closedPositions(closedPositions)
                 .build();
     }
@@ -317,6 +328,7 @@ public class ExitEngineService {
             }
             return evaluated;
         } catch (Exception exception) {
+            lastEvaluationSkippedErrors++;
             log.warn("PAPER_EXIT_CANDLE_UNAVAILABLE symbol={} reason={}", position.getSymbol(), exception.getMessage());
             return null;
         }
