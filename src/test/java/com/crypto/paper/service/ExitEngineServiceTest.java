@@ -240,7 +240,7 @@ class ExitEngineServiceTest {
 
 
     private Kline kline(String symbol) {
-        Instant openTime = Instant.now().minusSeconds(600);
+        Instant openTime = Instant.parse("2026-06-07T13:05:00Z");
         return Kline.builder()
                 .symbol(symbol)
                 .interval("5m")
@@ -265,7 +265,7 @@ class ExitEngineServiceTest {
                 .quantity(BigDecimal.ONE)
                 .notionalUsdt(new BigDecimal("100"))
                 .leverage(3)
-                .openedAt(Instant.now())
+                .openedAt(Instant.parse("2026-06-07T13:03:59Z"))
                 .takeProfitPct(new BigDecimal("1.0"))
                 .stopLossPct(new BigDecimal("0.6"))
                 .timeStopMinutes(240)

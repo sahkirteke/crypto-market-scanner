@@ -783,7 +783,9 @@ public class ExitEngineService {
         BigDecimal slip = costConfig().getSlippagePct();
         return side == PositionSide.SHORT ? price.multiply(BigDecimal.ONE.add(slip)) : price.multiply(BigDecimal.ONE.subtract(slip));
     }
-    private BigDecimal fallbackAtr(PaperPositionEntity p) { return defaultBigDecimal(p.getRiskPerUnit(), p.getEntryPrice().multiply(new BigDecimal("0.012"))).divide(scannerProperties.getPaperRisk().getAtrStopMultiplier(), PCT_SCALE + 4, RoundingMode.HALF_UP); }
+    private BigDecimal fallbackAtr(PaperPositionEntity p) {
+        return defaultBigDecimal(p.getRiskPerUnit(), p.getEntryPrice().multiply(new BigDecimal("0.012")));
+    }
     private List<PaperPositionStatus> activeStatuses() { return List.of(PaperPositionStatus.OPEN, PaperPositionStatus.PARTIALLY_CLOSED); }
     private ScannerProperties.PaperExit paperExitConfig() { return scannerProperties.getPaperExit() == null ? new ScannerProperties.PaperExit() : scannerProperties.getPaperExit(); }
     private ScannerProperties.PaperCost costConfig() { return scannerProperties.getPaperCost() == null ? new ScannerProperties.PaperCost() : scannerProperties.getPaperCost(); }
