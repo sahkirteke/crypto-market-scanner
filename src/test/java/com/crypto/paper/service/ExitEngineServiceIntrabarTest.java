@@ -204,9 +204,9 @@ class ExitEngineServiceIntrabarTest {
     void longTrailingUpdateDoesNotExitWithNewStopUntilNextCandle() {
         PaperPositionEventRepository events = mock(PaperPositionEventRepository.class);
         ExitEngineService service = service(events, null);
-        PaperPositionEntity p = trailingPosition(PositionSide.LONG);
+        PaperPositionEntity p = positionWithTp2BeyondTrailingUpdateCandle(PositionSide.LONG);
 
-        PaperPositionEntity result = service.evaluatePositionWithCandle(p, candle("102", "101", "102"), "5m");
+        PaperPositionEntity result = service.evaluatePositionWithCandle(p, candle("103", "101", "102"), "5m");
 
         assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.PARTIALLY_CLOSED);
         assertThat(result.getExitReason()).isNull();
@@ -218,7 +218,7 @@ class ExitEngineServiceIntrabarTest {
                 .map(PaperPositionEventEntity::getEventType)
                 .toList();
         assertThat(eventTypes)
-                .contains(PaperPositionEventType.TRAILING_UPDATED)
+                .contains(PaperPositionEventType.PARTIAL_TP1, PaperPositionEventType.STOP_UPDATED, PaperPositionEventType.TRAILING_UPDATED)
                 .doesNotContain(PaperPositionEventType.PARTIAL_TP2, PaperPositionEventType.TRAILING_STOP, PaperPositionEventType.CLOSED);
 
         PaperPositionEntity next = service.evaluatePositionWithCandle(p,
@@ -232,9 +232,9 @@ class ExitEngineServiceIntrabarTest {
     void shortTrailingUpdateDoesNotExitWithNewStopUntilNextCandle() {
         PaperPositionEventRepository events = mock(PaperPositionEventRepository.class);
         ExitEngineService service = service(events, null);
-        PaperPositionEntity p = trailingPosition(PositionSide.SHORT);
+        PaperPositionEntity p = positionWithTp2BeyondTrailingUpdateCandle(PositionSide.SHORT);
 
-        PaperPositionEntity result = service.evaluatePositionWithCandle(p, candle("99", "98", "98"), "5m");
+        PaperPositionEntity result = service.evaluatePositionWithCandle(p, candle("99", "97", "98"), "5m");
 
         assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.PARTIALLY_CLOSED);
         assertThat(result.getExitReason()).isNull();
@@ -246,7 +246,7 @@ class ExitEngineServiceIntrabarTest {
                 .map(PaperPositionEventEntity::getEventType)
                 .toList();
         assertThat(eventTypes)
-                .contains(PaperPositionEventType.TRAILING_UPDATED)
+                .contains(PaperPositionEventType.PARTIAL_TP1, PaperPositionEventType.STOP_UPDATED, PaperPositionEventType.TRAILING_UPDATED)
                 .doesNotContain(PaperPositionEventType.PARTIAL_TP2, PaperPositionEventType.TRAILING_STOP, PaperPositionEventType.CLOSED);
 
         PaperPositionEntity next = service.evaluatePositionWithCandle(p,
@@ -434,14 +434,9 @@ class ExitEngineServiceIntrabarTest {
     }
 
 
-    private PaperPositionEntity trailingPosition(PositionSide side) {
+    private PaperPositionEntity positionWithTp2BeyondTrailingUpdateCandle(PositionSide side) {
         PaperPositionEntity position = position(side);
-        position.setStatus(PaperPositionStatus.PARTIALLY_CLOSED);
-        position.setTp1Hit(true);
-        position.setTrailingActive(true);
-        position.setTrailingActivatedAtBarCloseTime(candleClose.minusSeconds(300));
-        position.setRemainingPositionPct(new BigDecimal("50"));
-        position.setCurrentStop(side == PositionSide.LONG ? new BigDecimal("100.05") : new BigDecimal("99.95"));
+        position.setTp2(side == PositionSide.LONG ? new BigDecimal("104") : new BigDecimal("96"));
         return position;
     }
 
