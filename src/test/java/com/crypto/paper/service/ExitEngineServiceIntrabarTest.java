@@ -206,7 +206,7 @@ class ExitEngineServiceIntrabarTest {
         ExitEngineService service = service(events, null);
         PaperPositionEntity p = trailingPosition(PositionSide.LONG);
 
-        PaperPositionEntity result = service.evaluatePositionWithCandle(p, candle("103", "101", "102"), "5m");
+        PaperPositionEntity result = service.evaluatePositionWithCandle(p, candle("102", "101", "102"), "5m");
 
         assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.PARTIALLY_CLOSED);
         assertThat(result.getExitReason()).isNull();
@@ -219,7 +219,7 @@ class ExitEngineServiceIntrabarTest {
                 .toList();
         assertThat(eventTypes)
                 .contains(PaperPositionEventType.TRAILING_UPDATED)
-                .doesNotContain(PaperPositionEventType.TRAILING_STOP, PaperPositionEventType.CLOSED);
+                .doesNotContain(PaperPositionEventType.PARTIAL_TP2, PaperPositionEventType.TRAILING_STOP, PaperPositionEventType.CLOSED);
 
         PaperPositionEntity next = service.evaluatePositionWithCandle(p,
                 candle(candleOpen.plusSeconds(300), candleClose.plusSeconds(300), "102", "101.7", "101.9"), "5m");
@@ -234,7 +234,7 @@ class ExitEngineServiceIntrabarTest {
         ExitEngineService service = service(events, null);
         PaperPositionEntity p = trailingPosition(PositionSide.SHORT);
 
-        PaperPositionEntity result = service.evaluatePositionWithCandle(p, candle("99", "97", "98"), "5m");
+        PaperPositionEntity result = service.evaluatePositionWithCandle(p, candle("99", "98", "98"), "5m");
 
         assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.PARTIALLY_CLOSED);
         assertThat(result.getExitReason()).isNull();
@@ -247,7 +247,7 @@ class ExitEngineServiceIntrabarTest {
                 .toList();
         assertThat(eventTypes)
                 .contains(PaperPositionEventType.TRAILING_UPDATED)
-                .doesNotContain(PaperPositionEventType.TRAILING_STOP, PaperPositionEventType.CLOSED);
+                .doesNotContain(PaperPositionEventType.PARTIAL_TP2, PaperPositionEventType.TRAILING_STOP, PaperPositionEventType.CLOSED);
 
         PaperPositionEntity next = service.evaluatePositionWithCandle(p,
                 candle(candleOpen.plusSeconds(300), candleClose.plusSeconds(300), "98.3", "98", "98.1"), "5m");
