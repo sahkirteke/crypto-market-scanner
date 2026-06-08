@@ -3,6 +3,7 @@ package com.crypto.paper.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.times;
@@ -22,6 +23,7 @@ import com.crypto.persistence.repository.PaperPositionRepository;
 import com.crypto.scanner.config.ScannerProperties;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -29,6 +31,64 @@ import org.springframework.test.util.ReflectionTestUtils;
 class ExitEngineServiceIntrabarTest {
     private final Instant candleOpen = Instant.parse("2026-06-07T10:00:00Z");
     private final Instant candleClose = Instant.parse("2026-06-07T10:04:59Z");
+
+    @Test
+    void candleClosedBeforePositionOpenedIsSkipped() {
+        PaperPositionEventRepository events = mock(PaperPositionEventRepository.class);
+        JsonlDecisionLogService jsonl = mock(JsonlDecisionLogService.class);
+        ExitEngineService service = service(events, jsonl);
+        PaperPositionEntity position = position(PositionSide.LONG);
+        position.setOpenedAt(Instant.parse("2026-06-07T10:03:59Z"));
+
+        PaperPositionEntity result = service.evaluatePositionWithCandle(position,
+                candle(Instant.parse("2026-06-07T09:55:00Z"), Instant.parse("2026-06-07T09:59:59Z"), "105", "99", "102"), "5m");
+
+        assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.OPEN);
+        assertThat(result.getExitReason()).isNull();
+        assertThat(result.getLastExitCandleCloseTime()).isNull();
+        verify(events, never()).save(any(PaperPositionEventEntity.class));
+        verify(jsonl, never()).logPaper(any());
+        verify(jsonl, never()).logPaperTrade(any());
+    }
+
+    @Test
+    void candleContainingPositionOpenIsSkipped() {
+        PaperPositionEntity position = position(PositionSide.LONG);
+        position.setOpenedAt(Instant.parse("2026-06-07T10:03:59Z"));
+
+        PaperPositionEntity result = service().evaluatePositionWithCandle(position,
+                candle(Instant.parse("2026-06-07T10:00:00Z"), Instant.parse("2026-06-07T10:04:59Z"), "105", "99", "102"), "5m");
+
+        assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.OPEN);
+        assertThat(result.getExitReason()).isNull();
+        assertThat(result.getLastExitCandleCloseTime()).isNull();
+    }
+
+    @Test
+    void firstFullyFormedCandleAfterPositionOpenIsEvaluated() {
+        PaperPositionEntity position = position(PositionSide.LONG);
+        position.setOpenedAt(Instant.parse("2026-06-07T10:03:59Z"));
+
+        PaperPositionEntity result = service().evaluatePositionWithCandle(position,
+                candle(Instant.parse("2026-06-07T10:05:00Z"), Instant.parse("2026-06-07T10:09:59Z"), "105", "99", "102"), "5m");
+
+        assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.CLOSED);
+        assertThat(result.getExitReason()).isEqualTo("STOP_LOSS");
+        assertThat(result.getLastExitCandleCloseTime()).isEqualTo(Instant.parse("2026-06-07T10:09:59Z"));
+    }
+
+    @Test
+    void closeTimeBeforeOpenedAtIsCorrected() {
+        PaperPositionEntity position = position(PositionSide.LONG);
+        position.setOpenedAt(Instant.parse("2999-06-07T10:03:59Z"));
+        ExitEngineService service = service();
+
+        ReflectionTestUtils.invokeMethod(service, "closeRemaining", position, new BigDecimal("99.5"),
+                com.crypto.paper.model.PaperExitReason.STOP_LOSS, Instant.parse("2999-06-07T09:59:59Z"));
+
+        assertThat(position.getClosedAt()).isNotNull();
+        assertThat(position.getClosedAt()).isAfterOrEqualTo(position.getOpenedAt());
+    }
 
     @Test
     void longCandleLowAtStopClosesWithStopLoss() {
@@ -180,13 +240,55 @@ class ExitEngineServiceIntrabarTest {
     }
 
     @Test
-    void callsJsonlServiceForPaperEvent() {
+    void callsJsonlServiceForPaperEventAndExitTrade() {
         JsonlDecisionLogService jsonl = mock(JsonlDecisionLogService.class);
         ExitEngineService service = service(null, jsonl);
 
-        service.evaluatePositionWithCandle(position(PositionSide.LONG), candle("102", "100", "101"), "5m");
+        service.evaluatePositionWithCandle(position(PositionSide.LONG), candle("105", "99", "102"), "5m");
 
         verify(jsonl, atLeastOnce()).logPaper(any());
+        verify(jsonl).logPaperTrade(any());
+    }
+
+    @Test
+    void writesShortExitTradeWithRealizedPnl() {
+        JsonlDecisionLogService jsonl = mock(JsonlDecisionLogService.class);
+        ExitEngineService service = service(null, jsonl);
+        PaperPositionEntity position = position(PositionSide.SHORT);
+        position.setEntryPrice(new BigDecimal("107.40"));
+        position.setQuantity(new BigDecimal("0.4"));
+        position.setCurrentStop(new BigDecimal("107.83"));
+
+        service.evaluatePositionWithCandle(position, candle("107.83", "106", "107.50"), "5m");
+
+        ArgumentCaptor<Map> captor = ArgumentCaptor.forClass(Map.class);
+        verify(jsonl).logPaperTrade(captor.capture());
+        assertThat(captor.getValue()).containsEntry("type", "EXIT");
+        assertThat(captor.getValue()).containsEntry("positionId", 1L);
+        assertThat((BigDecimal) captor.getValue().get("realizedPnl")).isEqualByComparingTo("-0.172");
+        assertThat(captor.getValue()).containsEntry("firstHit", "SL_FIRST");
+        assertThat(captor.getValue()).containsEntry("exitTrigger", "SL_5M");
+    }
+
+    @Test
+    void writesLongExitTradeWithRealizedPnl() {
+        JsonlDecisionLogService jsonl = mock(JsonlDecisionLogService.class);
+        ExitEngineService service = service(null, jsonl);
+        PaperPositionEntity position = position(PositionSide.LONG);
+        position.setEntryPrice(new BigDecimal("100"));
+        position.setQuantity(new BigDecimal("2"));
+        position.setTp1(null);
+        position.setTp2(null);
+        position.setCurrentStop(null);
+
+        service.evaluatePosition(position, new BigDecimal("101"));
+
+        ArgumentCaptor<Map> captor = ArgumentCaptor.forClass(Map.class);
+        verify(jsonl).logPaperTrade(captor.capture());
+        assertThat(captor.getValue()).containsEntry("type", "EXIT");
+        assertThat(captor.getValue()).containsEntry("positionId", 1L);
+        assertThat((BigDecimal) captor.getValue().get("realizedPnl")).isEqualByComparingTo("2");
+        assertThat(captor.getValue()).containsEntry("exitReason", "TAKE_PROFIT");
     }
 
     private ExitEngineService service() {
@@ -242,7 +344,7 @@ class ExitEngineServiceIntrabarTest {
                 .quantity(BigDecimal.ONE)
                 .notionalUsdt(new BigDecimal("100"))
                 .leverage(3)
-                .openedAt(Instant.now().minusSeconds(600))
+                .openedAt(candleOpen.minusSeconds(60))
                 .currentStop(side == PositionSide.LONG ? new BigDecimal("99.5") : new BigDecimal("100.5"))
                 .tp1(side == PositionSide.LONG ? new BigDecimal("101") : new BigDecimal("99"))
                 .tp2(side == PositionSide.LONG ? new BigDecimal("103") : new BigDecimal("97"))

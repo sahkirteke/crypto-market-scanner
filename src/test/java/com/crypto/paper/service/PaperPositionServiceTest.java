@@ -13,6 +13,7 @@ import com.crypto.common.enums.EntryAction;
 import com.crypto.common.enums.PositionSide;
 import com.crypto.common.enums.ReasonTag;
 import com.crypto.common.enums.RiskLevel;
+import com.crypto.common.service.JsonlDecisionLogService;
 import com.crypto.domain.model.EntrySignal;
 import com.crypto.paper.model.PaperPositionStatus;
 import com.crypto.persistence.entity.PaperPositionEntity;
@@ -27,6 +28,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class PaperPositionServiceTest {
     private PaperPositionRepository repository;
@@ -88,6 +90,23 @@ class PaperPositionServiceTest {
         assertThat(opened.getEntryBbScore()).isEqualByComparingTo("-4");
         assertThat(opened.getEntryBbPercentB()).isEqualByComparingTo("0.92");
         assertThat(opened.getEntryBbReasonsJson()).contains("LONG_BB_CHASE_RISK");
+    }
+
+    @Test
+    void openPositionWritesEntryTradeLog() {
+        JsonlDecisionLogService jsonl = mock(JsonlDecisionLogService.class);
+        ReflectionTestUtils.setField(service, "jsonlDecisionLogService", jsonl);
+        EntrySignal signal = signal("ETHUSDT", EntryAction.ENTER_SHORT, PositionSide.SHORT, "5.115", RiskLevel.LOW);
+
+        PaperPositionEntity opened = service.openPosition(signal);
+
+        ArgumentCaptor<Map> captor = ArgumentCaptor.forClass(Map.class);
+        verify(jsonl).logPaperTrade(captor.capture());
+        assertThat(opened).isNotNull();
+        assertThat(captor.getValue()).containsEntry("type", "ENTRY");
+        assertThat(captor.getValue()).containsEntry("symbol", "ETHUSDT");
+        assertThat(captor.getValue()).containsEntry("side", "SHORT");
+        assertThat(captor.getValue()).containsKeys("positionId", "entryPrice", "tp1", "tp2", "slPrice");
     }
 
     @Test
