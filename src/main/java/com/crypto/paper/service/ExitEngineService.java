@@ -144,6 +144,11 @@ public class ExitEngineService {
         if (position == null || candle == null || candle.getCloseTime() == null) {
             return position;
         }
+        if (!hasRequiredExitCandle(candle.getHigh(), candle.getLow(), candle.getClose())) {
+            log.warn("PAPER_EXIT_CANDLE_DATA_NOT_READY id={} symbol={} interval={} candleCloseTime={}",
+                    position.getId(), position.getSymbol(), interval, IstanbulTimeUtil.format(candle.getCloseTime()));
+            return position;
+        }
         String effectiveInterval = interval == null || interval.isBlank() ? defaultString(candle.getInterval(), "5m") : interval;
         if (shouldSkipCandleBeforePositionOpened(position, candle.getOpenTime(), candle.getCloseTime(), effectiveInterval)) {
             return position;
@@ -174,7 +179,7 @@ public class ExitEngineService {
                 log.info("PAPER_EXIT_CONSERVATIVE_STOP_FIRST id={} symbol={} interval={}",
                         position.getId(), position.getSymbol(), effectiveInterval);
             }
-            PaperExitReason reason = trailingActiveBefore && tp1HitBefore
+            PaperExitReason reason = canUseTrailingStop(position, tp1HitBefore, trailingActiveBefore, candle.getCloseTime())
                     ? PaperExitReason.TRAILING_STOP
                     : PaperExitReason.STOP_LOSS;
             closeRemaining(position, defaultBigDecimal(stopBefore, candle.getClose()), reason, candle.getCloseTime(), candleStartContext);
@@ -221,6 +226,11 @@ public class ExitEngineService {
 
     public PaperPositionEntity evaluatePositionOnCandle(PaperPositionEntity position, Instant candleOpenTime, Instant candleCloseTime,
             BigDecimal candleHigh, BigDecimal candleLow, BigDecimal candleClose, BigDecimal atr14) {
+        if (!hasRequiredExitCandle(candleHigh, candleLow, candleClose)) {
+            log.warn("PAPER_EXIT_CANDLE_DATA_NOT_READY id={} symbol={} interval={} candleCloseTime={}",
+                    position == null ? null : position.getId(), position == null ? null : position.getSymbol(), "1h", IstanbulTimeUtil.format(candleCloseTime));
+            return position;
+        }
         if (shouldSkipCandleBeforePositionOpened(position, candleOpenTime, candleCloseTime, "1h")) {
             return position;
         }
@@ -230,44 +240,52 @@ public class ExitEngineService {
         position.setBarsInPosition(intValue(position.getBarsInPosition(), 0) + 1);
         position.setLastCheckedAt(now);
         updateUnrealized(position, candleClose);
+        IntrabarEventContext oneHourContext = new IntrabarEventContext(position, KlineCandle.builder()
+                .openTime(candleOpenTime)
+                .closeTime(candleCloseTime)
+                .high(candleHigh)
+                .low(candleLow)
+                .close(candleClose)
+                .interval("1h")
+                .build(), "1h");
 
         if (position.getCurrentStop() == null && position.getTp1() == null && position.getTp2() == null) {
             PaperExitReason legacy = resolveLegacyExitReason(position, calculateUnrealizedPnlPct(position, candleClose));
             if (legacy != null) {
-                closeRemaining(position, candleClose, legacy, candleCloseTime);
+                closeRemaining(position, candleClose, legacy, candleCloseTime, oneHourContext);
             }
             return position;
         }
 
         if (stopHit(position, candleHigh, candleLow)) {
-            PaperExitReason reason = Boolean.TRUE.equals(position.getTrailingActive()) ? PaperExitReason.TRAILING_STOP : PaperExitReason.STOP_LOSS;
-            closeRemaining(position, defaultBigDecimal(position.getCurrentStop(), candleClose), reason, candleCloseTime);
+            PaperExitReason reason = canUseTrailingStop(position, Boolean.TRUE.equals(position.getTp1Hit()), Boolean.TRUE.equals(position.getTrailingActive()), candleCloseTime) ? PaperExitReason.TRAILING_STOP : PaperExitReason.STOP_LOSS;
+            closeRemaining(position, defaultBigDecimal(position.getCurrentStop(), candleClose), reason, candleCloseTime, oneHourContext);
             return position;
         }
         if (tp1Hit(position, candleHigh, candleLow)) {
-            IntrabarEventContext tp1Context = null;
+            IntrabarEventContext tp1Context = oneHourContext;
             position.setTp1Hit(true);
-            PartialCloseResult partial = partialClose(position, position.getTp1(), scannerProperties.getPaperRisk().getTp1ClosePct(), PaperPositionEventType.PARTIAL_TP1, candleCloseTime);
+            PartialCloseResult partial = partialClose(position, position.getTp1(), scannerProperties.getPaperRisk().getTp1ClosePct(), PaperPositionEventType.PARTIAL_TP1, candleCloseTime, tp1Context);
             position.setTrailingActive(true);
             position.setTrailingActivatedAtBarCloseTime(candleCloseTime);
-            updateBreakEvenStop(position, candleCloseTime, null);
+            updateBreakEvenStop(position, candleCloseTime, oneHourContext);
             writeSymbolTradePartialExit(position, partial, PaperExitReason.PARTIAL_TP1, tp1Context);
         }
         if (tp2Hit(position, candleHigh, candleLow)) {
-            IntrabarEventContext tp2Context = null;
+            IntrabarEventContext tp2Context = oneHourContext;
             position.setTp2Hit(true);
-            PartialCloseResult partial = partialClose(position, position.getTp2(), scannerProperties.getPaperRisk().getTp2ClosePct(), PaperPositionEventType.PARTIAL_TP2, candleCloseTime);
+            PartialCloseResult partial = partialClose(position, position.getTp2(), scannerProperties.getPaperRisk().getTp2ClosePct(), PaperPositionEventType.PARTIAL_TP2, candleCloseTime, tp2Context);
             writeSymbolTradePartialExit(position, partial, PaperExitReason.PARTIAL_TP2, tp2Context);
         }
         updateStatus(position);
-        updateTrailing(position, candleHigh, candleLow, atr14, candleCloseTime);
+        updateTrailing(position, candleHigh, candleLow, atr14, candleCloseTime, oneHourContext);
         if (timeStop(position) && shouldCloseTimeStop(position, candleClose)) {
-            closeRemaining(position, candleClose, PaperExitReason.TIME_STOP, candleCloseTime);
+            closeRemaining(position, candleClose, PaperExitReason.TIME_STOP, candleCloseTime, oneHourContext);
             return position;
         }
         PaperExitReason strategicExit = resolveStrategicExit(position);
         if (strategicExit != null) {
-            closeRemaining(position, candleClose, strategicExit, candleCloseTime);
+            closeRemaining(position, candleClose, strategicExit, candleCloseTime, oneHourContext);
         }
         log.info("PAPER_POSITION_EVALUATED id={} symbol={} side={} close={} status={} remainingPct={}", position.getId(), position.getSymbol(), position.getSide(), candleClose, position.getStatus(), position.getRemainingPositionPct());
         return position;
@@ -340,7 +358,7 @@ public class ExitEngineService {
             if (evaluated.getStatus() != PaperPositionStatus.CLOSED && snapshot != null && marketScanRunRepository != null) {
                 MarketScanRunEntity run = marketScanRunRepository.findTopByStatusOrderByScanTimeUtcDesc("COMPLETED").orElse(null);
                 if (run != null && shouldSignalInvalidate(evaluated, snapshot.getClose(), snapshot.getEma20(), snapshot.getMacdHist(), run.getMarketRegime())) {
-                    closeRemaining(evaluated, last.getClose(), PaperExitReason.SIGNAL_INVALIDATION, last.getCloseTime());
+                    closeRemaining(evaluated, last.getClose(), PaperExitReason.SIGNAL_INVALIDATION, last.getCloseTime(), new IntrabarEventContext(evaluated, KlineCandle.builder().openTime(last.getOpenTime()).closeTime(last.getCloseTime()).high(last.getHigh()).low(last.getLow()).close(last.getClose()).interval("1h").build(), "1h"));
                 }
             }
             return evaluated;
@@ -356,6 +374,17 @@ public class ExitEngineService {
                 .filter(kline -> kline != null && Boolean.TRUE.equals(kline.getClosed()))
                 .toList();
         return closed.isEmpty() ? null : closed.get(closed.size() - 1);
+    }
+
+    private boolean hasRequiredExitCandle(BigDecimal high, BigDecimal low, BigDecimal close) {
+        return high != null && low != null && close != null;
+    }
+
+    private boolean canUseTrailingStop(PaperPositionEntity position, boolean tp1HitBefore, boolean trailingActiveBefore, Instant candleCloseTime) {
+        if (!tp1HitBefore || !trailingActiveBefore || position == null || position.getTrailingActivatedAtBarCloseTime() == null) {
+            return false;
+        }
+        return candleCloseTime == null || candleCloseTime.isAfter(position.getTrailingActivatedAtBarCloseTime());
     }
 
     private boolean stopHit(PaperPositionEntity p, BigDecimal high, BigDecimal low) {
@@ -421,7 +450,7 @@ public class ExitEngineService {
     }
 
     private void updateTrailing(PaperPositionEntity p, BigDecimal high, BigDecimal low, BigDecimal atr14, Instant candleCloseTime, IntrabarEventContext context) {
-        if (!Boolean.TRUE.equals(p.getTrailingActive())) return;
+        if (!Boolean.TRUE.equals(p.getTrailingActive()) || p.getTrailingActivatedAtBarCloseTime() == null) return;
         BigDecimal trailingDistance = defaultBigDecimal(atr14, fallbackAtr(p)).multiply(scannerProperties.getPaperRisk().getTrailingAtrMultiplier());
         BigDecimal oldStop = p.getCurrentStop();
         if (p.getSide() == PositionSide.SHORT) {
@@ -635,6 +664,10 @@ public class ExitEngineService {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("type", "EXIT");
         payload.put("positionId", p.getId() == null ? "" : p.getId());
+        payload.put("scanRunId", p.getSourceScanRunId());
+        payload.put("sourceScanType", p.getSourceScanType() == null ? "" : p.getSourceScanType().name());
+        payload.put("sourceClassification", p.getSourceClassification() == null ? "" : p.getSourceClassification().name());
+        payload.put("candidateId", p.getSourceCandidateId());
         payload.put("symbol", p.getSymbol());
         payload.put("time", p.getClosedAt());
         payload.put("side", p.getSide().name());
@@ -656,6 +689,13 @@ public class ExitEngineService {
         payload.put("closedAt", p.getClosedAt());
         payload.put("minutesHeld", minutesHeldForTradeLog(p));
         payload.put("barsInPosition", p.getBarsInPosition());
+        if (context != null) {
+            payload.put("candleOpenTime", context.candle().getOpenTime());
+            payload.put("candleCloseTime", context.candle().getCloseTime());
+            payload.put("candleHigh", context.candle().getHigh());
+            payload.put("candleLow", context.candle().getLow());
+            payload.put("candleClose", context.candle().getClose());
+        }
         jsonlDecisionLogService.logPaperTrade(payload);
     }
 
@@ -764,6 +804,10 @@ public class ExitEngineService {
             payload.put("symbol", p.getSymbol());
             payload.put("side", p.getSide().name());
             payload.put("positionId", p.getId() == null ? "" : p.getId());
+            payload.put("scanRunId", p.getSourceScanRunId());
+            payload.put("sourceScanType", p.getSourceScanType() == null ? "" : p.getSourceScanType().name());
+            payload.put("sourceClassification", p.getSourceClassification() == null ? "" : p.getSourceClassification().name());
+            payload.put("candidateId", p.getSourceCandidateId());
             payload.put("exitPrice", price == null ? "" : price);
             payload.put("exitReason", reason == null ? "" : reason);
             payload.putAll(details);

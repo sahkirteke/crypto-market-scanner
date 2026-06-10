@@ -60,6 +60,7 @@ public class EntryCandidateService {
         List<EntryCandidate> eligibleCandidates = scanResults.stream()
                 .map(this::toEligibleCandidate)
                 .flatMap(List::stream)
+                .peek(candidate -> candidate.setSourceScanType(scanResult.getScanType()))
                 .toList();
 
         return applyLimits(eligibleCandidates);
@@ -95,6 +96,7 @@ public class EntryCandidateService {
                 .map(entity -> toCoinScanResult(entity, scanRunId, marketRegime, marketBreadthPct, scanTime))
                 .map(this::toEligibleCandidate)
                 .flatMap(List::stream)
+                .peek(candidate -> candidate.setSourceScanType(scanRun.getScanType()))
                 .toList();
 
         return applyLimits(eligibleCandidates);

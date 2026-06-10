@@ -107,6 +107,15 @@ public class PaperPositionService {
         if (signal.getEntryPrice() == null || signal.getEntryPrice().compareTo(BigDecimal.ZERO) <= 0) {
             return reject(signal, "INVALID_ENTRY_PRICE");
         }
+        if (signal.getScanRunId() == null) {
+            return reject(signal, "SCAN_RUN_ID_MISSING");
+        }
+        if (signal.getSourceScanType() == null || signal.getSourceClassification() == null || signal.getCandidateId() == null) {
+            return reject(signal, "SOURCE_METADATA_MISSING");
+        }
+        if (!hasRequiredEntryIndicators(signal)) {
+            return reject(signal, "DATA_NOT_READY");
+        }
         if (signal.getRiskLevel() == RiskLevel.HIGH && !booleanValue(config.getAllowHighRisk(), false)) {
             return reject(signal, "HIGH_RISK_BLOCKED");
         }
@@ -156,6 +165,15 @@ public class PaperPositionService {
         BigDecimal quantity = notionalUsdt.divide(entryPrice, QUANTITY_SCALE, RoundingMode.DOWN);
         Instant openedAt = Instant.now();
         PaperPositionEntity position = PaperPositionEntity.builder()
+                .sourceScanRunId(signal.getScanRunId())
+                .sourceScanType(signal.getSourceScanType())
+                .sourceCandidateId(signal.getCandidateId())
+                .entryClose1h(signal.getClose1h())
+                .entryEma20_1h(signal.getEma20_1h())
+                .entryRsi14_1h(signal.getRsi14_1h())
+                .entryMacdHist_1h(signal.getMacdHist_1h())
+                .entryAtr14_1h(signal.getAtr14_1h())
+                .entryVolumeRatio_1h(signal.getVolumeRatio_1h())
                 .symbol(signal.getSymbol())
                 .side(signal.getSide())
                 .status(PaperPositionStatus.OPEN)
@@ -361,6 +379,10 @@ public class PaperPositionService {
                 Map.entry("symbol", position.getSymbol()),
                 Map.entry("side", position.getSide().name()),
                 Map.entry("positionId", position.getId() == null ? "" : position.getId()),
+                Map.entry("scanRunId", position.getSourceScanRunId()),
+                Map.entry("sourceScanType", position.getSourceScanType() == null ? "" : position.getSourceScanType().name()),
+                Map.entry("sourceClassification", position.getSourceClassification() == null ? "" : position.getSourceClassification().name()),
+                Map.entry("candidateId", position.getSourceCandidateId()),
                 Map.entry("entryPrice", position.getEntryPrice()),
                 Map.entry("baseEntryScore", nullToEmpty(position.getEntryScore() == null || position.getEntryBbScore() == null ? position.getEntryScore() : BigDecimal.valueOf(position.getEntryScore()).subtract(position.getEntryBbScore()))),
                 Map.entry("bbScore", nullToEmpty(position.getEntryBbScore())),
@@ -383,6 +405,10 @@ public class PaperPositionService {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("type", "ENTRY");
         payload.put("positionId", position.getId() == null ? "" : position.getId());
+        payload.put("scanRunId", position.getSourceScanRunId());
+        payload.put("sourceScanType", position.getSourceScanType() == null ? "" : position.getSourceScanType().name());
+        payload.put("sourceClassification", position.getSourceClassification() == null ? "" : position.getSourceClassification().name());
+        payload.put("candidateId", position.getSourceCandidateId());
         payload.put("symbol", position.getSymbol());
         payload.put("time", position.getOpenedAt());
         payload.put("side", position.getSide().name());
@@ -390,7 +416,19 @@ public class PaperPositionService {
         payload.put("qty", position.getQuantity());
         payload.put("tp1", position.getTp1());
         payload.put("tp2", position.getTp2());
-        payload.put("slPrice", position.getCurrentStop() == null ? position.getInitialStop() : position.getCurrentStop());
+        payload.put("slPrice", position.getInitialStop());
+        payload.put("initialStop", position.getInitialStop());
+        payload.put("currentStop", position.getInitialStop());
+        payload.put("tp1Hit", false);
+        payload.put("tp2Hit", false);
+        payload.put("trailingActive", false);
+        payload.put("remainingPositionPct", new BigDecimal("100"));
+        payload.put("close1h", position.getEntryClose1h());
+        payload.put("ema20_1h", position.getEntryEma20_1h());
+        payload.put("rsi14_1h", position.getEntryRsi14_1h());
+        payload.put("macdHist_1h", position.getEntryMacdHist_1h());
+        payload.put("atr14_1h", position.getEntryAtr14_1h());
+        payload.put("volumeRatio_1h", position.getEntryVolumeRatio_1h());
         payload.put("matchedSetup", nullToEmpty(position.getEntryReason()));
         payload.put("entryReason", nullToEmpty(position.getEntryReason()));
         payload.put("marketRegime", "");
@@ -403,6 +441,15 @@ public class PaperPositionService {
         payload.put("reasons", jsonTextMapper.toStringList(position.getReasonsJson()));
         payload.put("warnings", jsonTextMapper.toStringList(position.getWarningsJson()));
         return payload;
+    }
+
+    private boolean hasRequiredEntryIndicators(EntrySignal signal) {
+        return signal.getClose1h() != null
+                && signal.getEma20_1h() != null
+                && signal.getRsi14_1h() != null
+                && signal.getMacdHist_1h() != null
+                && signal.getAtr14_1h() != null
+                && signal.getVolumeRatio_1h() != null;
     }
 
     private Object nullToEmpty(Object value) {

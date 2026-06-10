@@ -6,6 +6,7 @@ import com.crypto.common.enums.EntryAction;
 import com.crypto.common.enums.MarketRegime;
 import com.crypto.common.enums.PositionSide;
 import com.crypto.common.enums.RiskLevel;
+import com.crypto.common.enums.ScanType;
 import com.crypto.paper.model.PaperPositionStatus;
 import com.crypto.common.time.IstanbulTimeUtil;
 import jakarta.persistence.Column;
@@ -37,6 +38,34 @@ public class PaperPositionEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Column(name = "source_scan_run_id")
+    private Long sourceScanRunId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "source_scan_type", length = 32)
+    private ScanType sourceScanType;
+
+    @Column(name = "source_candidate_id")
+    private Long sourceCandidateId;
+
+    @Column(name = "entry_close_1h", precision = 30, scale = 12)
+    private BigDecimal entryClose1h;
+
+    @Column(name = "entry_ema20_1h", precision = 30, scale = 12)
+    private BigDecimal entryEma20_1h;
+
+    @Column(name = "entry_rsi14_1h", precision = 20, scale = 8)
+    private BigDecimal entryRsi14_1h;
+
+    @Column(name = "entry_macd_hist_1h", precision = 30, scale = 12)
+    private BigDecimal entryMacdHist_1h;
+
+    @Column(name = "entry_atr14_1h", precision = 30, scale = 12)
+    private BigDecimal entryAtr14_1h;
+
+    @Column(name = "entry_volume_ratio_1h", precision = 20, scale = 8)
+    private BigDecimal entryVolumeRatio_1h;
 
     @Column(name = "symbol", nullable = false, length = 32)
     private String symbol;

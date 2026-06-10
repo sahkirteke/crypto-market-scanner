@@ -6,6 +6,7 @@ import com.crypto.common.enums.MarketRegime;
 import com.crypto.common.enums.PositionSide;
 import com.crypto.common.enums.ReasonTag;
 import com.crypto.common.enums.RiskLevel;
+import com.crypto.common.enums.ScanType;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -24,6 +25,7 @@ import lombok.Setter;
 public class EntryCandidate {
     private Long id;
     private Long scanRunId;
+    private ScanType sourceScanType;
     private String symbol;
     private PositionSide side;
     private Integer score;
