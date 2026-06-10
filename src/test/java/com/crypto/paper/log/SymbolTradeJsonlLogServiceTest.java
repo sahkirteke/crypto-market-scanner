@@ -2,8 +2,10 @@ package com.crypto.paper.log;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.crypto.common.enums.CoinClassification;
 import com.crypto.common.enums.EntryAction;
 import com.crypto.common.enums.PositionSide;
+import com.crypto.common.enums.ScanType;
 import com.crypto.paper.log.SymbolTradeJsonlLogService.PaperExitContext;
 import com.crypto.paper.model.PaperPositionStatus;
 import com.crypto.persistence.entity.PaperPositionEntity;
@@ -58,6 +60,15 @@ class SymbolTradeJsonlLogServiceTest {
                 .containsEntry("time", "2026-06-08 14:44:59 TRT")
                 .containsEntry("side", "SHORT");
         assertThat(lines.get(0)).containsKeys("entryPrice", "tp1", "tp2", "slPrice");
+        assertThat(lines.get(0))
+                .containsEntry("scanRunId", 42)
+                .containsEntry("sourceScanType", "ONE_HOUR")
+                .containsEntry("sourceClassification", "STRONG_SHORT")
+                .containsEntry("candidateId", 99)
+                .containsEntry("tp1Hit", false)
+                .containsEntry("tp2Hit", false)
+                .containsEntry("trailingActive", false)
+                .containsEntry("remainingPositionPct", 100);
         assertThat(lines.get(1))
                 .containsEntry("type", "EXIT")
                 .containsEntry("positionId", 12)
@@ -104,6 +115,11 @@ class SymbolTradeJsonlLogServiceTest {
                 .tp2HitAfter(false)
                 .trailingActiveBefore(false)
                 .trailingActiveAfter(true)
+                .candleOpenTime(Instant.parse("2026-06-08T11:55:00Z"))
+                .candleCloseTime(Instant.parse("2026-06-08T11:59:59Z"))
+                .candleHigh(new BigDecimal("107.50"))
+                .candleLow(new BigDecimal("106.30"))
+                .candleClose(new BigDecimal("106.80"))
                 .build())).isTrue();
         position.setSymbolTradeTp1ExitLogged(true);
         position.setStatus(PaperPositionStatus.CLOSED);
@@ -124,6 +140,11 @@ class SymbolTradeJsonlLogServiceTest {
                 .remainingPositionPctBefore(new BigDecimal("50"))
                 .remainingPositionPctAfter(BigDecimal.ZERO)
                 .realizedPnlUsdt(new BigDecimal("0.25"))
+                .candleOpenTime(Instant.parse("2026-06-08T12:00:00Z"))
+                .candleCloseTime(Instant.parse("2026-06-08T12:04:59Z"))
+                .candleHigh(new BigDecimal("106.20"))
+                .candleLow(new BigDecimal("105.80"))
+                .candleClose(new BigDecimal("105.95"))
                 .build())).isTrue();
 
         List<Map<String, Object>> lines = readLines("AAVEUSDT");
@@ -157,10 +178,16 @@ class SymbolTradeJsonlLogServiceTest {
         assertThat(service.logExit(position, PaperExitContext.builder()
                 .exitReason("PARTIAL_TP1")
                 .exitSeq(1)
+                .candleHigh(new BigDecimal("107.50"))
+                .candleLow(new BigDecimal("106.30"))
+                .candleClose(new BigDecimal("106.80"))
                 .build())).isFalse();
         assertThat(service.logExit(position, PaperExitContext.builder()
                 .exitReason("PARTIAL_TP2")
                 .exitSeq(2)
+                .candleHigh(new BigDecimal("106.50"))
+                .candleLow(new BigDecimal("105.30"))
+                .candleClose(new BigDecimal("105.80"))
                 .build())).isTrue();
 
         List<Map<String, Object>> lines = readLines("AAVEUSDT");
@@ -184,6 +211,9 @@ class SymbolTradeJsonlLogServiceTest {
                 .firstHit("TP_FIRST")
                 .exitTrigger("TP_5M")
                 .interval("5m")
+                .candleHigh(new BigDecimal("101.20"))
+                .candleLow(new BigDecimal("100.80"))
+                .candleClose(new BigDecimal("101"))
                 .build())).isTrue();
 
         Map<String, Object> exit = readLines("AAVEUSDT").get(0);
@@ -211,10 +241,20 @@ class SymbolTradeJsonlLogServiceTest {
     private PaperPositionEntity shortPosition() {
         return PaperPositionEntity.builder()
                 .id(12L)
+                .sourceScanRunId(42L)
+                .sourceScanType(ScanType.ONE_HOUR)
+                .sourceCandidateId(99L)
                 .symbol("AAVEUSDT")
                 .side(PositionSide.SHORT)
                 .status(PaperPositionStatus.OPEN)
                 .entryAction(EntryAction.ENTER_SHORT)
+                .sourceClassification(CoinClassification.STRONG_SHORT)
+                .entryClose1h(new BigDecimal("107.20"))
+                .entryEma20_1h(new BigDecimal("108.00"))
+                .entryRsi14_1h(new BigDecimal("42.50"))
+                .entryMacdHist_1h(new BigDecimal("-0.12"))
+                .entryAtr14_1h(new BigDecimal("0.43"))
+                .entryVolumeRatio_1h(new BigDecimal("1.25"))
                 .entryPrice(new BigDecimal("107.40"))
                 .entryPriceAdjusted(new BigDecimal("107.3463"))
                 .bidPrice(new BigDecimal("107.39"))

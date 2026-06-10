@@ -177,6 +177,9 @@ public class EntrySignalService {
                     .build();
         }
         return EntrySignal.builder()
+                .scanRunId(candidate.getScanRunId())
+                .sourceScanType(candidate.getSourceScanType())
+                .candidateId(candidate.getId())
                 .symbol(candidate.getSymbol())
                 .side(candidate.getSide())
                 .action(EntryAction.NO_ENTRY)

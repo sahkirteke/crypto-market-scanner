@@ -39,6 +39,10 @@ public class SymbolTradeJsonlLogService {
         if (position == null || Boolean.TRUE.equals(position.getSymbolTradeEntryLogged())) {
             return false;
         }
+        if (!hasRequiredSourceIdentity(position) || !hasRequiredEntryIndicators(position, signal)) {
+            log.warn("SYMBOL_TRADE_JSONL_ENTRY_SKIPPED_DATA_NOT_READY symbol={} positionId={}", position.getSymbol(), position.getId());
+            return false;
+        }
         return append(position, "ENTRY", entryPayload(position, signal));
     }
 
@@ -49,6 +53,10 @@ public class SymbolTradeJsonlLogService {
     public boolean logExit(PaperPositionEntity position, PaperExitContext exitContext) {
         PaperExitContext context = exitContext == null ? PaperExitContext.builder().build() : exitContext;
         if (position == null || exitAlreadyLogged(position, context.exitReason())) {
+            return false;
+        }
+        if (!hasRequiredSourceIdentity(position) || !hasRequiredExitCandle(context)) {
+            log.warn("SYMBOL_TRADE_JSONL_EXIT_SKIPPED_DATA_NOT_READY symbol={} positionId={} reason={}", position.getSymbol(), position.getId(), context.exitReason());
             return false;
         }
         return append(position, "EXIT", exitPayload(position, context));
@@ -77,6 +85,31 @@ public class SymbolTradeJsonlLogService {
         }
     }
 
+    private boolean hasRequiredSourceIdentity(PaperPositionEntity position) {
+        return position.getSourceScanRunId() != null
+                && position.getSourceScanType() != null
+                && position.getSourceClassification() != null
+                && position.getSourceCandidateId() != null
+                && position.getId() != null;
+    }
+
+    private boolean hasRequiredEntryIndicators(PaperPositionEntity position, EntrySignal signal) {
+        return firstNonNull(signal == null ? null : signal.getClose1h(), position.getEntryClose1h()) != null
+                && firstNonNull(signal == null ? null : signal.getEma20_1h(), position.getEntryEma20_1h()) != null
+                && firstNonNull(signal == null ? null : signal.getRsi14_1h(), position.getEntryRsi14_1h()) != null
+                && firstNonNull(signal == null ? null : signal.getMacdHist_1h(), position.getEntryMacdHist_1h()) != null
+                && firstNonNull(signal == null ? null : signal.getAtr14_1h(), position.getEntryAtr14_1h()) != null
+                && firstNonNull(signal == null ? null : signal.getVolumeRatio_1h(), position.getEntryVolumeRatio_1h()) != null;
+    }
+
+    private boolean hasRequiredExitCandle(PaperExitContext context) {
+        return context.candleHigh() != null && context.candleLow() != null && context.candleClose() != null;
+    }
+
+    private BigDecimal firstNonNull(BigDecimal primary, BigDecimal fallback) {
+        return primary == null ? fallback : primary;
+    }
+
     private Path resolvePath(PaperPositionEntity position) {
         return logDirectory.resolve(position.getSymbol() + ".jsonl");
     }
@@ -86,9 +119,9 @@ public class SymbolTradeJsonlLogService {
         putCoreEntry(payload, p);
         payload.put("tp1", p.getTp1());
         payload.put("tp2", p.getTp2());
-        payload.put("slPrice", p.getCurrentStop() == null ? p.getInitialStop() : p.getCurrentStop());
+        payload.put("slPrice", p.getInitialStop());
         payload.put("initialStop", p.getInitialStop());
-        payload.put("currentStop", p.getCurrentStop());
+        payload.put("currentStop", p.getInitialStop());
         payload.put("riskPerUnit", p.getRiskPerUnit());
         payload.put("tp1Raw", p.getTp1());
         payload.put("tp2Raw", p.getTp2());
@@ -97,14 +130,14 @@ public class SymbolTradeJsonlLogService {
         payload.put("stepSize", null);
         putStrategy(payload, p, signal);
         putMarket(payload, p);
-        putIndicatorSnapshot(payload, signal);
+        putIndicatorSnapshot(payload, p, signal);
         putBollinger(payload, p, signal);
-        payload.put("tp1Hit", p.getTp1Hit());
-        payload.put("tp2Hit", p.getTp2Hit());
-        payload.put("trailingActive", p.getTrailingActive());
-        payload.put("remainingPositionPct", p.getRemainingPositionPct());
-        payload.put("highestPriceSinceEntry", p.getHighestPriceSinceEntry());
-        payload.put("lowestPriceSinceEntry", p.getLowestPriceSinceEntry());
+        payload.put("tp1Hit", false);
+        payload.put("tp2Hit", false);
+        payload.put("trailingActive", false);
+        payload.put("remainingPositionPct", BigDecimal.valueOf(100));
+        payload.put("highestPriceSinceEntry", p.getEntryPrice());
+        payload.put("lowestPriceSinceEntry", p.getEntryPrice());
         payload.put("openedAt", format(p.getOpenedAt()));
         return payload;
     }
@@ -112,6 +145,7 @@ public class SymbolTradeJsonlLogService {
     private void putCoreEntry(Map<String, Object> payload, PaperPositionEntity p) {
         payload.put("type", "ENTRY");
         payload.put("positionId", p.getId());
+        putSourceIdentity(payload, p);
         payload.put("symbol", p.getSymbol());
         payload.put("time", format(p.getOpenedAt()));
         payload.put("side", enumName(p.getSide()));
@@ -141,6 +175,7 @@ public class SymbolTradeJsonlLogService {
         BigDecimal realizedPnl = context.realizedPnlUsdt() == null ? realizedPnl(p, exitPrice) : context.realizedPnlUsdt();
         payload.put("type", "EXIT");
         payload.put("positionId", p.getId());
+        putSourceIdentity(payload, p);
         payload.put("symbol", p.getSymbol());
         payload.put("time", format(exitTime));
         payload.put("side", enumName(p.getSide()));
@@ -222,9 +257,10 @@ public class SymbolTradeJsonlLogService {
     }
 
     private void putStrategy(Map<String, Object> payload, PaperPositionEntity p, EntrySignal signal) {
-        payload.put("scanRunId", null);
-        payload.put("sourceScanType", null);
+        payload.put("scanRunId", p.getSourceScanRunId());
+        payload.put("sourceScanType", enumName(p.getSourceScanType()));
         payload.put("sourceClassification", enumName(p.getSourceClassification()));
+        payload.put("candidateId", p.getSourceCandidateId());
         payload.put("directionBias", enumName(p.getDirectionBias()));
         payload.put("matchedSetup", p.getEntryReason());
         payload.put("entryReason", p.getEntryReason());
@@ -242,6 +278,13 @@ public class SymbolTradeJsonlLogService {
         payload.put("warnings", jsonTextMapper.toStringList(p.getWarningsJson()));
     }
 
+    private void putSourceIdentity(Map<String, Object> payload, PaperPositionEntity p) {
+        payload.put("scanRunId", p.getSourceScanRunId());
+        payload.put("sourceScanType", enumName(p.getSourceScanType()));
+        payload.put("sourceClassification", enumName(p.getSourceClassification()));
+        payload.put("candidateId", p.getSourceCandidateId());
+    }
+
     private void putMarket(Map<String, Object> payload, PaperPositionEntity p) {
         payload.put("fundingRate", p.getFundingRate());
         payload.put("openInterest", p.getOpenInterest());
@@ -249,16 +292,16 @@ public class SymbolTradeJsonlLogService {
         payload.put("spreadPct", p.getSpreadPct());
     }
 
-    private void putIndicatorSnapshot(Map<String, Object> payload, EntrySignal signal) {
-        payload.put("close1h", signal == null ? null : signal.getClose1h());
-        payload.put("ema20_1h", signal == null ? null : signal.getEma20_1h());
+    private void putIndicatorSnapshot(Map<String, Object> payload, PaperPositionEntity p, EntrySignal signal) {
+        payload.put("close1h", signal != null && signal.getClose1h() != null ? signal.getClose1h() : p.getEntryClose1h());
+        payload.put("ema20_1h", signal != null && signal.getEma20_1h() != null ? signal.getEma20_1h() : p.getEntryEma20_1h());
         payload.put("ema50_1h", null);
         payload.put("ema200_1h", null);
-        payload.put("rsi14_1h", signal == null ? null : signal.getRsi14_1h());
-        payload.put("macdHist_1h", signal == null ? null : signal.getMacdHist_1h());
+        payload.put("rsi14_1h", signal != null && signal.getRsi14_1h() != null ? signal.getRsi14_1h() : p.getEntryRsi14_1h());
+        payload.put("macdHist_1h", signal != null && signal.getMacdHist_1h() != null ? signal.getMacdHist_1h() : p.getEntryMacdHist_1h());
         payload.put("previousMacdHist_1h", signal == null ? null : signal.getPreviousMacdHist_1h());
-        payload.put("atr14_1h", signal == null ? null : signal.getAtr14_1h());
-        payload.put("volumeRatio_1h", signal == null ? null : signal.getVolumeRatio_1h());
+        payload.put("atr14_1h", signal != null && signal.getAtr14_1h() != null ? signal.getAtr14_1h() : p.getEntryAtr14_1h());
+        payload.put("volumeRatio_1h", signal != null && signal.getVolumeRatio_1h() != null ? signal.getVolumeRatio_1h() : p.getEntryVolumeRatio_1h());
     }
 
     private void putBollinger(Map<String, Object> payload, PaperPositionEntity p, EntrySignal signal) {

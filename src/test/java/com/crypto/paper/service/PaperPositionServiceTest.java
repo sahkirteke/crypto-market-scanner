@@ -13,6 +13,7 @@ import com.crypto.common.enums.EntryAction;
 import com.crypto.common.enums.PositionSide;
 import com.crypto.common.enums.ReasonTag;
 import com.crypto.common.enums.RiskLevel;
+import com.crypto.common.enums.ScanType;
 import com.crypto.common.service.JsonlDecisionLogService;
 import com.crypto.domain.model.EntrySignal;
 import com.crypto.paper.model.PaperPositionStatus;
@@ -24,6 +25,7 @@ import com.crypto.scanner.service.EntrySignalService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -278,6 +280,9 @@ class PaperPositionServiceTest {
 
     private EntrySignal signal(String symbol, EntryAction action, PositionSide side, String entryPrice, RiskLevel riskLevel) {
         return EntrySignal.builder()
+                .scanRunId(77L)
+                .sourceScanType(ScanType.ONE_HOUR)
+                .candidateId(123L)
                 .symbol(symbol)
                 .action(action)
                 .side(side)
@@ -288,6 +293,12 @@ class PaperPositionServiceTest {
                 .directionBias(side == PositionSide.SHORT ? DirectionBias.SHORT : DirectionBias.LONG)
                 .riskLevel(riskLevel)
                 .entryPrice(entryPrice == null ? null : new BigDecimal(entryPrice))
+                .close1h(new BigDecimal("10.50"))
+                .ema20_1h(new BigDecimal("10.00"))
+                .rsi14_1h(new BigDecimal("55"))
+                .macdHist_1h(new BigDecimal("0.10"))
+                .atr14_1h(new BigDecimal("0.20"))
+                .volumeRatio_1h(new BigDecimal("1.20"))
                 .fundingRate(new BigDecimal("0.0001"))
                 .openInterest(new BigDecimal("1000000"))
                 .marketBreadthPct(new BigDecimal("55"))

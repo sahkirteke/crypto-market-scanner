@@ -1,0 +1,11 @@
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS source_scan_run_id BIGINT;
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS source_scan_type VARCHAR(32);
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS source_candidate_id BIGINT;
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS entry_close_1h NUMERIC(30,12);
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS entry_ema20_1h NUMERIC(30,12);
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS entry_rsi14_1h NUMERIC(20,8);
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS entry_macd_hist_1h NUMERIC(30,12);
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS entry_atr14_1h NUMERIC(30,12);
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS entry_volume_ratio_1h NUMERIC(20,8);
+CREATE INDEX IF NOT EXISTS idx_paper_positions_source_scan_run_id ON paper_positions(source_scan_run_id);
+CREATE INDEX IF NOT EXISTS idx_paper_positions_source_candidate_id ON paper_positions(source_candidate_id);
