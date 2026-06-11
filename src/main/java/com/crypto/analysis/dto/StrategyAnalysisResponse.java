@@ -10,6 +10,7 @@ public record StrategyAnalysisResponse(
         List<ClassificationPerformanceResponse> byClassification,
         List<RiskPerformanceResponse> byRiskLevel,
         List<ExitReasonPerformanceResponse> byExitReason,
+        List<SignalExecutionModePerformanceResponse> bySignalExecutionMode,
         List<String> observations
 ) {
 }

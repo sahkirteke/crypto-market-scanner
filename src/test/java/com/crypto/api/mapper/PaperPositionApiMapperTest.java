@@ -27,6 +27,9 @@ class PaperPositionApiMapperTest {
         var response = mapper.toResponse(entity);
 
         assertThat(response.openedAt()).isEqualTo("2026-06-07 23:25:10 TRT");
+        assertThat(response.sourceSignalSide()).isEqualTo(PositionSide.LONG);
+        assertThat(response.executionSide()).isEqualTo(PositionSide.LONG);
+        assertThat(response.signalInverted()).isFalse();
         assertThat(new ObjectMapper().writeValueAsString(response)).doesNotContain("openedAtIstanbulText");
     }
 }

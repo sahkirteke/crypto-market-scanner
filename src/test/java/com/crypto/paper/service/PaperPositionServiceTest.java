@@ -57,7 +57,7 @@ class PaperPositionServiceTest {
     }
 
     @Test
-    void validEnterShortSignalOpensPaperPosition() {
+    void validEnterShortSignalOpensInvertedLongPaperPosition() {
         EntrySignal signal = signal("ETHUSDT", EntryAction.ENTER_SHORT, PositionSide.SHORT, "5.115", RiskLevel.LOW);
 
         PaperPositionEntity opened = service.openPosition(signal);
@@ -66,7 +66,13 @@ class PaperPositionServiceTest {
         verify(repository).save(captor.capture());
         assertThat(opened).isNotNull();
         assertThat(captor.getValue().getStatus()).isEqualTo(PaperPositionStatus.OPEN);
-        assertThat(captor.getValue().getSide()).isEqualTo(PositionSide.SHORT);
+        assertThat(captor.getValue().getSide()).isEqualTo(PositionSide.LONG);
+        assertThat(captor.getValue().getSourceSignalSide()).isEqualTo(PositionSide.SHORT);
+        assertThat(captor.getValue().getExecutionSide()).isEqualTo(PositionSide.LONG);
+        assertThat(captor.getValue().getSignalInverted()).isTrue();
+        assertThat(captor.getValue().getInversionReason()).isEqualTo("SHORT_SIGNAL_INVERTED_TO_LONG");
+        assertThat(captor.getValue().getInitialStop()).isLessThan(captor.getValue().getEntryPrice());
+        assertThat(captor.getValue().getTp1()).isGreaterThan(captor.getValue().getEntryPrice());
         assertThat(captor.getValue().getQuantity()).isEqualByComparingTo(new BigDecimal("19.550342130987"));
     }
 
@@ -89,6 +95,11 @@ class PaperPositionServiceTest {
         PaperPositionEntity opened = service.openPosition(signal);
 
         assertThat(opened).isNotNull();
+        assertThat(opened.getSide()).isEqualTo(PositionSide.LONG);
+        assertThat(opened.getSourceSignalSide()).isEqualTo(PositionSide.LONG);
+        assertThat(opened.getExecutionSide()).isEqualTo(PositionSide.LONG);
+        assertThat(opened.getSignalInverted()).isFalse();
+        assertThat(opened.getInversionReason()).isNull();
         assertThat(opened.getEntryBbScore()).isEqualByComparingTo("-4");
         assertThat(opened.getEntryBbPercentB()).isEqualByComparingTo("0.92");
         assertThat(opened.getEntryBbReasonsJson()).contains("LONG_BB_CHASE_RISK");
@@ -107,7 +118,11 @@ class PaperPositionServiceTest {
         assertThat(opened).isNotNull();
         assertThat(captor.getValue()).containsEntry("type", "ENTRY");
         assertThat(captor.getValue()).containsEntry("symbol", "ETHUSDT");
-        assertThat(captor.getValue()).containsEntry("side", "SHORT");
+        assertThat(captor.getValue()).containsEntry("side", "LONG");
+        assertThat(captor.getValue()).containsEntry("signalSide", "SHORT");
+        assertThat(captor.getValue()).containsEntry("executionSide", "LONG");
+        assertThat(captor.getValue()).containsEntry("signalInverted", true);
+        assertThat(captor.getValue()).containsEntry("inversionReason", "SHORT_SIGNAL_INVERTED_TO_LONG");
         assertThat(captor.getValue()).containsKeys("positionId", "entryPrice", "tp1", "tp2", "slPrice");
     }
 
@@ -185,7 +200,7 @@ class PaperPositionServiceTest {
     }
 
     @Test
-    void maxOpenShortPositionsReachedDoesNotOpenShortPosition() {
+    void maxOpenShortPositionsDoesNotBlockInvertedShortSignalBecauseExecutionIsLong() {
         when(repository.findByStatusInOrderByOpenedAtDesc(List.of(
                 PaperPositionStatus.OPEN,
                 PaperPositionStatus.PARTIALLY_CLOSED
@@ -195,8 +210,9 @@ class PaperPositionServiceTest {
 
         PaperPositionEntity opened = service.openPosition(signal("BTCUSDT", EntryAction.ENTER_SHORT, PositionSide.SHORT, "10", RiskLevel.LOW));
 
-        assertThat(opened).isNull();
-        verify(repository, never()).save(any(PaperPositionEntity.class));
+        assertThat(opened).isNotNull();
+        assertThat(opened.getSide()).isEqualTo(PositionSide.LONG);
+        verify(repository).save(any(PaperPositionEntity.class));
     }
 
     @Test
@@ -214,6 +230,21 @@ class PaperPositionServiceTest {
         verify(repository, never()).save(any(PaperPositionEntity.class));
     }
 
+
+    @Test
+    void maxOpenLongPositionsReachedBlocksInvertedEnterShortSignal() {
+        when(repository.findByStatusInOrderByOpenedAtDesc(List.of(
+                PaperPositionStatus.OPEN,
+                PaperPositionStatus.PARTIALLY_CLOSED
+        ))).thenReturn(List.of(
+                position(PositionSide.LONG), position(PositionSide.LONG), position(PositionSide.LONG)
+        ));
+
+        PaperPositionEntity opened = service.openPosition(signal("BTCUSDT", EntryAction.ENTER_SHORT, PositionSide.SHORT, "10", RiskLevel.LOW));
+
+        assertThat(opened).isNull();
+        verify(repository, never()).save(any(PaperPositionEntity.class));
+    }
 
     @Test
     void watchlistSignalDoesNotOpenPaperPosition() {

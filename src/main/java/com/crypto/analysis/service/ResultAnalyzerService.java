@@ -4,6 +4,7 @@ import com.crypto.analysis.dto.ClassificationPerformanceResponse;
 import com.crypto.analysis.dto.DirectionPerformanceResponse;
 import com.crypto.analysis.dto.ExitReasonPerformanceResponse;
 import com.crypto.analysis.dto.RiskPerformanceResponse;
+import com.crypto.analysis.dto.SignalExecutionModePerformanceResponse;
 import com.crypto.analysis.dto.StrategyAnalysisResponse;
 import com.crypto.analysis.dto.StrategyPerformanceSummaryResponse;
 import com.crypto.analysis.dto.SymbolPerformanceResponse;
@@ -93,6 +94,7 @@ public class ResultAnalyzerService {
                 this::exitReasonKey,
                 ExitReasonPerformanceResponse::new
         );
+        List<SignalExecutionModePerformanceResponse> bySignalExecutionMode = buildSignalExecutionModeBreakdown(closedTrades);
         List<String> observations = buildObservations(
                 closedTrades,
                 summary,
@@ -114,6 +116,7 @@ public class ResultAnalyzerService {
                 byClassification,
                 byRiskLevel,
                 byExitReason,
+                bySignalExecutionMode,
                 observations
         );
     }
@@ -151,7 +154,7 @@ public class ResultAnalyzerService {
         return List.of(PositionSide.LONG, PositionSide.SHORT).stream()
                 .map(side -> {
                     List<PaperPositionEntity> sideTrades = trades.stream()
-                            .filter(trade -> side == trade.getSide())
+                            .filter(trade -> side == effectiveExecutionSide(trade))
                             .toList();
                     int winCount = countWins(sideTrades);
                     int lossCount = countLosses(sideTrades);
@@ -199,6 +202,35 @@ public class ResultAnalyzerService {
                 average(values(trades, PaperPositionEntity::getMaxFavorableMovePct)),
                 average(values(trades, PaperPositionEntity::getMaxAdverseMovePct))
         );
+    }
+
+    private List<SignalExecutionModePerformanceResponse> buildSignalExecutionModeBreakdown(List<PaperPositionEntity> trades) {
+        return List.of("NORMAL_LONG", "INVERTED_SHORT_TO_LONG", "OTHER").stream()
+                .map(key -> {
+                    List<PaperPositionEntity> groupTrades = trades.stream()
+                            .filter(trade -> key.equals(signalExecutionModeKey(trade)))
+                            .toList();
+                    int winCount = countWins(groupTrades);
+                    int lossCount = countLosses(groupTrades);
+                    List<BigDecimal> pnlPctValues = values(groupTrades, PaperPositionEntity::getRealizedPnlPct);
+                    return new SignalExecutionModePerformanceResponse(
+                            key,
+                            groupTrades.size(),
+                            winCount,
+                            lossCount,
+                            countFlats(groupTrades),
+                            pct(winCount, winCount + lossCount),
+                            sum(values(groupTrades, PaperPositionEntity::getRealizedPnlUsdt)),
+                            average(pnlPctValues),
+                            average(values(groupTrades, PaperPositionEntity::getMaxFavorableMovePct)),
+                            average(values(groupTrades, PaperPositionEntity::getMaxAdverseMovePct)),
+                            averageInteger(valuesInteger(groupTrades, PaperPositionEntity::getMinutesHeld)),
+                            averageInteger(valuesInteger(groupTrades, PaperPositionEntity::getBarsHeld)),
+                            pnlPctValues.stream().max(BigDecimal::compareTo).map(this::scale).orElse(ZERO),
+                            pnlPctValues.stream().min(BigDecimal::compareTo).map(this::scale).orElse(ZERO)
+                    );
+                })
+                .toList();
     }
 
     private <T> List<T> buildSimpleBreakdown(
@@ -374,6 +406,26 @@ public class ResultAnalyzerService {
 
     private String exitReasonKey(PaperPositionEntity trade) {
         return valueOrUnknown(trade.getExitReason());
+    }
+
+    private String signalExecutionModeKey(PaperPositionEntity trade) {
+        PositionSide sourceSignalSide = trade.getSourceSignalSide() == null ? trade.getSide() : trade.getSourceSignalSide();
+        PositionSide executionSide = effectiveExecutionSide(trade);
+        boolean signalInverted = Boolean.TRUE.equals(trade.getSignalInverted());
+        if (sourceSignalSide == PositionSide.LONG && executionSide == PositionSide.LONG && !signalInverted) {
+            return "NORMAL_LONG";
+        }
+        if (sourceSignalSide == PositionSide.SHORT
+                && executionSide == PositionSide.LONG
+                && signalInverted
+                && "SHORT_SIGNAL_INVERTED_TO_LONG".equals(trade.getInversionReason())) {
+            return "INVERTED_SHORT_TO_LONG";
+        }
+        return "OTHER";
+    }
+
+    private PositionSide effectiveExecutionSide(PaperPositionEntity trade) {
+        return trade.getExecutionSide() == null ? trade.getSide() : trade.getExecutionSide();
     }
 
     private String valueOrUnknown(String value) {

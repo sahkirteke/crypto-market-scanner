@@ -149,6 +149,10 @@ public class SymbolTradeJsonlLogService {
         payload.put("symbol", p.getSymbol());
         payload.put("time", format(p.getOpenedAt()));
         payload.put("side", enumName(p.getSide()));
+        payload.put("signalSide", enumName(p.getSourceSignalSide() == null ? p.getSide() : p.getSourceSignalSide()));
+        payload.put("executionSide", enumName(effectiveExecutionSide(p)));
+        payload.put("signalInverted", Boolean.TRUE.equals(p.getSignalInverted()));
+        payload.put("inversionReason", p.getInversionReason() == null ? "" : p.getInversionReason());
         payload.put("entryAction", enumName(p.getEntryAction()));
         payload.put("entryPrice", p.getEntryPrice());
         payload.put("entryPriceAdjusted", p.getEntryPriceAdjusted());
@@ -179,6 +183,10 @@ public class SymbolTradeJsonlLogService {
         payload.put("symbol", p.getSymbol());
         payload.put("time", format(exitTime));
         payload.put("side", enumName(p.getSide()));
+        payload.put("signalSide", enumName(p.getSourceSignalSide() == null ? p.getSide() : p.getSourceSignalSide()));
+        payload.put("executionSide", enumName(effectiveExecutionSide(p)));
+        payload.put("signalInverted", Boolean.TRUE.equals(p.getSignalInverted()));
+        payload.put("inversionReason", p.getInversionReason() == null ? "" : p.getInversionReason());
         payload.put("exitSeq", context.exitSeq());
         payload.put("exitReason", exitReason);
         payload.put("exitTrigger", context.exitTrigger());
@@ -315,6 +323,10 @@ public class SymbolTradeJsonlLogService {
         payload.put("bbUpperClosedOutside", p.getEntryBbUpperClosedOutside());
         payload.put("bbLowerClosedOutside", p.getEntryBbLowerClosedOutside());
         payload.put("bbReasons", signal != null && signal.getBbReasons() != null ? signal.getBbReasons() : jsonTextMapper.toStringList(p.getEntryBbReasonsJson()));
+    }
+
+    private PositionSide effectiveExecutionSide(PaperPositionEntity p) {
+        return p.getExecutionSide() == null ? p.getSide() : p.getExecutionSide();
     }
 
     private BigDecimal baseEntryScore(PaperPositionEntity p) {

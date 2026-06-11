@@ -75,6 +75,20 @@ public class PaperPositionEntity {
     private PositionSide side;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "source_signal_side", length = 16)
+    private PositionSide sourceSignalSide;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "execution_side", length = 16)
+    private PositionSide executionSide;
+
+    @Column(name = "signal_inverted")
+    private Boolean signalInverted;
+
+    @Column(name = "inversion_reason", length = 64)
+    private String inversionReason;
+
+    @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     private PaperPositionStatus status;
 

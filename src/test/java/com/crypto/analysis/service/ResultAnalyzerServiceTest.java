@@ -94,6 +94,27 @@ class ResultAnalyzerServiceTest {
     }
 
     @Test
+    void analyzeBuildsDirectionBreakdownFromExecutionSide() {
+        PaperPositionEntity invertedShortToLong = position("ETHUSDT", PositionSide.LONG, "1.0", "1.0");
+        invertedShortToLong.setSourceSignalSide(PositionSide.SHORT);
+        invertedShortToLong.setExecutionSide(PositionSide.LONG);
+        invertedShortToLong.setSignalInverted(true);
+        invertedShortToLong.setInversionReason("SHORT_SIGNAL_INVERTED_TO_LONG");
+
+        StrategyAnalysisResponse response = service.analyze(List.of(
+                invertedShortToLong,
+                position("SOLUSDT", PositionSide.SHORT, "2.0", "2.0")
+        ));
+
+        assertThat(response.byDirection())
+                .extracting("side", "totalTrades", "winCount", "lossCount")
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("LONG", 1, 1, 0),
+                        org.assertj.core.groups.Tuple.tuple("SHORT", 1, 1, 0)
+                );
+    }
+
+    @Test
     void analyzeSortsTopAndWorstSymbolsByTotalRealizedPnl() {
         StrategyAnalysisResponse response = service.analyze(List.of(
                 position("BTCUSDT", PositionSide.LONG, "3.0", "1.0"),
@@ -159,6 +180,39 @@ class ResultAnalyzerServiceTest {
     }
 
     @Test
+    void analyzeBuildsSignalExecutionModeBreakdown() {
+        PaperPositionEntity normalLong = position("BTCUSDT", PositionSide.LONG, "1.0", "1.0");
+        normalLong.setSourceSignalSide(PositionSide.LONG);
+        normalLong.setExecutionSide(PositionSide.LONG);
+        normalLong.setSignalInverted(false);
+        PaperPositionEntity invertedShort = position("ETHUSDT", PositionSide.LONG, "-1.0", "-1.0");
+        invertedShort.setSourceSignalSide(PositionSide.SHORT);
+        invertedShort.setExecutionSide(PositionSide.LONG);
+        invertedShort.setSignalInverted(true);
+        invertedShort.setInversionReason("SHORT_SIGNAL_INVERTED_TO_LONG");
+        PaperPositionEntity other = position("SOLUSDT", PositionSide.SHORT, "0", "0");
+        other.setSourceSignalSide(PositionSide.SHORT);
+        other.setExecutionSide(PositionSide.SHORT);
+        other.setSignalInverted(false);
+
+        StrategyAnalysisResponse response = service.analyze(List.of(normalLong, invertedShort, other));
+
+        assertThat(response.bySignalExecutionMode())
+                .extracting("signalExecutionMode", "totalTrades", "winCount", "lossCount", "flatCount")
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("NORMAL_LONG", 1, 1, 0, 0),
+                        org.assertj.core.groups.Tuple.tuple("INVERTED_SHORT_TO_LONG", 1, 0, 1, 0),
+                        org.assertj.core.groups.Tuple.tuple("OTHER", 1, 0, 0, 1)
+                );
+        assertThat(response.bySignalExecutionMode().get(0).avgMaxFavorableMovePct()).isEqualByComparingTo("1.5");
+        assertThat(response.bySignalExecutionMode().get(1).avgMaxAdverseMovePct()).isEqualByComparingTo("-0.5");
+        assertThat(response.bySignalExecutionMode().get(0).avgMinutesHeld()).isEqualByComparingTo("10");
+        assertThat(response.bySignalExecutionMode().get(0).avgBarsHeld()).isEqualByComparingTo("2");
+        assertThat(response.bySignalExecutionMode().get(0).bestTradePct()).isEqualByComparingTo("1.0");
+        assertThat(response.bySignalExecutionMode().get(1).worstTradePct()).isEqualByComparingTo("-1.0");
+    }
+
+    @Test
     void analyzeLastClosedTradesLimitsPageSizeToMaxOneThousand() {
         when(repository.findByStatusOrderByClosedAtDesc(eq(PaperPositionStatus.CLOSED), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
@@ -205,6 +259,9 @@ class ResultAnalyzerServiceTest {
                 .symbol(symbol)
                 .status(PaperPositionStatus.CLOSED)
                 .side(side)
+                .sourceSignalSide(side)
+                .executionSide(side)
+                .signalInverted(false)
                 .sourceClassification(classification)
                 .riskLevel(riskLevel)
                 .exitReason(exitReason)

@@ -38,6 +38,8 @@ import org.springframework.stereotype.Service;
 @Slf4j
 public class PaperPositionService {
     private static final int QUANTITY_SCALE = 12;
+    private static final String SHORT_SIGNAL_INVERSION_MODE = "SHORT_SIGNAL_INVERSION_MODE";
+    private static final String SHORT_SIGNAL_INVERTED_TO_LONG = "SHORT_SIGNAL_INVERTED_TO_LONG";
 
     private final PaperPositionRepository paperPositionRepository;
     private final EntrySignalService entrySignalService;
@@ -127,18 +129,20 @@ public class PaperPositionService {
             return reject(signal, "SYMBOL_ALREADY_OPEN");
         }
 
+        SignalExecution execution = resolveSignalExecution(signal);
+
         List<PaperPositionEntity> openPositions = getOpenPositionsForValidation();
         if (openPositions.size() >= intValue(config.getMaxOpenPositions(), 5)) {
             return reject(signal, "MAX_OPEN_POSITIONS_REACHED");
         }
         long openSideCount = openPositions.stream()
-                .filter(position -> position.getSide() == signal.getSide())
+                .filter(position -> effectiveExecutionSide(position) == execution.executionSide())
                 .count();
-        if (signal.getSide() == PositionSide.LONG
+        if (execution.executionSide() == PositionSide.LONG
                 && openSideCount >= intValue(config.getMaxOpenLongPositions(), 3)) {
             return reject(signal, "MAX_OPEN_LONG_REACHED");
         }
-        if (signal.getSide() == PositionSide.SHORT
+        if (execution.executionSide() == PositionSide.SHORT
                 && openSideCount >= intValue(config.getMaxOpenShortPositions(), 3)) {
             return reject(signal, "MAX_OPEN_SHORT_REACHED");
         }
@@ -160,7 +164,7 @@ public class PaperPositionService {
         ScannerProperties.PaperRisk riskConfig = scannerProperties.getPaperRisk() == null ? new ScannerProperties.PaperRisk() : scannerProperties.getPaperRisk();
         ScannerProperties.PaperCost costConfig = scannerProperties.getPaperCost() == null ? new ScannerProperties.PaperCost() : scannerProperties.getPaperCost();
         BigDecimal atr = signal.getAtr14_1h() == null ? entryPrice.multiply(new BigDecimal("0.012")) : signal.getAtr14_1h();
-        RiskLevels risk = calculateRiskLevels(signal.getSide(), entryPrice, atr, riskConfig);
+        RiskLevels risk = calculateRiskLevels(execution.executionSide(), entryPrice, atr, riskConfig);
         BigDecimal notionalUsdt = bigDecimalValue(config.getDefaultNotionalUsdt(), "100");
         BigDecimal quantity = notionalUsdt.divide(entryPrice, QUANTITY_SCALE, RoundingMode.DOWN);
         Instant openedAt = Instant.now();
@@ -175,7 +179,11 @@ public class PaperPositionService {
                 .entryAtr14_1h(signal.getAtr14_1h())
                 .entryVolumeRatio_1h(signal.getVolumeRatio_1h())
                 .symbol(signal.getSymbol())
-                .side(signal.getSide())
+                .side(execution.executionSide())
+                .sourceSignalSide(execution.signalSide())
+                .executionSide(execution.executionSide())
+                .signalInverted(execution.signalInverted())
+                .inversionReason(execution.inversionReason())
                 .status(PaperPositionStatus.OPEN)
                 .entryAction(signal.getAction())
                 .entryPrice(entryPrice)
@@ -229,7 +237,7 @@ public class PaperPositionService {
                 .highestPriceSinceEntry(entryPrice)
                 .lowestPriceSinceEntry(entryPrice)
                 .barsInPosition(0)
-                .entryPriceAdjusted(adjustedEntry(signal.getSide(), entryPrice, costConfig))
+                .entryPriceAdjusted(adjustedEntry(execution.executionSide(), entryPrice, costConfig))
                 .totalFeePct(costConfig.getTakerFeePct().multiply(BigDecimal.valueOf(200)))
                 .totalSlippagePct(costConfig.getSlippagePct().multiply(BigDecimal.valueOf(200)))
                 .maxFavorableMovePct(BigDecimal.ZERO)
@@ -247,10 +255,13 @@ public class PaperPositionService {
         writeSymbolTradeEntry(saved, signal);
         markCandidateUsed(saved.getSymbol());
         log.info(
-                "PAPER_POSITION_OPENED openedAt={} symbol={} side={} entry={} stop={} tp1={} tp2={} id={} quantity={} notionalUsdt={} leverage={}",
+                "PAPER_POSITION_OPENED openedAt={} symbol={} signalSide={} executionSide={} signalInverted={} mode={} entry={} stop={} tp1={} tp2={} id={} quantity={} notionalUsdt={} leverage={}",
                 IstanbulTimeUtil.format(saved.getOpenedAt()),
                 saved.getSymbol(),
-                saved.getSide(),
+                saved.getSourceSignalSide(),
+                effectiveExecutionSide(saved),
+                saved.getSignalInverted(),
+                SHORT_SIGNAL_INVERSION_MODE,
                 saved.getEntryPrice(),
                 saved.getInitialStop(),
                 saved.getTp1(),
@@ -263,6 +274,21 @@ public class PaperPositionService {
         return saved;
     }
 
+
+    private SignalExecution resolveSignalExecution(EntrySignal signal) {
+        if (signal.getAction() == EntryAction.ENTER_SHORT) {
+            return new SignalExecution(PositionSide.SHORT, PositionSide.LONG, true, SHORT_SIGNAL_INVERTED_TO_LONG);
+        }
+        return new SignalExecution(PositionSide.LONG, PositionSide.LONG, false, null);
+    }
+
+    private String enumName(Enum<?> value) {
+        return value == null ? "" : value.name();
+    }
+
+    private PositionSide effectiveExecutionSide(PaperPositionEntity position) {
+        return position.getExecutionSide() == null ? position.getSide() : position.getExecutionSide();
+    }
 
     public RiskLevels calculateRiskLevels(PositionSide side, BigDecimal entryPrice, BigDecimal atr14, ScannerProperties.PaperRisk config) {
         BigDecimal raw = atr14.multiply(config.getAtrStopMultiplier());
@@ -277,6 +303,13 @@ public class PaperPositionService {
     }
 
     public record RiskLevels(BigDecimal initialStop, BigDecimal riskPerUnit, BigDecimal tp1, BigDecimal tp2) {}
+
+    private record SignalExecution(
+            PositionSide signalSide,
+            PositionSide executionSide,
+            boolean signalInverted,
+            String inversionReason
+    ) {}
 
     public record PaperOpenSummary(
             int candidateCount,
@@ -378,6 +411,10 @@ public class PaperPositionService {
                 Map.entry("time", position.getOpenedAt()),
                 Map.entry("symbol", position.getSymbol()),
                 Map.entry("side", position.getSide().name()),
+                Map.entry("signalSide", enumName(position.getSourceSignalSide() == null ? position.getSide() : position.getSourceSignalSide())),
+                Map.entry("executionSide", enumName(effectiveExecutionSide(position))),
+                Map.entry("signalInverted", Boolean.TRUE.equals(position.getSignalInverted())),
+                Map.entry("inversionReason", position.getInversionReason() == null ? "" : position.getInversionReason()),
                 Map.entry("positionId", position.getId() == null ? "" : position.getId()),
                 Map.entry("scanRunId", position.getSourceScanRunId()),
                 Map.entry("sourceScanType", position.getSourceScanType() == null ? "" : position.getSourceScanType().name()),
@@ -412,6 +449,10 @@ public class PaperPositionService {
         payload.put("symbol", position.getSymbol());
         payload.put("time", position.getOpenedAt());
         payload.put("side", position.getSide().name());
+        payload.put("signalSide", enumName(position.getSourceSignalSide() == null ? position.getSide() : position.getSourceSignalSide()));
+        payload.put("executionSide", enumName(effectiveExecutionSide(position)));
+        payload.put("signalInverted", Boolean.TRUE.equals(position.getSignalInverted()));
+        payload.put("inversionReason", position.getInversionReason() == null ? "" : position.getInversionReason());
         payload.put("entryPrice", position.getEntryPrice());
         payload.put("qty", position.getQuantity());
         payload.put("tp1", position.getTp1());
