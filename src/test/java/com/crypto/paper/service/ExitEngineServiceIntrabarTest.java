@@ -53,16 +53,16 @@ class ExitEngineServiceIntrabarTest {
     }
 
     @Test
-    void candleContainingPositionOpenIsSkipped() {
+    void candleClosingAfterPositionOpenedIsEvaluatedEvenWhenCandleOpenedBeforePosition() {
         PaperPositionEntity position = position(PositionSide.LONG);
         position.setOpenedAt(Instant.parse("2026-06-07T10:03:59Z"));
 
         PaperPositionEntity result = service().evaluatePositionWithCandle(position,
                 candle(Instant.parse("2026-06-07T10:00:00Z"), Instant.parse("2026-06-07T10:04:59Z"), "105", "99", "102"), "5m");
 
-        assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.OPEN);
-        assertThat(result.getExitReason()).isNull();
-        assertThat(result.getLastExitCandleCloseTime()).isNull();
+        assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.CLOSED);
+        assertThat(result.getExitReason()).isEqualTo("STOP_LOSS");
+        assertThat(result.getLastExitCandleCloseTime()).isEqualTo(Instant.parse("2026-06-07T10:04:59Z"));
     }
 
     @Test

@@ -8,19 +8,26 @@ import static org.mockito.Mockito.when;
 
 import com.crypto.binance.client.BinanceFuturesClient;
 import com.crypto.common.enums.EntryAction;
+import com.crypto.common.enums.MarketRegime;
 import com.crypto.common.enums.PositionSide;
 import com.crypto.domain.model.Kline;
+import com.crypto.domain.model.TechnicalSnapshot;
 import com.crypto.domain.model.Ticker24h;
 import com.crypto.paper.model.PaperExitEvaluationResult;
 import com.crypto.paper.model.PaperPositionStatus;
+import com.crypto.persistence.entity.MarketScanRunEntity;
 import com.crypto.persistence.entity.PaperPositionEntity;
+import com.crypto.persistence.repository.MarketScanRunRepository;
 import com.crypto.persistence.repository.PaperPositionRepository;
 import com.crypto.scanner.config.ScannerProperties;
+import com.crypto.scanner.service.IndicatorService;
 import java.math.BigDecimal;
 import java.net.SocketException;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class ExitEngineServiceTest {
 
@@ -104,6 +111,45 @@ class ExitEngineServiceTest {
 
         assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.OPEN);
         assertThat(result.getExitReason()).isNull();
+    }
+
+    @Test
+    void lastClosedOneHourCandleBeforePositionOpenDoesNotTriggerSignalInvalidation() {
+        PaperPositionRepository repository = mock(PaperPositionRepository.class);
+        BinanceFuturesClient client = mock(BinanceFuturesClient.class);
+        IndicatorService indicatorService = mock(IndicatorService.class);
+        MarketScanRunRepository marketScanRunRepository = mock(MarketScanRunRepository.class);
+        ExitEngineService service = service(repository, client);
+        ReflectionTestUtils.setField(service, "indicatorService", indicatorService);
+        ReflectionTestUtils.setField(service, "marketScanRunRepository", marketScanRunRepository);
+        PaperPositionEntity position = position(PositionSide.LONG);
+        position.setOpenedAt(Instant.parse("2026-06-11T16:04:17Z"));
+        List<Kline> closedKlines = hourlyKlinesEndingAt(
+                Instant.parse("2026-06-11T15:00:00Z"),
+                Instant.parse("2026-06-11T15:59:59Z")
+        );
+        MarketScanRunEntity run = new MarketScanRunEntity();
+        run.setMarketRegime(MarketRegime.CHOP);
+        when(repository.findByStatusInOrderByOpenedAtDesc(List.of(
+                PaperPositionStatus.OPEN,
+                PaperPositionStatus.PARTIALLY_CLOSED
+        ))).thenReturn(List.of(position));
+        when(repository.save(position)).thenReturn(position);
+        when(client.getKlines(position.getSymbol(), "1h", 250)).thenReturn(closedKlines);
+        when(indicatorService.calculateOneHour(position.getSymbol(), closedKlines)).thenReturn(TechnicalSnapshot.builder()
+                .close(new BigDecimal("98"))
+                .ema20(new BigDecimal("100"))
+                .macdHist(new BigDecimal("-0.1"))
+                .atr14(new BigDecimal("1"))
+                .build());
+        when(marketScanRunRepository.findTopByStatusOrderByScanTimeUtcDesc("COMPLETED")).thenReturn(Optional.of(run));
+
+        List<PaperPositionEntity> closed = service.evaluateOpenPositions();
+
+        assertThat(closed).isEmpty();
+        assertThat(position.getStatus()).isEqualTo(PaperPositionStatus.OPEN);
+        assertThat(position.getExitReason()).isNull();
+        assertThat(position.getLastExitCandleCloseTime()).isNull();
     }
 
     @Test
@@ -238,6 +284,26 @@ class ExitEngineServiceTest {
         return properties;
     }
 
+
+    private List<Kline> hourlyKlinesEndingAt(Instant lastOpenTime, Instant lastCloseTime) {
+        Instant firstOpenTime = lastOpenTime.minusSeconds(219L * 60L * 60L);
+        return java.util.stream.IntStream.range(0, 220)
+                .mapToObj(index -> {
+                    Instant openTime = firstOpenTime.plusSeconds(index * 60L * 60L);
+                    return Kline.builder()
+                            .symbol("BTCUSDT")
+                            .interval("1h")
+                            .openTime(openTime)
+                            .closeTime(index == 219 ? lastCloseTime : openTime.plusSeconds(3599))
+                            .open(new BigDecimal("100"))
+                            .high(new BigDecimal("101"))
+                            .low(new BigDecimal("97"))
+                            .close(new BigDecimal("98"))
+                            .closed(true)
+                            .build();
+                })
+                .toList();
+    }
 
     private Kline kline(String symbol) {
         Instant openTime = Instant.parse("2026-06-07T13:05:00Z");

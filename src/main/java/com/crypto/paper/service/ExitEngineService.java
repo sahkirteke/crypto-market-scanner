@@ -348,6 +348,9 @@ public class ExitEngineService {
                     .toList();
             if (closed.isEmpty()) return null;
             Kline last = closed.get(closed.size() - 1);
+            if (shouldSkipCandleBeforePositionOpened(position, last.getOpenTime(), last.getCloseTime(), "1h")) {
+                return position;
+            }
             BigDecimal atr = fallbackAtr(position);
             TechnicalSnapshot snapshot = null;
             if (indicatorService != null && closed.size() >= 220) {
@@ -492,21 +495,16 @@ public class ExitEngineService {
 
 
     private boolean shouldSkipCandleBeforePositionOpened(PaperPositionEntity position, Instant candleOpenTime, Instant candleCloseTime, String interval) {
-        if (position == null || position.getOpenedAt() == null) {
+        if (position == null || position.getOpenedAt() == null || candleCloseTime == null
+                || candleCloseTime.isAfter(position.getOpenedAt())) {
             return false;
         }
-        boolean candleOpenedBeforePosition = candleOpenTime != null && candleOpenTime.isBefore(position.getOpenedAt());
-        boolean candleClosedBeforeOrAtPosition = candleCloseTime != null && !candleCloseTime.isAfter(position.getOpenedAt());
-        if (!candleOpenedBeforePosition && !candleClosedBeforeOrAtPosition) {
-            return false;
-        }
-        log.info("PAPER_EXIT_CANDLE_SKIPPED_BEFORE_POSITION_OPENED id={} symbol={} interval={} openedAt={} candleOpenTime={} candleCloseTime={}",
+        log.info("PAPER_EXIT_CANDLE_SKIPPED_BEFORE_POSITION_OPEN positionId={} symbol={} openedAt={} candleCloseTime={} interval={}",
                 position.getId(),
                 position.getSymbol(),
-                interval,
                 IstanbulTimeUtil.format(position.getOpenedAt()),
-                IstanbulTimeUtil.format(candleOpenTime),
-                IstanbulTimeUtil.format(candleCloseTime));
+                IstanbulTimeUtil.format(candleCloseTime),
+                interval);
         return true;
     }
 
