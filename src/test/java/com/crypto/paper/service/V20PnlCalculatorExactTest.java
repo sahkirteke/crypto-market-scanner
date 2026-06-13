@@ -12,31 +12,72 @@ class V20PnlCalculatorExactTest {
     private final V20PnlCalculator calculator = new V20PnlCalculator(new ScannerProperties());
 
     @Test
-    void longTakeProfitFiveXPnlExact() {
+    void longTakeProfitMakerFeeNoSlippagePnlExact() {
         assertPnl(calculator.calculate(PositionSide.LONG, bd("100"), bd("102")),
-                "2.00000000", "2.00000000", "0.02001000", "0.02038980", "1.85860020",
-                "10.00000000", "0.10005000", "0.10194900", "9.29300100", "9.29300100");
+                "2.00000000", "2.00000000", "0.02000000", "0.02040000", "1.95960000",
+                "10.00000000", "0.10000000", "0.10200000", "9.79800000", "9.79800000");
     }
 
     @Test
-    void longStopLossFiveXPnlExact() {
+    void longStopLossMakerFeeNoSlippagePnlExact() {
         assertPnl(calculator.calculate(PositionSide.LONG, bd("100"), bd("98.6")),
-                "-1.40000000", "-1.40000000", "0.02001000", "0.01971014", "-1.53902014",
-                "-7.00000000", "0.10005000", "0.09855070", "-7.69510070", "-7.69510070");
+                "-1.40000000", "-1.40000000", "0.02000000", "0.01972000", "-1.43972000",
+                "-7.00000000", "0.10000000", "0.09860000", "-7.19860000", "-7.19860000");
     }
 
     @Test
-    void shortTakeProfitFiveXPnlExact() {
+    void shortTakeProfitMakerFeeNoSlippagePnlExact() {
         assertPnl(calculator.calculate(PositionSide.SHORT, bd("100"), bd("98")),
-                "2.00000000", "2.00000000", "0.01999000", "0.01960980", "1.86140020",
-                "10.00000000", "0.09995000", "0.09804900", "9.30700100", "9.30700100");
+                "2.00000000", "2.00000000", "0.02000000", "0.01960000", "1.96040000",
+                "10.00000000", "0.10000000", "0.09800000", "9.80200000", "9.80200000");
     }
 
     @Test
-    void shortStopLossFiveXPnlExact() {
+    void shortStopLossMakerFeeNoSlippagePnlExact() {
         assertPnl(calculator.calculate(PositionSide.SHORT, bd("100"), bd("101.4")),
-                "-1.40000000", "-1.40000000", "0.01999000", "0.02029014", "-1.54098014",
-                "-7.00000000", "0.09995000", "0.10145070", "-7.70490070", "-7.70490070");
+                "-1.40000000", "-1.40000000", "0.02000000", "0.02028000", "-1.44028000",
+                "-7.00000000", "0.10000000", "0.10140000", "-7.20140000", "-7.20140000");
+    }
+
+
+    @Test
+    void makerFeeAppliedOnEntryAndExit() {
+        V20PnlResult pnl = calculator.calculate(PositionSide.LONG, bd("100"), bd("102"));
+        assertThat(pnl.feeMode()).isEqualTo("MAKER");
+        assertThat(pnl.feeRate()).isEqualByComparingTo("0.0002");
+        assertThat(pnl.leveragedEntryFeeUsdt()).isEqualByComparingTo("0.10000000");
+        assertThat(pnl.leveragedExitFeeUsdt()).isEqualByComparingTo("0.10200000");
+        assertThat(pnl.leveragedTotalFeeUsdt()).isEqualByComparingTo("0.20200000");
+    }
+
+    @Test
+    void takerFeeNotUsedWhenFeeModeMaker() {
+        V20PnlResult pnl = calculator.calculate(PositionSide.LONG, bd("100"), bd("102"));
+        assertThat(pnl.feeRate()).isNotEqualByComparingTo("0.0004");
+    }
+
+    @Test
+    void slippageZeroMeansAdjustedEqualsRaw() {
+        V20PnlResult longPnl = calculator.calculate(PositionSide.LONG, bd("100"), bd("102"));
+        V20PnlResult shortPnl = calculator.calculate(PositionSide.SHORT, bd("100"), bd("98"));
+        assertThat(longPnl.slippagePct()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(longPnl.entryPriceAdjusted()).isEqualByComparingTo("100.000000000000");
+        assertThat(longPnl.exitPriceAdjusted()).isEqualByComparingTo("102.000000000000");
+        assertThat(shortPnl.entryPriceAdjusted()).isEqualByComparingTo("100.000000000000");
+        assertThat(shortPnl.exitPriceAdjusted()).isEqualByComparingTo("98.000000000000");
+    }
+
+    @Test
+    void leveragedNetPnlPctUsesMarginNotNotional() {
+        V20PnlResult pnl = calculator.calculate(PositionSide.LONG, bd("100"), bd("102"));
+        assertThat(pnl.leveragedNetPnlPct()).isEqualByComparingTo("9.79800000");
+    }
+
+    @Test
+    void unleveragedAndLeveragedUseDifferentQuantities() {
+        V20PnlResult pnl = calculator.calculate(PositionSide.LONG, bd("100"), bd("102"));
+        assertThat(pnl.unleveragedQuantity()).isEqualByComparingTo("1.000000000000");
+        assertThat(pnl.leveragedQuantity()).isEqualByComparingTo("5.000000000000");
     }
 
     private void assertPnl(V20PnlResult pnl, String rawPct, String unRaw, String unEntryFee, String unExitFee,

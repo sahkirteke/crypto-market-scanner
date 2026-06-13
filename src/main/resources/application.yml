@@ -213,7 +213,7 @@ scanner:
       mode: MAKER
       maker-fee-pct: 0.0002
       taker-fee-pct: 0.0004
-      slippage-pct: 0.0005
+      slippage-pct: 0
       log-zone: Europe/Istanbul
     allow-multiple-open-same-symbol: false
     max-open-positions: 5
@@ -238,7 +238,7 @@ scanner:
     leverage: 5
     taker-fee-pct: 0.0004
     maker-fee-pct: 0.0002
-    slippage-pct: 0.0005
+    slippage-pct: 0
 
   single-tp-sl:
     enabled: true

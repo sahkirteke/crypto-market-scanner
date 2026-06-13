@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Test;
 
 class V20AnalysisSummaryServiceTest {
     @Test
-    void summaryContainsV20TotalLongShortAggregation() {
+    void analysisSummaryContainsMakerFeeAndBothPnlModels() {
         PaperPositionRepository repo = mock(PaperPositionRepository.class);
         ScannerProperties properties = new ScannerProperties();
         V20PnlCalculator calculator = new V20PnlCalculator(properties);
@@ -41,6 +41,10 @@ class V20AnalysisSummaryServiceTest {
         assertThat(longSummary.get("tradeCount")).isEqualTo(1);
         assertThat(shortSummary.get("tradeCount")).isEqualTo(1);
         assertThat(total).containsKeys("unleveragedNetPnlUsdt", "leveragedNetPnlUsdt", "leveragedNetPnlPctOnMargin");
+        Map<String, Object> paperConfig = (Map<String, Object>) response.get("paperConfig");
+        assertThat(paperConfig.get("feeMode")).isEqualTo("MAKER");
+        assertThat(paperConfig.get("feeRate")).isEqualTo(new BigDecimal("0.0002"));
+        assertThat(paperConfig.get("slippagePct")).isEqualTo(BigDecimal.ZERO);
     }
 
 

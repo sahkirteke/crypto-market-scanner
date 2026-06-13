@@ -150,7 +150,7 @@ public class ScannerProperties {
         private String mode = "MAKER";
         private BigDecimal makerFeePct = new BigDecimal("0.0002");
         private BigDecimal takerFeePct = new BigDecimal("0.0004");
-        private BigDecimal slippagePct = new BigDecimal("0.0005");
+        private BigDecimal slippagePct = new BigDecimal("0");
         private String logZone = "Europe/Istanbul";
     }
 
@@ -176,7 +176,7 @@ public class ScannerProperties {
         private Integer leverage = 5;
         private BigDecimal takerFeePct = new BigDecimal("0.0004");
         private BigDecimal makerFeePct = new BigDecimal("0.0002");
-        private BigDecimal slippagePct = new BigDecimal("0.0005");
+        private BigDecimal slippagePct = new BigDecimal("0");
     }
 
     @Getter

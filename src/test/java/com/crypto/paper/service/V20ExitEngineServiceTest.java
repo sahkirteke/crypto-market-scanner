@@ -1,15 +1,23 @@
 package com.crypto.paper.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.crypto.common.enums.PositionSide;
+import com.crypto.paper.log.V20PaperJsonlLogService;
 import com.crypto.paper.model.KlineCandle;
 import com.crypto.paper.model.PaperPositionStatus;
 import com.crypto.persistence.entity.PaperPositionEntity;
 import com.crypto.scanner.config.ScannerProperties;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class V20ExitEngineServiceTest {
     private final ScannerProperties properties = new ScannerProperties();
@@ -106,6 +114,25 @@ class V20ExitEngineServiceTest {
         assertThat(p.getExitReason()).isEqualTo("STOP_LOSS");
         assertThat(p.getLeveragedRawPnlUsdt()).isNegative();
         assertThat(p.getLeveragedNetPnlUsdt()).isNegative();
+    }
+
+
+    @Test
+    void jsonlClosedEventContainsMakerFeeAndBothPnlModels() {
+        V20PaperJsonlLogService v20Log = mock(V20PaperJsonlLogService.class);
+        when(v20Log.formatTr(any())).thenReturn("2026-06-13T18:42:10.125+03:00");
+        ReflectionTestUtils.setField(service, "v20PaperJsonlLogService", v20Log);
+        PaperPositionEntity p = longPosition();
+
+        service.evaluatePositionWithCandle(p, candle("103", "100", 1), "5m");
+
+        ArgumentCaptor<Map> captor = ArgumentCaptor.forClass(Map.class);
+        verify(v20Log).log(captor.capture());
+        assertThat(captor.getValue()).containsEntry("eventType", "POSITION_CLOSED");
+        assertThat(captor.getValue()).containsEntry("feeMode", "MAKER");
+        assertThat(captor.getValue()).containsEntry("feeRate", new BigDecimal("0.0002"));
+        assertThat(captor.getValue()).containsEntry("slippagePct", BigDecimal.ZERO);
+        assertThat(captor.getValue()).containsKeys("unleveragedNetPnlUsdt", "leveragedNetPnlUsdt", "leveragedNetPnlPct");
     }
 
     private void assertClosed(PaperPositionEntity p, String reason, String exitPrice) {

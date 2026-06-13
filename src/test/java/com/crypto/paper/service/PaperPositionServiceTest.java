@@ -134,6 +134,13 @@ class PaperPositionServiceTest {
         assertThat(captor.getValue()).containsEntry("eventType", "POSITION_OPENED");
         assertThat(captor.getValue()).containsEntry("positionId", 42L);
         assertThat(captor.getValue()).containsEntry("qualityStatus", "INSUFFICIENT_HISTORY");
+        assertThat(captor.getValue()).containsEntry("feeMode", "MAKER");
+        assertThat(captor.getValue()).containsEntry("feeRate", new BigDecimal("0.0002"));
+        assertThat(captor.getValue()).containsEntry("slippagePct", BigDecimal.ZERO);
+        assertThat(captor.getValue()).containsEntry("marginUsdt", new BigDecimal("100"));
+        assertThat(captor.getValue()).containsEntry("leverage", 5);
+        assertThat(captor.getValue()).containsEntry("leveragedNotionalUsdt", new BigDecimal("500"));
+        assertThat(captor.getValue()).containsEntry("unleveragedNotionalUsdt", new BigDecimal("100"));
     }
 
     @Test

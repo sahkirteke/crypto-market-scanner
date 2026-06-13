@@ -26,7 +26,7 @@ public class V20PnlCalculator {
         return new BigDecimal("0.0002");
     }
     public String feeMode() { return paper().getFee() == null || paper().getFee().getMode() == null ? "MAKER" : paper().getFee().getMode(); }
-    public BigDecimal slippagePct() { return paper().getFee() == null || paper().getFee().getSlippagePct() == null ? new BigDecimal("0.0005") : paper().getFee().getSlippagePct(); }
+    public BigDecimal slippagePct() { return paper().getFee() == null || paper().getFee().getSlippagePct() == null ? new BigDecimal("0") : paper().getFee().getSlippagePct(); }
 
     public V20PnlResult calculate(PositionSide side, BigDecimal entryPrice, BigDecimal exitPrice) {
         BigDecimal margin = marginUsdt();
