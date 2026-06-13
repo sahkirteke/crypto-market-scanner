@@ -113,7 +113,7 @@ public class EntryCandidateService {
             return List.of();
         }
 
-        if (score(result) < valueOrDefault(config.getMinScore(), 70)) {
+        if (!isV20Enabled() && score(result) < valueOrDefault(config.getMinScore(), 70)) {
             logRejected(result, "SCORE_TOO_LOW");
             return List.of();
         }
@@ -191,6 +191,15 @@ public class EntryCandidateService {
         List<EntryCandidate> sortedCandidates = candidates.stream()
                 .sorted(candidateComparator())
                 .toList();
+
+        if (isV20Enabled()) {
+            sortedCandidates.forEach(candidate -> {
+                persistCandidate(candidate);
+                log.info("ENTRY_CANDIDATE_SELECTED symbol={} side={} score={} reason={}",
+                        candidate.getSymbol(), candidate.getSide(), candidate.getScore(), candidate.getCandidateReason());
+            });
+            return finish(sortedCandidates);
+        }
 
         int maxLongCandidates = valueOrDefault(config.getMaxLongCandidates(), 5);
         int maxShortCandidates = valueOrDefault(config.getMaxShortCandidates(), 5);
@@ -379,6 +388,10 @@ public class EntryCandidateService {
                 result.getDirectionBias(),
                 result.getScore()
         );
+    }
+
+    private boolean isV20Enabled() {
+        return scannerProperties.getV20() != null && Boolean.TRUE.equals(scannerProperties.getV20().getEnabled());
     }
 
     private void logRejected(EntryCandidate candidate, String reason) {

@@ -19,6 +19,8 @@ import lombok.Setter;
 public class FuturesSnapshot {
     private String symbol;
     private BigDecimal fundingRate;
+    @Builder.Default
+    private List<BigDecimal> fundingRates = new ArrayList<>();
     private BigDecimal openInterest;
     private Boolean longCrowded;
     private Boolean shortCrowded;

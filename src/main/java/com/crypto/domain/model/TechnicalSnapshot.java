@@ -21,6 +21,9 @@ public class TechnicalSnapshot {
     private BigDecimal previousClose;
     private BigDecimal previousHigh;
     private BigDecimal previousLow;
+    private BigDecimal high;
+    private BigDecimal low;
+    private BigDecimal volume;
     private BigDecimal ema20;
     private BigDecimal ema50;
     private BigDecimal ema200;
@@ -29,6 +32,10 @@ public class TechnicalSnapshot {
     private BigDecimal macdHist;
     private BigDecimal previousMacdHist;
     private BigDecimal atr14;
+    private BigDecimal adx14;
+    private BigDecimal plusDi14;
+    private BigDecimal minusDi14;
+    private BigDecimal diDiff;
     private BigDecimal volumeSma20;
     private BigDecimal volumeRatio;
     private BigDecimal bbMiddle;
@@ -36,6 +43,15 @@ public class TechnicalSnapshot {
     private BigDecimal bbLower;
     private BigDecimal bbWidth;
     private BigDecimal bbPercentB;
+    private BigDecimal bbPosition;
+    private BigDecimal rangePct;
+    private BigDecimal closePosition;
+    private BigDecimal atrPct;
+    private BigDecimal ema20Ema50CompPct;
+    private BigDecimal closeEma20DistPct;
+    private BigDecimal distFromLow20Pct;
+    private BigDecimal distFromHigh20Pct;
+    private BigDecimal takerBuyRatio;
     private Boolean bbUpperTouched;
     private Boolean bbLowerTouched;
     private Boolean bbUpperClosedOutside;

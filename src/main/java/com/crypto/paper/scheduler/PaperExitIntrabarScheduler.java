@@ -18,12 +18,16 @@ public class PaperExitIntrabarScheduler {
     private final ExitEngineService exitEngineService;
     private final PaperTradeLockService paperTradeLockService;
 
-    @Scheduled(cron = "${scanner.paper-exit.intrabar-cron}", zone = "${scanner.paper-exit.intrabar-zone}")
+    @Scheduled(cron = "${scanner.intrabar-exit.cron}", zone = "${scanner.intrabar-exit.zone}")
     public void evaluateOpenPaperPositionsOnFiveMinuteBars() {
         ScannerProperties.PaperAuto paperAuto = scannerProperties.getPaperAuto();
         ScannerProperties.PaperExit paperExit = scannerProperties.getPaperExit();
-        if (paperAuto == null || !Boolean.TRUE.equals(paperAuto.getEnabled())
-                || paperExit == null || !Boolean.TRUE.equals(paperExit.getIntrabarCheckEnabled())) {
+        ScannerProperties.IntrabarExit intrabarExit = scannerProperties.getIntrabarExit();
+        boolean v20Enabled = scannerProperties.getV20() != null && Boolean.TRUE.equals(scannerProperties.getV20().getEnabled());
+        boolean intrabarEnabled = v20Enabled
+                ? intrabarExit != null && Boolean.TRUE.equals(intrabarExit.getEnabled())
+                : paperExit != null && Boolean.TRUE.equals(paperExit.getIntrabarCheckEnabled());
+        if (paperAuto == null || !Boolean.TRUE.equals(paperAuto.getEnabled()) || !intrabarEnabled) {
             log.info("PAPER_INTRABAR_EXIT_CHECK_SKIPPED_DISABLED");
             return;
         }
@@ -31,7 +35,9 @@ public class PaperExitIntrabarScheduler {
             log.info("PAPER_INTRABAR_EXIT_CHECK_SKIPPED_LOCKED");
             return;
         }
-        String interval = paperExit.getIntrabarInterval() == null ? "5m" : paperExit.getIntrabarInterval();
+        String interval = v20Enabled
+                ? (intrabarExit == null || intrabarExit.getInterval() == null ? "5m" : intrabarExit.getInterval())
+                : (paperExit.getIntrabarInterval() == null ? "5m" : paperExit.getIntrabarInterval());
         try {
             log.info("PAPER_INTRABAR_EXIT_CHECK_STARTED time={} interval={}", IstanbulTimeUtil.nowText(), interval);
             PaperExitEvaluationResult result = exitEngineService.evaluateOpenPositionsWithInterval(interval);

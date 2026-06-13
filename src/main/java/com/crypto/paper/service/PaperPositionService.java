@@ -9,6 +9,7 @@ import com.crypto.domain.model.BookTicker;
 import com.crypto.common.service.JsonlDecisionLogService;
 import com.crypto.common.time.IstanbulTimeUtil;
 import com.crypto.paper.log.SymbolTradeJsonlLogService;
+import com.crypto.paper.log.V20PaperJsonlLogService;
 import com.crypto.paper.model.PaperPositionEventType;
 import com.crypto.persistence.entity.PaperPositionEventEntity;
 import com.crypto.persistence.repository.PaperPositionEventRepository;
@@ -43,6 +44,7 @@ public class PaperPositionService {
     private final EntrySignalService entrySignalService;
     private final ScannerProperties scannerProperties;
     private final JsonTextMapper jsonTextMapper;
+    private final V20PnlCalculator v20PnlCalculator;
 
     @Autowired(required = false)
     private BinanceFuturesClient binanceFuturesClient;
@@ -54,6 +56,14 @@ public class PaperPositionService {
     private JsonlDecisionLogService jsonlDecisionLogService;
     @Autowired(required = false)
     private SymbolTradeJsonlLogService symbolTradeJsonlLogService;
+    @Autowired(required = false)
+    private V20PaperJsonlLogService v20PaperJsonlLogService;
+
+
+    public PaperPositionService(PaperPositionRepository paperPositionRepository, EntrySignalService entrySignalService,
+                                ScannerProperties scannerProperties, JsonTextMapper jsonTextMapper) {
+        this(paperPositionRepository, entrySignalService, scannerProperties, jsonTextMapper, new V20PnlCalculator(scannerProperties));
+    }
 
     public List<PaperPositionEntity> openPositionsFromLatestSignals() {
         return openPositionsFromSignals(entrySignalService.generateSignalsFromLatestScan()).openedPositions();
@@ -95,7 +105,7 @@ public class PaperPositionService {
         if (signal.getAction() == EntryAction.NO_ENTRY) {
             return reject(signal, "SIGNAL_NO_ENTRY");
         }
-        if (!isStrongSignal(signal)) {
+        if (!isV20Enabled() && !isStrongSignal(signal)) {
             return reject(signal, "SOURCE_CLASSIFICATION_NOT_STRONG");
         }
         if (!isEnterAction(signal.getAction())) {
@@ -128,17 +138,17 @@ public class PaperPositionService {
         }
 
         List<PaperPositionEntity> openPositions = getOpenPositionsForValidation();
-        if (openPositions.size() >= intValue(config.getMaxOpenPositions(), 5)) {
+        if (!isV20Enabled() && openPositions.size() >= intValue(config.getMaxOpenPositions(), 5)) {
             return reject(signal, "MAX_OPEN_POSITIONS_REACHED");
         }
         long openSideCount = openPositions.stream()
                 .filter(position -> position.getSide() == signal.getSide())
                 .count();
-        if (signal.getSide() == PositionSide.LONG
+        if (!isV20Enabled() && signal.getSide() == PositionSide.LONG
                 && openSideCount >= intValue(config.getMaxOpenLongPositions(), 3)) {
             return reject(signal, "MAX_OPEN_LONG_REACHED");
         }
-        if (signal.getSide() == PositionSide.SHORT
+        if (!isV20Enabled() && signal.getSide() == PositionSide.SHORT
                 && openSideCount >= intValue(config.getMaxOpenShortPositions(), 3)) {
             return reject(signal, "MAX_OPEN_SHORT_REACHED");
         }
@@ -161,13 +171,19 @@ public class PaperPositionService {
         ScannerProperties.PaperCost costConfig = scannerProperties.getPaperCost() == null ? new ScannerProperties.PaperCost() : scannerProperties.getPaperCost();
         BigDecimal atr = signal.getAtr14_1h() == null ? entryPrice.multiply(new BigDecimal("0.012")) : signal.getAtr14_1h();
         RiskLevels risk = calculateRiskLevels(signal.getSide(), entryPrice, atr, riskConfig);
-        BigDecimal notionalUsdt = bigDecimalValue(config.getDefaultNotionalUsdt(), "100");
+        BigDecimal v20TakeProfit = v20TakeProfit(signal.getSide(), entryPrice);
+        BigDecimal v20StopLoss = v20StopLoss(signal.getSide(), entryPrice);
+        BigDecimal marginUsdt = config.getMarginUsdt() == null ? new BigDecimal("100") : config.getMarginUsdt();
+        int paperLeverage = intValue(config.getLeverage(), 5);
+        BigDecimal leveragedNotionalUsdt = marginUsdt.multiply(BigDecimal.valueOf(paperLeverage));
+        BigDecimal notionalUsdt = isV20Enabled() ? leveragedNotionalUsdt : bigDecimalValue(config.getDefaultNotionalUsdt(), "100");
         BigDecimal quantity = notionalUsdt.divide(entryPrice, QUANTITY_SCALE, RoundingMode.DOWN);
         Instant openedAt = Instant.now();
         PaperPositionEntity position = PaperPositionEntity.builder()
                 .sourceScanRunId(signal.getScanRunId())
                 .sourceScanType(signal.getSourceScanType())
                 .sourceCandidateId(signal.getCandidateId())
+                .strategyVersion(isV20Enabled() ? "V20" : null)
                 .entryClose1h(signal.getClose1h())
                 .entryEma20_1h(signal.getEma20_1h())
                 .entryRsi14_1h(signal.getRsi14_1h())
@@ -183,8 +199,14 @@ public class PaperPositionService {
                 .askPrice(bookTicker == null ? null : bookTicker.getAskPrice())
                 .midPrice(entryPrice)
                 .quantity(quantity)
+                .marginUsdt(isV20Enabled() ? marginUsdt : null)
+                .unleveragedNotionalUsdt(isV20Enabled() ? marginUsdt : null)
+                .leveragedNotionalUsdt(isV20Enabled() ? leveragedNotionalUsdt : null)
                 .notionalUsdt(notionalUsdt)
-                .leverage(intValue(costConfig.getLeverage(), intValue(config.getLeverage(), 3)))
+                .feeMode(isV20Enabled() && config.getFee() != null ? config.getFee().getMode() : null)
+                .feeRate(isV20Enabled() && config.getFee() != null ? ("TAKER".equalsIgnoreCase(config.getFee().getMode()) ? config.getFee().getTakerFeePct() : config.getFee().getMakerFeePct()) : null)
+                .slippagePct(isV20Enabled() && config.getFee() != null ? config.getFee().getSlippagePct() : null)
+                .leverage(isV20Enabled() ? paperLeverage : intValue(costConfig.getLeverage(), intValue(config.getLeverage(), 3)))
                 .entryScore(signal.getScore())
                 .marketRegime(signal.getMarketRegime())
                 .entrySignalScore(signal.getScore())
@@ -213,15 +235,19 @@ public class PaperPositionService {
                 .signalReason(signal.getSignalReason())
                 .reasonsJson(jsonTextMapper.toJson(signal.getReasons()))
                 .warningsJson(jsonTextMapper.toJson(signal.getWarnings()))
+                .qualityStatus(isV20Enabled() ? "INSUFFICIENT_HISTORY" : null)
+                .qualityScore(isV20Enabled() ? BigDecimal.ZERO : null)
                 .openedAt(openedAt)
                 .currentPrice(entryPrice)
                 .highestPrice(entryPrice)
                 .lowestPrice(entryPrice)
-                .initialStop(risk.initialStop())
-                .currentStop(risk.initialStop())
-                .riskPerUnit(risk.riskPerUnit())
-                .tp1(risk.tp1())
-                .tp2(risk.tp2())
+                .initialStop(isV20Enabled() ? null : risk.initialStop())
+                .currentStop(isV20Enabled() ? null : risk.initialStop())
+                .riskPerUnit(isV20Enabled() ? null : risk.riskPerUnit())
+                .takeProfitPrice(isV20Enabled() ? v20TakeProfit : null)
+                .stopLossPrice(isV20Enabled() ? v20StopLoss : null)
+                .tp1(isV20Enabled() ? null : risk.tp1())
+                .tp2(isV20Enabled() ? null : risk.tp2())
                 .tp1Hit(false)
                 .tp2Hit(false)
                 .trailingActive(false)
@@ -229,7 +255,7 @@ public class PaperPositionService {
                 .highestPriceSinceEntry(entryPrice)
                 .lowestPriceSinceEntry(entryPrice)
                 .barsInPosition(0)
-                .entryPriceAdjusted(adjustedEntry(signal.getSide(), entryPrice, costConfig))
+                .entryPriceAdjusted(isV20Enabled() ? v20PnlCalculator.calculate(signal.getSide(), entryPrice, entryPrice).entryPriceAdjusted() : adjustedEntry(signal.getSide(), entryPrice, costConfig))
                 .totalFeePct(costConfig.getTakerFeePct().multiply(BigDecimal.valueOf(200)))
                 .totalSlippagePct(costConfig.getSlippagePct().multiply(BigDecimal.valueOf(200)))
                 .maxFavorableMovePct(BigDecimal.ZERO)
@@ -241,9 +267,13 @@ public class PaperPositionService {
                 .stopLossPct(bigDecimalValue(exitConfig.getStopLossPct(), "0.6"))
                 .timeStopMinutes(intValue(exitConfig.getTimeStopMinutes(), 240))
                 .build();
+        if (isV20Enabled()) {
+            position.setV20SignalSnapshotJson(v20SignalSnapshotJson(position, signal));
+        }
 
         PaperPositionEntity saved = paperPositionRepository.save(position);
         writeOpenedEvent(saved);
+        writeV20OpenedLog(saved, signal);
         writeSymbolTradeEntry(saved, signal);
         markCandidateUsed(saved.getSymbol());
         log.info(
@@ -263,6 +293,97 @@ public class PaperPositionService {
         return saved;
     }
 
+
+
+
+    private String v20SignalSnapshotJson(PaperPositionEntity position, EntrySignal signal) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("signalScore", position.getEntrySignalScore());
+        snapshot.put("signalScoreReasons", signal == null ? List.of() : signal.getBbReasons());
+        snapshot.put("fundingRate", position.getFundingRate());
+        snapshot.put("fundingMa3", position.getFundingMa3());
+        snapshot.put("oneHourTakerBuyRatio", position.getOneHourTakerBuyRatio());
+        snapshot.put("fourHourTakerBuyRatio", position.getFourHourTakerBuyRatio());
+        snapshot.put("distFromLow20Pct", position.getDistFromLow20Pct());
+        snapshot.put("distFromHigh20Pct", position.getDistFromHigh20Pct());
+        snapshot.put("diDiff", position.getDiDiff());
+        snapshot.put("rsi14", position.getRsi14());
+        snapshot.put("adx14", position.getAdx14());
+        snapshot.put("atrPct", position.getAtrPct());
+        snapshot.put("ema20Ema50CompPct", position.getEma20Ema50CompPct());
+        snapshot.put("closeEma20DistPct", position.getCloseEma20DistPct());
+        snapshot.put("bbPosition", position.getBbPosition());
+        snapshot.put("closePosition", position.getClosePosition());
+        snapshot.put("volumeRatio20", position.getVolumeRatio20());
+        snapshot.put("rangePct", position.getRangePct());
+        snapshot.put("qualityStatus", position.getQualityStatus());
+        snapshot.put("qualityScore", position.getQualityScore());
+        snapshot.put("reasons", signal == null ? List.of() : signal.getReasons());
+        snapshot.put("warnings", signal == null ? List.of() : signal.getWarnings());
+        return jsonTextMapper.toJson(snapshot);
+    }
+
+    private BigDecimal v20TakeProfit(PositionSide side, BigDecimal entryPrice) {
+        ScannerProperties.SingleTpSl single = scannerProperties.getSingleTpSl() == null ? new ScannerProperties.SingleTpSl() : scannerProperties.getSingleTpSl();
+        BigDecimal pct = side == PositionSide.SHORT ? single.getShortTpPct() : single.getLongTpPct();
+        return side == PositionSide.SHORT ? entryPrice.multiply(BigDecimal.ONE.subtract(pct)) : entryPrice.multiply(BigDecimal.ONE.add(pct));
+    }
+
+    private BigDecimal v20StopLoss(PositionSide side, BigDecimal entryPrice) {
+        ScannerProperties.SingleTpSl single = scannerProperties.getSingleTpSl() == null ? new ScannerProperties.SingleTpSl() : scannerProperties.getSingleTpSl();
+        BigDecimal pct = side == PositionSide.SHORT ? single.getShortSlPct() : single.getLongSlPct();
+        return side == PositionSide.SHORT ? entryPrice.multiply(BigDecimal.ONE.add(pct)) : entryPrice.multiply(BigDecimal.ONE.subtract(pct));
+    }
+
+    private void writeV20OpenedLog(PaperPositionEntity position, EntrySignal signal) {
+        if (!isV20Enabled() || v20PaperJsonlLogService == null || position == null) {
+            return;
+        }
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("eventType", "POSITION_OPENED");
+        payload.put("strategyVersion", "V20");
+        payload.put("positionId", position.getId());
+        payload.put("timeTr", v20PaperJsonlLogService.formatTr(position.getOpenedAt()));
+        payload.put("symbol", position.getSymbol());
+        payload.put("side", position.getSide().name());
+        payload.put("status", position.getStatus().name());
+        payload.put("entryPrice", position.getEntryPrice());
+        payload.put("entryPriceAdjusted", position.getEntryPriceAdjusted());
+        payload.put("marginUsdt", position.getMarginUsdt());
+        payload.put("leverage", position.getLeverage());
+        payload.put("leveragedNotionalUsdt", position.getLeveragedNotionalUsdt());
+        payload.put("unleveragedNotionalUsdt", position.getUnleveragedNotionalUsdt());
+        payload.put("quantity", position.getQuantity());
+        payload.put("takeProfitPrice", position.getTakeProfitPrice());
+        payload.put("stopLossPrice", position.getStopLossPrice());
+        payload.put("feeMode", position.getFeeMode());
+        payload.put("feeRate", position.getFeeRate());
+        payload.put("slippagePct", position.getSlippagePct());
+        payload.put("signalScore", position.getEntrySignalScore());
+        payload.put("signalScoreReasons", signal == null ? List.of() : signal.getBbReasons());
+        payload.put("fundingRate", position.getFundingRate());
+        payload.put("fundingMa3", position.getFundingMa3());
+        payload.put("oneHourTakerBuyRatio", position.getOneHourTakerBuyRatio());
+        payload.put("fourHourTakerBuyRatio", position.getFourHourTakerBuyRatio());
+        payload.put("distFromLow20Pct", position.getDistFromLow20Pct());
+        payload.put("distFromHigh20Pct", position.getDistFromHigh20Pct());
+        payload.put("diDiff", position.getDiDiff());
+        payload.put("rsi14", position.getRsi14());
+        payload.put("adx14", position.getAdx14());
+        payload.put("atrPct", position.getAtrPct());
+        payload.put("ema20Ema50CompPct", position.getEma20Ema50CompPct());
+        payload.put("closeEma20DistPct", position.getCloseEma20DistPct());
+        payload.put("bbPosition", position.getBbPosition());
+        payload.put("closePosition", position.getClosePosition());
+        payload.put("volumeRatio20", position.getVolumeRatio20());
+        payload.put("rangePct", position.getRangePct());
+        payload.put("reasons", jsonTextMapper.toStringList(position.getReasonsJson()));
+        payload.put("warnings", jsonTextMapper.toStringList(position.getWarningsJson()));
+        payload.put("qualityStatus", position.getQualityStatus());
+        payload.put("qualityScore", position.getQualityScore());
+        payload.put("v20SignalSnapshot", position.getV20SignalSnapshotJson());
+        v20PaperJsonlLogService.log(payload);
+    }
 
     public RiskLevels calculateRiskLevels(PositionSide side, BigDecimal entryPrice, BigDecimal atr14, ScannerProperties.PaperRisk config) {
         BigDecimal raw = atr14.multiply(config.getAtrStopMultiplier());
@@ -440,6 +561,9 @@ public class PaperPositionService {
         payload.put("notionalUsdt", nullToEmpty(position.getNotionalUsdt()));
         payload.put("reasons", jsonTextMapper.toStringList(position.getReasonsJson()));
         payload.put("warnings", jsonTextMapper.toStringList(position.getWarningsJson()));
+        payload.put("qualityStatus", position.getQualityStatus());
+        payload.put("qualityScore", position.getQualityScore());
+        payload.put("v20SignalSnapshot", position.getV20SignalSnapshotJson());
         return payload;
     }
 
@@ -482,6 +606,10 @@ public class PaperPositionService {
 
     private List<PaperPositionStatus> activeStatuses() {
         return List.of(PaperPositionStatus.OPEN, PaperPositionStatus.PARTIALLY_CLOSED);
+    }
+
+    private boolean isV20Enabled() {
+        return scannerProperties.getV20() != null && Boolean.TRUE.equals(scannerProperties.getV20().getEnabled());
     }
 
     private boolean isStrongSignal(EntrySignal signal) {

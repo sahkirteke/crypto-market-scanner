@@ -16,12 +16,19 @@ import org.ta4j.core.BarSeries;
 import org.ta4j.core.BaseBarSeriesBuilder;
 import org.ta4j.core.Indicator;
 import org.ta4j.core.indicators.ATRIndicator;
+import org.ta4j.core.indicators.adx.ADXIndicator;
+import org.ta4j.core.indicators.adx.MinusDIIndicator;
+import org.ta4j.core.indicators.adx.PlusDIIndicator;
 import org.ta4j.core.indicators.MACDIndicator;
 import org.ta4j.core.indicators.RSIIndicator;
 import org.ta4j.core.indicators.averages.EMAIndicator;
 import org.ta4j.core.indicators.averages.SMAIndicator;
 import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
 import org.ta4j.core.indicators.helpers.VolumeIndicator;
+import org.ta4j.core.indicators.bollinger.BollingerBandsLowerIndicator;
+import org.ta4j.core.indicators.bollinger.BollingerBandsMiddleIndicator;
+import org.ta4j.core.indicators.bollinger.BollingerBandsUpperIndicator;
+import org.ta4j.core.indicators.statistics.StandardDeviationIndicator;
 import org.ta4j.core.num.DecimalNumFactory;
 import org.ta4j.core.num.Num;
 
@@ -55,16 +62,25 @@ public class IndicatorService {
             MACDIndicator macdIndicator = new MACDIndicator(closePriceIndicator, 12, 26);
             EMAIndicator signalLineIndicator = new EMAIndicator(macdIndicator, 9);
             ATRIndicator atr14Indicator = new ATRIndicator(series, 14);
+            ADXIndicator adx14Indicator = new ADXIndicator(series, 14);
+            PlusDIIndicator plusDi14Indicator = new PlusDIIndicator(series, 14);
+            MinusDIIndicator minusDi14Indicator = new MinusDIIndicator(series, 14);
             VolumeIndicator volumeIndicator = new VolumeIndicator(series);
             SMAIndicator volumeSma20Indicator = new SMAIndicator(volumeIndicator, 20);
 
             BigDecimal close = toBigDecimal(closePriceIndicator.getValue(latestIndex));
+            BigDecimal high = toBigDecimal(series.getBar(latestIndex).getHighPrice());
+            BigDecimal low = toBigDecimal(series.getBar(latestIndex).getLowPrice());
             BigDecimal ema20 = toBigDecimal(ema20Indicator.getValue(latestIndex));
             BigDecimal rsi14 = toBigDecimal(rsi14Indicator.getValue(latestIndex));
             BigDecimal macdHist = macdHistogram(macdIndicator, signalLineIndicator, latestIndex);
             BigDecimal volumeSma20 = toBigDecimal(volumeSma20Indicator.getValue(latestIndex));
             BigDecimal latestVolume = toBigDecimal(volumeIndicator.getValue(latestIndex));
             BigDecimal volumeRatio = calculateVolumeRatio(latestVolume, volumeSma20);
+            BigDecimal ema50 = toBigDecimal(ema50Indicator.getValue(latestIndex));
+            BigDecimal atr14 = toBigDecimal(atr14Indicator.getValue(latestIndex));
+            BigDecimal plusDi14 = toBigDecimal(plusDi14Indicator.getValue(latestIndex));
+            BigDecimal minusDi14 = toBigDecimal(minusDi14Indicator.getValue(latestIndex));
             BollingerValues bollinger = calculateBollinger(series, latestIndex, close);
 
             TechnicalSnapshot snapshot = TechnicalSnapshot.builder()
@@ -75,14 +91,21 @@ public class IndicatorService {
                     .previousClose(toBigDecimal(closePriceIndicator.getValue(previousIndex)))
                     .previousHigh(toBigDecimal(series.getBar(previousIndex).getHighPrice()))
                     .previousLow(toBigDecimal(series.getBar(previousIndex).getLowPrice()))
+                    .high(high)
+                    .low(low)
+                    .volume(latestVolume)
                     .ema20(ema20)
-                    .ema50(toBigDecimal(ema50Indicator.getValue(latestIndex)))
+                    .ema50(ema50)
                     .ema200(toBigDecimal(ema200Indicator.getValue(latestIndex)))
                     .rsi14(rsi14)
                     .previousRsi14(toBigDecimal(rsi14Indicator.getValue(previousIndex)))
                     .macdHist(macdHist)
                     .previousMacdHist(macdHistogram(macdIndicator, signalLineIndicator, previousIndex))
-                    .atr14(toBigDecimal(atr14Indicator.getValue(latestIndex)))
+                    .atr14(atr14)
+                    .adx14(toBigDecimal(adx14Indicator.getValue(latestIndex)))
+                    .plusDi14(plusDi14)
+                    .minusDi14(minusDi14)
+                    .diDiff(subtract(plusDi14, minusDi14))
                     .volumeSma20(volumeSma20)
                     .volumeRatio(volumeRatio)
                     .bbMiddle(bollinger.bbMiddle())
@@ -90,6 +113,15 @@ public class IndicatorService {
                     .bbLower(bollinger.bbLower())
                     .bbWidth(bollinger.bbWidth())
                     .bbPercentB(bollinger.bbPercentB())
+                    .bbPosition(bollinger.bbPercentB())
+                    .rangePct(percent(high == null || low == null ? null : high.subtract(low), close))
+                    .closePosition(ratio(close == null || low == null ? null : close.subtract(low), high == null || low == null ? null : high.subtract(low)))
+                    .atrPct(percent(atr14, close))
+                    .ema20Ema50CompPct(percent(ema20 == null || ema50 == null ? null : ema20.subtract(ema50), ema50))
+                    .closeEma20DistPct(percent(close == null || ema20 == null ? null : close.subtract(ema20), ema20))
+                    .distFromLow20Pct(distanceFromLow20(series, latestIndex, close))
+                    .distFromHigh20Pct(distanceFromHigh20(series, latestIndex, close))
+                    .takerBuyRatio(calculateTakerBuyRatio(latestClosedKline(klines)))
                     .bbUpperTouched(bollinger.bbUpperTouched())
                     .bbLowerTouched(bollinger.bbLowerTouched())
                     .bbUpperClosedOutside(bollinger.bbUpperClosedOutside())
@@ -152,7 +184,7 @@ public class IndicatorService {
 
         klines.stream()
                 .filter(kline -> kline != null
-                        && !Boolean.FALSE.equals(kline.getClosed())
+                        && Boolean.TRUE.equals(kline.getClosed())
                         && kline.getCloseTime() != null
                         && kline.getOpenTime() != null)
                 .sorted(Comparator.comparing(Kline::getOpenTime))
@@ -186,12 +218,52 @@ public class IndicatorService {
         return toBigDecimal(macdLine.minus(signalLine));
     }
 
+    private Kline latestClosedKline(List<Kline> klines) {
+        return klines.stream()
+                .filter(kline -> kline != null && Boolean.TRUE.equals(kline.getClosed()) && kline.getOpenTime() != null)
+                .max(Comparator.comparing(Kline::getOpenTime))
+                .orElse(null);
+    }
+
+    private BigDecimal calculateTakerBuyRatio(Kline kline) {
+        if (kline == null || kline.getVolume() == null || kline.getVolume().compareTo(BigDecimal.ZERO) == 0 || kline.getTakerBuyBaseVolume() == null) {
+            return null;
+        }
+        return kline.getTakerBuyBaseVolume().divide(kline.getVolume(), VOLUME_RATIO_SCALE, RoundingMode.HALF_UP);
+    }
+
     private BigDecimal calculateVolumeRatio(BigDecimal latestVolume, BigDecimal volumeSma20) {
         if (latestVolume == null || volumeSma20 == null || volumeSma20.compareTo(BigDecimal.ZERO) == 0) {
             return null;
         }
         return latestVolume.divide(volumeSma20, VOLUME_RATIO_SCALE, RoundingMode.HALF_UP);
     }
+
+    private BigDecimal distanceFromLow20(BarSeries series, int latestIndex, BigDecimal close) {
+        if (close == null || latestIndex < BOLLINGER_PERIOD - 1) return null;
+        BigDecimal lowest = null;
+        for (int i = latestIndex - BOLLINGER_PERIOD + 1; i <= latestIndex; i++) {
+            BigDecimal low = toBigDecimal(series.getBar(i).getLowPrice());
+            if (low == null) return null;
+            lowest = lowest == null || low.compareTo(lowest) < 0 ? low : lowest;
+        }
+        return percent(close.subtract(lowest), lowest);
+    }
+
+    private BigDecimal distanceFromHigh20(BarSeries series, int latestIndex, BigDecimal close) {
+        if (close == null || latestIndex < BOLLINGER_PERIOD - 1) return null;
+        BigDecimal highest = null;
+        for (int i = latestIndex - BOLLINGER_PERIOD + 1; i <= latestIndex; i++) {
+            BigDecimal high = toBigDecimal(series.getBar(i).getHighPrice());
+            if (high == null) return null;
+            highest = highest == null || high.compareTo(highest) > 0 ? high : highest;
+        }
+        return percent(highest.subtract(close), close);
+    }
+
+    private BigDecimal subtract(BigDecimal left, BigDecimal right) { return left == null || right == null ? null : left.subtract(right); }
+    private BigDecimal ratio(BigDecimal numerator, BigDecimal denominator) { return denominator == null || numerator == null || denominator.compareTo(BigDecimal.ZERO) == 0 ? null : numerator.divide(denominator, VOLUME_RATIO_SCALE, RoundingMode.HALF_UP); }
+    private BigDecimal percent(BigDecimal numerator, BigDecimal denominator) { BigDecimal value = ratio(numerator, denominator); return value == null ? null : value.multiply(BigDecimal.valueOf(100)); }
 
     public BollingerValues calculateBollingerForTest(BigDecimal close, BigDecimal high, BigDecimal low, BigDecimal bbMiddle, BigDecimal bbUpper, BigDecimal bbLower) {
         return buildBollingerValues(close, high, low, bbMiddle, bbUpper, bbLower);
@@ -201,24 +273,15 @@ public class IndicatorService {
         if (series == null || latestIndex < BOLLINGER_PERIOD - 1 || close == null) {
             return BollingerValues.empty();
         }
-        BigDecimal sum = BigDecimal.ZERO;
-        for (int index = latestIndex - BOLLINGER_PERIOD + 1; index <= latestIndex; index++) {
-            BigDecimal value = toBigDecimal(series.getBar(index).getClosePrice());
-            if (value == null) {
-                return BollingerValues.empty();
-            }
-            sum = sum.add(value);
-        }
-        BigDecimal middle = sum.divide(BigDecimal.valueOf(BOLLINGER_PERIOD), BOLLINGER_SCALE, RoundingMode.HALF_UP);
-        BigDecimal varianceSum = BigDecimal.ZERO;
-        for (int index = latestIndex - BOLLINGER_PERIOD + 1; index <= latestIndex; index++) {
-            BigDecimal diff = toBigDecimal(series.getBar(index).getClosePrice()).subtract(middle);
-            varianceSum = varianceSum.add(diff.multiply(diff));
-        }
-        BigDecimal variance = varianceSum.divide(BigDecimal.valueOf(BOLLINGER_PERIOD), BOLLINGER_SCALE, RoundingMode.HALF_UP);
-        BigDecimal stdDev = BigDecimal.valueOf(Math.sqrt(variance.doubleValue()));
-        BigDecimal upper = middle.add(stdDev.multiply(BOLLINGER_STD_DEV_MULTIPLIER));
-        BigDecimal lower = middle.subtract(stdDev.multiply(BOLLINGER_STD_DEV_MULTIPLIER));
+        ClosePriceIndicator closePrice = new ClosePriceIndicator(series);
+        SMAIndicator sma20 = new SMAIndicator(closePrice, BOLLINGER_PERIOD);
+        StandardDeviationIndicator standardDeviation = new StandardDeviationIndicator(closePrice, BOLLINGER_PERIOD);
+        BollingerBandsMiddleIndicator middleIndicator = new BollingerBandsMiddleIndicator(sma20);
+        BollingerBandsUpperIndicator upperIndicator = new BollingerBandsUpperIndicator(middleIndicator, standardDeviation);
+        BollingerBandsLowerIndicator lowerIndicator = new BollingerBandsLowerIndicator(middleIndicator, standardDeviation);
+        BigDecimal middle = toBigDecimal(middleIndicator.getValue(latestIndex));
+        BigDecimal upper = toBigDecimal(upperIndicator.getValue(latestIndex));
+        BigDecimal lower = toBigDecimal(lowerIndicator.getValue(latestIndex));
         BigDecimal high = toBigDecimal(series.getBar(latestIndex).getHighPrice());
         BigDecimal low = toBigDecimal(series.getBar(latestIndex).getLowPrice());
         return buildBollingerValues(close, high, low, middle, upper, lower);

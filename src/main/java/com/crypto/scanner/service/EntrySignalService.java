@@ -87,6 +87,9 @@ public class EntrySignalService {
         if (candidate.getSide() == null) {
             return blocked(signal, "SIDE_MISSING");
         }
+        if (isV20Enabled()) {
+            return generateV20ImmediateSignal(candidate, signal, config);
+        }
         applyTechnicalSnapshot(signal);
         applyBollingerScore(signal);
         if (entryScoreValue(signal) < intValue(config.getMinEnterScore(), 75)) {
@@ -167,6 +170,32 @@ public class EntrySignalService {
         }
 
         return blocked(signal, "SIDE_MISSING");
+    }
+
+
+    private EntrySignal generateV20ImmediateSignal(EntryCandidate candidate, EntrySignal signal, ScannerProperties.EntrySignal config) {
+        if (!isStrong(candidate.getSourceClassification())) {
+            return blocked(signal, "V20_ONLY_STRONG_CANDIDATES_ENTRY_ELIGIBLE");
+        }
+        if (candidate.getSourceClassification() == CoinClassification.WATCHLIST) {
+            return blocked(signal, "WATCHLIST_NOT_ENTRY_ELIGIBLE");
+        }
+        if (candidate.getMarketRegime() == MarketRegime.PANIC) {
+            return blocked(signal, "MARKET_PANIC_BLOCKED");
+        }
+        if (paperPositionRepository != null && paperPositionRepository.existsBySymbolAndStatusIn(candidate.getSymbol(), List.of(PaperPositionStatus.OPEN, PaperPositionStatus.PARTIALLY_CLOSED))) {
+            return blocked(signal, "SYMBOL_ALREADY_OPEN");
+        }
+        if (greaterThan(candidate.getSpreadPct(), bigDecimalValue(config.getMaxSpreadPct(), "0.08"))) {
+            return blocked(signal, "SPREAD_TOO_HIGH");
+        }
+        if (lessThan(candidate.getQuoteVolume24h(), bigDecimalValue(config.getMinQuoteVolume24h(), "30000000"))) {
+            return blocked(signal, "VOLUME_TOO_LOW");
+        }
+        signal.setEntryTrigger("V20_IMMEDIATE");
+        signal.setSignalReason(resolveSignalReason(candidate));
+        signal.setAction(candidate.getSide() == PositionSide.SHORT ? EntryAction.ENTER_SHORT : EntryAction.ENTER_LONG);
+        return ready(signal);
     }
 
     private EntrySignal baseSignal(EntryCandidate candidate) {
@@ -430,6 +459,10 @@ public class EntrySignalService {
             return 2;
         }
         return 3;
+    }
+
+    private boolean isV20Enabled() {
+        return scannerProperties.getV20() != null && Boolean.TRUE.equals(scannerProperties.getV20().getEnabled());
     }
 
     private boolean isStrong(CoinClassification classification) {

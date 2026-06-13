@@ -16,6 +16,7 @@ import com.crypto.common.enums.RiskLevel;
 import com.crypto.common.enums.ScanType;
 import com.crypto.common.service.JsonlDecisionLogService;
 import com.crypto.domain.model.EntrySignal;
+import com.crypto.paper.log.V20PaperJsonlLogService;
 import com.crypto.paper.model.PaperPositionStatus;
 import com.crypto.persistence.entity.PaperPositionEntity;
 import com.crypto.persistence.mapper.JsonTextMapper;
@@ -43,6 +44,7 @@ class PaperPositionServiceTest {
         repository = mock(PaperPositionRepository.class);
         entrySignalService = mock(EntrySignalService.class);
         scannerProperties = new ScannerProperties();
+        scannerProperties.getV20().setEnabled(false);
         service = new PaperPositionService(
                 repository,
                 entrySignalService,
@@ -109,6 +111,41 @@ class PaperPositionServiceTest {
         assertThat(captor.getValue()).containsEntry("symbol", "ETHUSDT");
         assertThat(captor.getValue()).containsEntry("side", "SHORT");
         assertThat(captor.getValue()).containsKeys("positionId", "entryPrice", "tp1", "tp2", "slPrice");
+    }
+
+    @Test
+    void v20PositionOpenedLogIsWrittenOnceAfterSaveWithPositionIdAndSnapshot() {
+        scannerProperties.getV20().setEnabled(true);
+        V20PaperJsonlLogService v20Log = mock(V20PaperJsonlLogService.class);
+        ReflectionTestUtils.setField(service, "v20PaperJsonlLogService", v20Log);
+        when(v20Log.formatTr(any())).thenReturn("2026-06-13T18:42:10.125+03:00");
+        when(repository.save(any(PaperPositionEntity.class))).thenAnswer(invocation -> {
+            PaperPositionEntity p = invocation.getArgument(0);
+            p.setId(42L);
+            return p;
+        });
+
+        PaperPositionEntity opened = service.openPosition(signal("BTCUSDT", EntryAction.ENTER_LONG, PositionSide.LONG, "100", RiskLevel.LOW));
+
+        ArgumentCaptor<Map> captor = ArgumentCaptor.forClass(Map.class);
+        verify(v20Log, Mockito.times(1)).log(captor.capture());
+        assertThat(opened.getId()).isEqualTo(42L);
+        assertThat(opened.getV20SignalSnapshotJson()).contains("signalScore", "qualityStatus", "INSUFFICIENT_HISTORY");
+        assertThat(captor.getValue()).containsEntry("eventType", "POSITION_OPENED");
+        assertThat(captor.getValue()).containsEntry("positionId", 42L);
+        assertThat(captor.getValue()).containsEntry("qualityStatus", "INSUFFICIENT_HISTORY");
+    }
+
+    @Test
+    void noEntryDoesNotWritePositionOpened() {
+        scannerProperties.getV20().setEnabled(true);
+        V20PaperJsonlLogService v20Log = mock(V20PaperJsonlLogService.class);
+        ReflectionTestUtils.setField(service, "v20PaperJsonlLogService", v20Log);
+
+        PaperPositionEntity opened = service.openPosition(signal("BTCUSDT", EntryAction.NO_ENTRY, PositionSide.LONG, "10", RiskLevel.LOW));
+
+        assertThat(opened).isNull();
+        verify(v20Log, never()).log(any());
     }
 
     @Test

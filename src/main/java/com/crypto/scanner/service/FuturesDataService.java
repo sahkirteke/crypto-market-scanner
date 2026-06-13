@@ -27,7 +27,8 @@ public class FuturesDataService {
     private final ScannerProperties scannerProperties;
 
     public FuturesSnapshot loadForSymbol(String symbol) {
-        BigDecimal fundingRate = loadFundingRate(symbol);
+        List<BigDecimal> fundingRates = loadFundingRates(symbol);
+        BigDecimal fundingRate = latestFundingRate(fundingRates);
         BigDecimal openInterest = loadOpenInterest(symbol);
         List<ReasonTag> warnings = new ArrayList<>();
 
@@ -39,6 +40,7 @@ public class FuturesDataService {
         FuturesSnapshot snapshot = FuturesSnapshot.builder()
                 .symbol(symbol)
                 .fundingRate(fundingRate)
+                .fundingRates(fundingRates)
                 .openInterest(openInterest)
                 .longCrowded(crowdingFlags.longCrowded())
                 .shortCrowded(crowdingFlags.shortCrowded())
@@ -76,15 +78,23 @@ public class FuturesDataService {
         return snapshots;
     }
 
-    private BigDecimal loadFundingRate(String symbol) {
+    private List<BigDecimal> loadFundingRates(String symbol) {
         try {
             List<BinanceFundingRateDto> fundingRates = binanceFuturesClient.getFundingRate(symbol);
-            BinanceFundingRateDto latestFundingRate = latestFundingRate(fundingRates);
-            return latestFundingRate == null ? null : toBigDecimal(latestFundingRate.getFundingRate());
+            return fundingRates == null ? List.of() : fundingRates.stream()
+                    .filter(Objects::nonNull)
+                    .sorted(Comparator.comparing(BinanceFundingRateDto::getFundingTime, Comparator.nullsFirst(Comparator.naturalOrder())))
+                    .map(rate -> toBigDecimal(rate.getFundingRate()))
+                    .filter(Objects::nonNull)
+                    .toList();
         } catch (Exception exception) {
             log.error("FUTURES_FUNDING_ERROR symbol={} message={}", symbol, exception.getMessage(), exception);
-            return null;
+            return List.of();
         }
+    }
+
+    private BigDecimal latestFundingRate(List<BigDecimal> fundingRates) {
+        return fundingRates == null || fundingRates.isEmpty() ? null : fundingRates.get(fundingRates.size() - 1);
     }
 
     private BigDecimal loadOpenInterest(String symbol) {
@@ -95,18 +105,6 @@ public class FuturesDataService {
             log.error("FUTURES_OPEN_INTEREST_ERROR symbol={} message={}", symbol, exception.getMessage(), exception);
             return null;
         }
-    }
-
-    private BinanceFundingRateDto latestFundingRate(List<BinanceFundingRateDto> fundingRates) {
-        if (fundingRates == null || fundingRates.isEmpty()) {
-            return null;
-        }
-        return fundingRates.stream()
-                .filter(Objects::nonNull)
-                .max(Comparator.comparing(
-                        BinanceFundingRateDto::getFundingTime,
-                        Comparator.nullsFirst(Comparator.naturalOrder())))
-                .orElse(null);
     }
 
     private CrowdingFlags applyFundingWarnings(BigDecimal fundingRate, List<ReasonTag> warnings) {

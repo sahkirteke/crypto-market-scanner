@@ -13,6 +13,7 @@ import com.crypto.domain.model.Ticker24h;
 import com.crypto.scanner.config.ScannerProperties;
 import com.crypto.scanner.model.CoinScoringInput;
 import com.crypto.scanner.model.MarketRegimeResult;
+import com.crypto.scanner.model.V20SignalResult;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -55,6 +56,12 @@ public class CoinScoringService {
             return result;
         }
 
+        if (isV20Enabled()) {
+            CoinScanResult result = scoreV20(input);
+            logScored(result);
+            return result;
+        }
+
         List<ReasonTag> reasons = new ArrayList<>();
         List<ReasonTag> warnings = new ArrayList<>();
         addMarketReason(input.getMarketRegimeResult(), reasons, warnings);
@@ -84,6 +91,85 @@ public class CoinScoringService {
         logScored(result);
         return result;
     }
+
+
+    private CoinScanResult scoreV20(CoinScoringInput input) {
+        List<ReasonTag> reasons = new ArrayList<>();
+        List<ReasonTag> warnings = new ArrayList<>();
+        addMarketReason(input.getMarketRegimeResult(), reasons, warnings);
+        if (marketRegime(input.getMarketRegimeResult()) == MarketRegime.PANIC) {
+            return CoinScanResult.builder()
+                    .symbol(input.getSymbol())
+                    .directionBias(DirectionBias.NEUTRAL)
+                    .classification(CoinClassification.ELIMINATED)
+                    .score(0).longScore(0).shortScore(0)
+                    .riskLevel(RiskLevel.HIGH)
+                    .eliminatedReason(EliminationReason.MARKET_PANIC_NO_NEW_ENTRY)
+                    .reasons(reasons)
+                    .warnings(warnings)
+                    .scanTime(Instant.now())
+                    .build();
+        }
+        V20SignalService v20SignalService = new V20SignalService(scannerProperties);
+        List<BigDecimal> fundingRates = input.getFuturesSnapshot() == null ? List.of() : input.getFuturesSnapshot().getFundingRates();
+        BigDecimal fundingRate = fundingRate(input.getFuturesSnapshot());
+        V20SignalResult longResult = v20SignalService.evaluateLong(input.getFourHour(), input.getOneHour(), fundingRate, fundingRates, false, false);
+        V20SignalResult shortResult = v20SignalService.evaluateShort(input.getFourHour(), input.getOneHour(), fundingRate, fundingRates, false, false);
+        boolean longPass = pass(longResult);
+        boolean shortPass = pass(shortResult);
+        DirectionBias directionBias = DirectionBias.NEUTRAL;
+        CoinClassification classification = CoinClassification.WATCHLIST;
+        int effectiveScore = Math.max(score(longResult), score(shortResult));
+        if (longPass && shortPass) {
+            int diff = Math.abs(score(longResult) - score(shortResult));
+            if (diff <= 1) {
+                classification = CoinClassification.ELIMINATED;
+                reasons.add(ReasonTag.DATA_NOT_READY);
+            } else if (score(longResult) > score(shortResult)) {
+                directionBias = DirectionBias.LONG;
+                classification = CoinClassification.STRONG_LONG;
+                effectiveScore = score(longResult);
+            } else {
+                directionBias = DirectionBias.SHORT;
+                classification = CoinClassification.STRONG_SHORT;
+                effectiveScore = score(shortResult);
+            }
+        } else if (longPass) {
+            directionBias = DirectionBias.LONG;
+            classification = CoinClassification.STRONG_LONG;
+            effectiveScore = score(longResult);
+        } else if (shortPass) {
+            directionBias = DirectionBias.SHORT;
+            classification = CoinClassification.STRONG_SHORT;
+            effectiveScore = score(shortResult);
+        }
+        if (classification == CoinClassification.WATCHLIST) {
+            reasons.add(ReasonTag.DATA_NOT_READY);
+        }
+        CoinScanResult result = CoinScanResult.builder()
+                .symbol(input.getSymbol())
+                .directionBias(directionBias)
+                .classification(classification)
+                .score(effectiveScore)
+                .longScore(score(longResult))
+                .shortScore(score(shortResult))
+                .riskLevel(determineRiskLevel(warnings, input.getMarketRegimeResult()))
+                .eliminatedReason(classification == CoinClassification.ELIMINATED ? EliminationReason.DATA_NOT_READY : null)
+                .reasons(reasons)
+                .warnings(warnings)
+                .scanTime(Instant.now())
+                .build();
+        enrichMarketData(result, input);
+        return result;
+    }
+
+    private boolean pass(V20SignalResult result) {
+        return result != null && result.isBaseSignalPass() && result.isEntryFiltersPass() && result.isScorePass();
+    }
+
+    private int score(V20SignalResult result) { return result == null ? 0 : result.getSignalScore(); }
+
+    private boolean isV20Enabled() { return scannerProperties.getV20() != null && Boolean.TRUE.equals(scannerProperties.getV20().getEnabled()); }
 
     public int calculateLongScore(CoinScoringInput input, List<ReasonTag> reasons, List<ReasonTag> warnings) {
         int trendScore = 0;

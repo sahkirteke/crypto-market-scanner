@@ -22,13 +22,20 @@ import org.springframework.web.bind.annotation.RestController;
 public class AnalysisController {
     private final ResultAnalyzerService resultAnalyzerService;
     private final ForwardMetricsService forwardMetricsService;
+    private final com.crypto.analysis.service.V20AnalysisSummaryService v20AnalysisSummaryService;
+    private final com.crypto.scanner.config.ScannerProperties scannerProperties;
 
     @GetMapping("/summary")
-    public StrategyAnalysisResponse getSummary(
+    public Object getSummary(
             @RequestParam(required = false) Integer limit,
             @RequestParam(required = false) String start,
             @RequestParam(required = false) String end
     ) {
+        if (scannerProperties.getV20() != null && Boolean.TRUE.equals(scannerProperties.getV20().getEnabled())) {
+            Instant startInstant = start == null ? null : parseInstant(start, "start");
+            Instant endInstant = end == null ? null : parseInstant(end, "end");
+            return v20AnalysisSummaryService.summary(limit, startInstant, endInstant);
+        }
         if (start != null || end != null) {
             if (start == null || end == null) {
                 throw new BadRequestException("Both start and end must be provided for range analysis");

@@ -130,7 +130,9 @@ class CoinScoringServiceTest {
     }
 
     private CoinScoringService service() {
-        return new CoinScoringService(new ScannerProperties());
+        ScannerProperties properties = new ScannerProperties();
+        properties.getV20().setEnabled(false);
+        return new CoinScoringService(properties);
     }
 
     private CoinScoringInput neutralInput(MarketRegime marketRegime) {

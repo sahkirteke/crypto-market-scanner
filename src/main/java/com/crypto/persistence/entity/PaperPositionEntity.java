@@ -49,6 +49,9 @@ public class PaperPositionEntity {
     @Column(name = "source_candidate_id")
     private Long sourceCandidateId;
 
+    @Column(name = "strategy_version", length = 32)
+    private String strategyVersion;
+
     @Column(name = "entry_close_1h", precision = 30, scale = 12)
     private BigDecimal entryClose1h;
 
@@ -87,6 +90,15 @@ public class PaperPositionEntity {
 
     @Column(name = "quantity", nullable = false, precision = 30, scale = 12)
     private BigDecimal quantity;
+
+    @Column(name = "margin_usdt", precision = 30, scale = 8)
+    private BigDecimal marginUsdt;
+
+    @Column(name = "leveraged_notional_usdt", precision = 30, scale = 8)
+    private BigDecimal leveragedNotionalUsdt;
+
+    @Column(name = "unleveraged_notional_usdt", precision = 30, scale = 8)
+    private BigDecimal unleveragedNotionalUsdt;
 
     @Column(name = "notional_usdt", nullable = false, precision = 30, scale = 8)
     private BigDecimal notionalUsdt;
@@ -155,6 +167,51 @@ public class PaperPositionEntity {
     @Column(name = "funding_rate", precision = 20, scale = 10)
     private BigDecimal fundingRate;
 
+    @Column(name = "funding_ma3", precision = 20, scale = 10)
+    private BigDecimal fundingMa3;
+
+    @Column(name = "one_hour_taker_buy_ratio", precision = 20, scale = 8)
+    private BigDecimal oneHourTakerBuyRatio;
+
+    @Column(name = "four_hour_taker_buy_ratio", precision = 20, scale = 8)
+    private BigDecimal fourHourTakerBuyRatio;
+
+    @Column(name = "dist_from_low20_pct", precision = 20, scale = 8)
+    private BigDecimal distFromLow20Pct;
+
+    @Column(name = "dist_from_high20_pct", precision = 20, scale = 8)
+    private BigDecimal distFromHigh20Pct;
+
+    @Column(name = "di_diff", precision = 20, scale = 8)
+    private BigDecimal diDiff;
+
+    @Column(name = "rsi14", precision = 20, scale = 8)
+    private BigDecimal rsi14;
+
+    @Column(name = "adx14", precision = 20, scale = 8)
+    private BigDecimal adx14;
+
+    @Column(name = "atr_pct", precision = 20, scale = 8)
+    private BigDecimal atrPct;
+
+    @Column(name = "ema20_ema50_comp_pct", precision = 20, scale = 8)
+    private BigDecimal ema20Ema50CompPct;
+
+    @Column(name = "close_ema20_dist_pct", precision = 20, scale = 8)
+    private BigDecimal closeEma20DistPct;
+
+    @Column(name = "bb_position", precision = 20, scale = 8)
+    private BigDecimal bbPosition;
+
+    @Column(name = "close_position", precision = 20, scale = 8)
+    private BigDecimal closePosition;
+
+    @Column(name = "volume_ratio20", precision = 20, scale = 8)
+    private BigDecimal volumeRatio20;
+
+    @Column(name = "range_pct", precision = 20, scale = 8)
+    private BigDecimal rangePct;
+
     @Column(name = "open_interest", precision = 30, scale = 8)
     private BigDecimal openInterest;
 
@@ -178,6 +235,15 @@ public class PaperPositionEntity {
 
     @Column(name = "warnings_json", columnDefinition = "TEXT")
     private String warningsJson;
+
+    @Column(name = "v20_signal_snapshot_json", columnDefinition = "TEXT")
+    private String v20SignalSnapshotJson;
+
+    @Column(name = "quality_status", length = 32)
+    private String qualityStatus;
+
+    @Column(name = "quality_score", precision = 20, scale = 8)
+    private BigDecimal qualityScore;
 
     @Column(name = "opened_at", nullable = false)
     private Instant openedAt;
@@ -206,6 +272,12 @@ public class PaperPositionEntity {
 
     @Column(name = "tp1", precision = 30, scale = 12)
     private BigDecimal tp1;
+
+    @Column(name = "take_profit_price", precision = 30, scale = 12)
+    private BigDecimal takeProfitPrice;
+
+    @Column(name = "stop_loss_price", precision = 30, scale = 12)
+    private BigDecimal stopLossPrice;
 
     @Column(name = "tp2", precision = 30, scale = 12)
     private BigDecimal tp2;
@@ -248,6 +320,69 @@ public class PaperPositionEntity {
 
     @Column(name = "leveraged_net_realized_pnl_pct", precision = 20, scale = 8)
     private BigDecimal leveragedNetRealizedPnlPct;
+
+    @Column(name = "raw_pnl_pct", precision = 20, scale = 8)
+    private BigDecimal rawPnlPct;
+
+    @Column(name = "unleveraged_raw_pnl_usdt", precision = 30, scale = 8)
+    private BigDecimal unleveragedRawPnlUsdt;
+
+    @Column(name = "unleveraged_entry_fee_usdt", precision = 30, scale = 8)
+    private BigDecimal unleveragedEntryFeeUsdt;
+
+    @Column(name = "unleveraged_exit_fee_usdt", precision = 30, scale = 8)
+    private BigDecimal unleveragedExitFeeUsdt;
+
+    @Column(name = "unleveraged_total_fee_usdt", precision = 30, scale = 8)
+    private BigDecimal unleveragedTotalFeeUsdt;
+
+    @Column(name = "unleveraged_net_pnl_usdt", precision = 30, scale = 8)
+    private BigDecimal unleveragedNetPnlUsdt;
+
+    @Column(name = "unleveraged_net_pnl_pct", precision = 20, scale = 8)
+    private BigDecimal unleveragedNetPnlPct;
+
+    @Column(name = "leveraged_raw_pnl_usdt", precision = 30, scale = 8)
+    private BigDecimal leveragedRawPnlUsdt;
+
+    @Column(name = "leveraged_entry_fee_usdt", precision = 30, scale = 8)
+    private BigDecimal leveragedEntryFeeUsdt;
+
+    @Column(name = "leveraged_exit_fee_usdt", precision = 30, scale = 8)
+    private BigDecimal leveragedExitFeeUsdt;
+
+    @Column(name = "leveraged_total_fee_usdt", precision = 30, scale = 8)
+    private BigDecimal leveragedTotalFeeUsdt;
+
+    @Column(name = "leveraged_net_pnl_usdt", precision = 30, scale = 8)
+    private BigDecimal leveragedNetPnlUsdt;
+
+    @Column(name = "leveraged_net_pnl_pct", precision = 20, scale = 8)
+    private BigDecimal leveragedNetPnlPct;
+
+    @Column(name = "slippage_pct", precision = 20, scale = 8)
+    private BigDecimal slippagePct;
+
+    @Column(name = "fee_rate", precision = 20, scale = 8)
+    private BigDecimal feeRate;
+
+    @Column(name = "fee_mode", length = 16)
+    private String feeMode;
+
+    @Column(name = "gross_pnl_usdt", precision = 30, scale = 8)
+    private BigDecimal grossPnlUsdt;
+
+    @Column(name = "entry_fee_usdt", precision = 30, scale = 8)
+    private BigDecimal entryFeeUsdt;
+
+    @Column(name = "exit_fee_usdt", precision = 30, scale = 8)
+    private BigDecimal exitFeeUsdt;
+
+    @Column(name = "total_fee_usdt", precision = 30, scale = 8)
+    private BigDecimal totalFeeUsdt;
+
+    @Column(name = "net_pnl_usdt", precision = 30, scale = 8)
+    private BigDecimal netPnlUsdt;
 
     @Column(name = "raw_unrealized_pnl_pct", precision = 20, scale = 8)
     private BigDecimal rawUnrealizedPnlPct;

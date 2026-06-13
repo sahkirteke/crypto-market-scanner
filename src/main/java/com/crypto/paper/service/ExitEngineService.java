@@ -9,6 +9,8 @@ import com.crypto.common.time.IstanbulTimeUtil;
 import com.crypto.domain.model.Kline;
 import com.crypto.domain.model.TechnicalSnapshot;
 import com.crypto.paper.log.SymbolTradeJsonlLogService;
+import com.crypto.paper.log.V20PaperJsonlLogService;
+import com.crypto.paper.model.V20PnlResult;
 import com.crypto.paper.log.SymbolTradeJsonlLogService.PaperExitContext;
 import com.crypto.paper.model.KlineCandle;
 import com.crypto.paper.model.PaperExitEvaluationResult;
@@ -49,6 +51,7 @@ public class ExitEngineService {
     private final PaperPositionRepository paperPositionRepository;
     private final BinanceFuturesClient binanceFuturesClient;
     private final ScannerProperties scannerProperties;
+    private final V20PnlCalculator v20PnlCalculator;
 
     @Autowired(required = false) private PaperPositionEventRepository eventRepository;
     @Autowired(required = false) private JsonlDecisionLogService jsonlDecisionLogService;
@@ -57,9 +60,14 @@ public class ExitEngineService {
     @Autowired(required = false) private CoinScanResultRepository coinScanResultRepository;
     @Autowired(required = false) private ObjectMapper objectMapper;
     @Autowired(required = false) private SymbolTradeJsonlLogService symbolTradeJsonlLogService;
+    @Autowired(required = false) private V20PaperJsonlLogService v20PaperJsonlLogService;
 
     private int lastEvaluationEventCount;
     private int lastEvaluationSkippedErrors;
+
+    public ExitEngineService(PaperPositionRepository paperPositionRepository, BinanceFuturesClient binanceFuturesClient, ScannerProperties scannerProperties) {
+        this(paperPositionRepository, binanceFuturesClient, scannerProperties, new V20PnlCalculator(scannerProperties));
+    }
 
     public List<PaperPositionEntity> evaluateOpenPositions() {
         if (!booleanValue(paperExitConfig().getEnabled(), true)) {
@@ -67,7 +75,9 @@ public class ExitEngineService {
             return List.of();
         }
         lastEvaluationSkippedErrors = 0;
-        List<PaperPositionEntity> openPositions = paperPositionRepository.findByStatusInOrderByOpenedAtDesc(activeStatuses());
+        List<PaperPositionEntity> openPositions = Boolean.TRUE.equals(scannerProperties.getV20().getEnabled())
+                ? paperPositionRepository.findByStatusAndStrategyVersionOrderByOpenedAtDesc(PaperPositionStatus.OPEN, "V20")
+                : paperPositionRepository.findByStatusInOrderByOpenedAtDesc(activeStatuses());
         List<PaperPositionEntity> evaluated = new ArrayList<>();
         for (PaperPositionEntity position : openPositions) {
             PaperPositionEntity evaluatedPosition = evaluateWithLastClosedCandle(position);
@@ -92,12 +102,15 @@ public class ExitEngineService {
                     .closedPositions(List.of())
                     .build();
         }
+        boolean v20Enabled = scannerProperties.getV20() != null && Boolean.TRUE.equals(scannerProperties.getV20().getEnabled());
         String effectiveInterval = interval == null || interval.isBlank()
-                ? defaultString(paperExitConfig().getIntrabarInterval(), "5m")
+                ? (v20Enabled ? defaultString(scannerProperties.getIntrabarExit().getInterval(), "5m") : defaultString(paperExitConfig().getIntrabarInterval(), "5m"))
                 : interval;
-        int limit = Math.max(1, intValue(paperExitConfig().getIntrabarKlineLimit(), 3));
+        int limit = Math.max(1, intValue(v20Enabled ? scannerProperties.getIntrabarExit().getKlineLimit() : paperExitConfig().getIntrabarKlineLimit(), 3));
         lastEvaluationEventCount = 0;
-        List<PaperPositionEntity> openPositions = paperPositionRepository.findByStatusInOrderByOpenedAtDesc(activeStatuses());
+        List<PaperPositionEntity> openPositions = Boolean.TRUE.equals(scannerProperties.getV20().getEnabled())
+                ? paperPositionRepository.findByStatusAndStrategyVersionOrderByOpenedAtDesc(PaperPositionStatus.OPEN, "V20")
+                : paperPositionRepository.findByStatusInOrderByOpenedAtDesc(activeStatuses());
         List<PaperPositionEntity> closedPositions = new ArrayList<>();
         int checked = 0;
         int skippedErrors = 0;
@@ -159,6 +172,10 @@ public class ExitEngineService {
             return position;
         }
 
+        if (isV20(position)) {
+            return evaluateV20PositionWithCandle(position, candle, effectiveInterval);
+        }
+
         Instant now = Instant.now();
         updatePricePath(position, candle.getHigh(), candle.getLow(), candle.getClose());
         updateHoldingDuration(position, now);
@@ -215,6 +232,180 @@ public class ExitEngineService {
         return position;
     }
 
+
+    private PaperPositionEntity evaluateV20PositionWithCandle(PaperPositionEntity position, KlineCandle candle, String interval) {
+        Instant now = Instant.now();
+        updatePricePath(position, candle.getHigh(), candle.getLow(), candle.getClose());
+        updateHoldingDuration(position, now);
+        position.setBarsInPosition(intValue(position.getBarsInPosition(), 0) + 1);
+        position.setLastCheckedAt(now);
+        position.setLastExitCandleCloseTime(candle.getCloseTime());
+        log.info("PAPER_POSITION_EVALUATED symbol={} side={} candleHigh={} candleLow={}",
+                position.getSymbol(), position.getSide(), candle.getHigh(), candle.getLow());
+
+        V20ExitHit hit = v20ExitHit(position, candle.getHigh(), candle.getLow());
+        if (hit == null) {
+            updateUnrealized(position, candle.getClose());
+            return position;
+        }
+        closeV20(position, hit.exitPrice(), hit.reason(), candle, interval, hit.conservativeStopFirstApplied());
+        return position;
+    }
+
+    private V20ExitHit v20ExitHit(PaperPositionEntity position, BigDecimal high, BigDecimal low) {
+        BigDecimal stop = position.getStopLossPrice();
+        BigDecimal takeProfit = position.getTakeProfitPrice();
+        if (position.getSide() == PositionSide.SHORT) {
+            boolean stopHit = ge(high, stop);
+            boolean tpHit = le(low, takeProfit);
+            if (stopHit) return new V20ExitHit(PaperExitReason.STOP_LOSS, stop, tpHit);
+            if (tpHit) return new V20ExitHit(PaperExitReason.TAKE_PROFIT, takeProfit, false);
+            return null;
+        }
+        boolean stopHit = le(low, stop);
+        boolean tpHit = ge(high, takeProfit);
+        if (stopHit) return new V20ExitHit(PaperExitReason.STOP_LOSS, stop, tpHit);
+        if (tpHit) return new V20ExitHit(PaperExitReason.TAKE_PROFIT, takeProfit, false);
+        return null;
+    }
+
+    private void closeV20(PaperPositionEntity p, BigDecimal exitPrice, PaperExitReason reason, KlineCandle candle, String interval, boolean conservativeStopFirstApplied) {
+        BigDecimal margin = defaultBigDecimal(p.getMarginUsdt(), v20PnlCalculator.marginUsdt());
+        BigDecimal unleveragedQuantity = margin.divide(p.getEntryPrice(), 12, RoundingMode.DOWN);
+        BigDecimal leveragedQuantity = defaultBigDecimal(p.getQuantity(), v20PnlCalculator.leveragedNotionalUsdt().divide(p.getEntryPrice(), 12, RoundingMode.DOWN));
+        V20PnlResult pnl = v20PnlCalculator.calculate(p.getSide(), p.getEntryPrice(), exitPrice, unleveragedQuantity, leveragedQuantity);
+
+        p.setStatus(PaperPositionStatus.CLOSED);
+        p.setClosedAt(correctedCloseTime(p, candle.getCloseTime()));
+        p.setExitPrice(exitPrice);
+        p.setEntryPriceAdjusted(pnl.entryPriceAdjusted());
+        p.setExitPriceAdjusted(pnl.exitPriceAdjusted());
+        p.setExitReason(reason.name());
+        p.setExitDetail("V20 single TP/SL exit reason=" + reason.name());
+        p.setRawPnlPct(pnl.rawPnlPct());
+        p.setRawRealizedPnlPct(pnl.rawPnlPct());
+        p.setNetRealizedPnlPct(pnl.leveragedNetPnlPct());
+        p.setLeveragedNetRealizedPnlPct(pnl.leveragedNetPnlPct());
+        p.setRealizedPnlPct(pnl.leveragedNetPnlPct());
+        p.setUnleveragedNotionalUsdt(pnl.unleveragedNotionalUsdt());
+        p.setLeveragedNotionalUsdt(pnl.leveragedNotionalUsdt());
+        p.setMarginUsdt(pnl.unleveragedNotionalUsdt());
+        p.setUnleveragedRawPnlUsdt(pnl.unleveragedRawPnlUsdt());
+        p.setUnleveragedEntryFeeUsdt(pnl.unleveragedEntryFeeUsdt());
+        p.setUnleveragedExitFeeUsdt(pnl.unleveragedExitFeeUsdt());
+        p.setUnleveragedTotalFeeUsdt(pnl.unleveragedTotalFeeUsdt());
+        p.setUnleveragedNetPnlUsdt(pnl.unleveragedNetPnlUsdt());
+        p.setUnleveragedNetPnlPct(pnl.unleveragedNetPnlPct());
+        p.setLeveragedRawPnlUsdt(pnl.leveragedRawPnlUsdt());
+        p.setLeveragedEntryFeeUsdt(pnl.leveragedEntryFeeUsdt());
+        p.setLeveragedExitFeeUsdt(pnl.leveragedExitFeeUsdt());
+        p.setLeveragedTotalFeeUsdt(pnl.leveragedTotalFeeUsdt());
+        p.setLeveragedNetPnlUsdt(pnl.leveragedNetPnlUsdt());
+        p.setLeveragedNetPnlPct(pnl.leveragedNetPnlPct());
+        p.setFeeRate(pnl.feeRate());
+        p.setFeeMode(pnl.feeMode());
+        p.setSlippagePct(pnl.slippagePct());
+        p.setGrossPnlUsdt(pnl.leveragedRawPnlUsdt());
+        p.setEntryFeeUsdt(pnl.leveragedEntryFeeUsdt());
+        p.setExitFeeUsdt(pnl.leveragedExitFeeUsdt());
+        p.setTotalFeeUsdt(pnl.leveragedTotalFeeUsdt());
+        p.setNetPnlUsdt(pnl.leveragedNetPnlUsdt());
+        p.setRealizedPnlUsdt(pnl.leveragedNetPnlUsdt());
+        p.setRemainingPositionPct(BigDecimal.ZERO);
+        p.setTp1Hit(false);
+        p.setTp2Hit(false);
+        p.setTrailingActive(false);
+        writeEvent(p, PaperPositionEventType.valueOf(reason.name()), p.getClosedAt(), exitPrice, pnl.exitPriceAdjusted(), ONE_HUNDRED, null, reason.name(), new IntrabarEventContext(p, candle, interval));
+        writeEvent(p, PaperPositionEventType.CLOSED, p.getClosedAt(), exitPrice, pnl.exitPriceAdjusted(), ONE_HUNDRED, null, reason.name(), new IntrabarEventContext(p, candle, interval));
+        writeV20ClosedLog(p, candle, conservativeStopFirstApplied);
+        log.info("POSITION_CLOSED symbol={} side={} reason={} netPnlUsdt={}", p.getSymbol(), p.getSide(), reason, pnl.leveragedNetPnlUsdt());
+    }
+
+    private void writeV20ClosedLog(PaperPositionEntity p, KlineCandle candle, boolean conservativeStopFirstApplied) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("eventType", "POSITION_CLOSED");
+        payload.put("event", "POSITION_CLOSED");
+        payload.put("timeTr", v20PaperJsonlLogService == null ? p.getClosedAt() : v20PaperJsonlLogService.formatTr(p.getClosedAt()));
+        payload.put("strategyVersion", "V20");
+        payload.put("positionId", p.getId());
+        payload.put("symbol", p.getSymbol());
+        payload.put("side", p.getSide().name());
+        payload.put("exitReason", p.getExitReason());
+        payload.put("entryPrice", p.getEntryPrice());
+        payload.put("exitPrice", p.getExitPrice());
+        payload.put("entryPriceAdjusted", p.getEntryPriceAdjusted());
+        payload.put("exitPriceAdjusted", p.getExitPriceAdjusted());
+        payload.put("marginUsdt", p.getMarginUsdt());
+        payload.put("leverage", p.getLeverage());
+        payload.put("leveragedNotionalUsdt", p.getLeveragedNotionalUsdt());
+        payload.put("unleveragedNotionalUsdt", p.getUnleveragedNotionalUsdt());
+        payload.put("quantity", p.getQuantity());
+        payload.put("notionalUsdt", p.getNotionalUsdt());
+        payload.put("feeMode", p.getFeeMode());
+        payload.put("feeRate", p.getFeeRate());
+        payload.put("slippagePct", p.getSlippagePct());
+        payload.put("takeProfitPrice", p.getTakeProfitPrice());
+        payload.put("stopLossPrice", p.getStopLossPrice());
+        payload.put("rawPnlPct", p.getRawPnlPct());
+        payload.put("unleveragedRawPnlUsdt", p.getUnleveragedRawPnlUsdt());
+        payload.put("unleveragedEntryFeeUsdt", p.getUnleveragedEntryFeeUsdt());
+        payload.put("unleveragedExitFeeUsdt", p.getUnleveragedExitFeeUsdt());
+        payload.put("unleveragedTotalFeeUsdt", p.getUnleveragedTotalFeeUsdt());
+        payload.put("unleveragedNetPnlUsdt", p.getUnleveragedNetPnlUsdt());
+        payload.put("unleveragedNetPnlPct", p.getUnleveragedNetPnlPct());
+        payload.put("leveragedRawPnlUsdt", p.getLeveragedRawPnlUsdt());
+        payload.put("leveragedEntryFeeUsdt", p.getLeveragedEntryFeeUsdt());
+        payload.put("leveragedExitFeeUsdt", p.getLeveragedExitFeeUsdt());
+        payload.put("leveragedTotalFeeUsdt", p.getLeveragedTotalFeeUsdt());
+        payload.put("leveragedNetPnlUsdt", p.getLeveragedNetPnlUsdt());
+        payload.put("leveragedNetPnlPct", p.getLeveragedNetPnlPct());
+        payload.put("candleHigh", candle.getHigh());
+        payload.put("candleLow", candle.getLow());
+        payload.put("candleClose", candle.getClose());
+        payload.put("candleCloseTimeTr", v20PaperJsonlLogService == null ? candle.getCloseTime() : v20PaperJsonlLogService.formatTr(candle.getCloseTime()));
+        payload.put("conservativeStopFirstApplied", conservativeStopFirstApplied);
+        payload.put("signalScore", p.getEntrySignalScore());
+        payload.put("fundingRate", p.getFundingRate());
+        payload.put("fundingMa3", p.getFundingMa3());
+        payload.put("oneHourTakerBuyRatio", p.getOneHourTakerBuyRatio());
+        payload.put("fourHourTakerBuyRatio", p.getFourHourTakerBuyRatio());
+        payload.put("distFromLow20Pct", p.getDistFromLow20Pct());
+        payload.put("distFromHigh20Pct", p.getDistFromHigh20Pct());
+        payload.put("diDiff", p.getDiDiff());
+        payload.put("rsi14", p.getRsi14());
+        payload.put("adx14", p.getAdx14());
+        payload.put("atrPct", p.getAtrPct());
+        payload.put("bbPosition", p.getBbPosition());
+        payload.put("closePosition", p.getClosePosition());
+        payload.put("volumeRatio20", p.getVolumeRatio20());
+        payload.put("rangePct", p.getRangePct());
+        payload.put("qualityStatus", p.getQualityStatus());
+        payload.put("qualityScore", p.getQualityScore());
+        payload.put("v20SignalSnapshot", p.getV20SignalSnapshotJson());
+        if (jsonlDecisionLogService != null) {
+            jsonlDecisionLogService.logPaper(payload);
+        }
+        if (v20PaperJsonlLogService != null) {
+            v20PaperJsonlLogService.log(payload);
+        }
+    }
+
+    private BigDecimal adjustedEntry(PositionSide side, BigDecimal price) {
+        BigDecimal slip = costConfig().getSlippagePct();
+        return side == PositionSide.SHORT ? price.multiply(BigDecimal.ONE.subtract(slip)) : price.multiply(BigDecimal.ONE.add(slip));
+    }
+
+    private BigDecimal rawPnlPctFromAdjusted(PositionSide side, BigDecimal entryAdjusted, BigDecimal exitAdjusted) {
+        BigDecimal numerator = side == PositionSide.SHORT ? entryAdjusted.subtract(exitAdjusted) : exitAdjusted.subtract(entryAdjusted);
+        return numerator.divide(entryAdjusted, PCT_SCALE + 4, RoundingMode.HALF_UP).multiply(ONE_HUNDRED).setScale(PCT_SCALE, RoundingMode.HALF_UP);
+    }
+
+    private boolean isV20(PaperPositionEntity position) {
+        return position != null && "V20".equalsIgnoreCase(position.getStrategyVersion());
+    }
+
+    private record V20ExitHit(PaperExitReason reason, BigDecimal exitPrice, boolean conservativeStopFirstApplied) {}
+
     public PaperPositionEntity evaluatePosition(PaperPositionEntity position, BigDecimal currentPrice) {
         if (currentPrice == null) {
             log.warn("PAPER_EXIT_PRICE_MISSING symbol={}", position.getSymbol());
@@ -234,6 +425,17 @@ public class ExitEngineService {
         if (shouldSkipCandleBeforePositionOpened(position, candleOpenTime, candleCloseTime, "1h")) {
             return position;
         }
+        if (isV20(position)) {
+            return evaluateV20PositionWithCandle(position, KlineCandle.builder()
+                    .openTime(candleOpenTime)
+                    .closeTime(candleCloseTime)
+                    .high(candleHigh)
+                    .low(candleLow)
+                    .close(candleClose)
+                    .interval("1h")
+                    .build(), "1h");
+        }
+
         Instant now = Instant.now();
         updatePricePath(position, candleHigh, candleLow, candleClose);
         updateHoldingDuration(position, now);
@@ -811,7 +1013,12 @@ public class ExitEngineService {
             payload.put("exitPrice", price == null ? "" : price);
             payload.put("exitReason", reason == null ? "" : reason);
             payload.putAll(details);
+            if (jsonlDecisionLogService != null) {
             jsonlDecisionLogService.logPaper(payload);
+        }
+        if (v20PaperJsonlLogService != null) {
+            v20PaperJsonlLogService.log(payload);
+        }
         }
     }
 

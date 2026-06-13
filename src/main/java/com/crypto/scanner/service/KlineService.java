@@ -109,7 +109,7 @@ public class KlineService {
         return klines.stream()
                 .filter(kline -> kline != null && kline.getCloseTime() != null)
                 .filter(kline -> !kline.getCloseTime().isAfter(now))
-                .filter(kline -> !Boolean.FALSE.equals(kline.getClosed()))
+                .filter(kline -> Boolean.TRUE.equals(kline.getClosed()))
                 .toList();
     }
 

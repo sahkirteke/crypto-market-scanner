@@ -13,6 +13,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface PaperPositionRepository extends JpaRepository<PaperPositionEntity, Long> {
     List<PaperPositionEntity> findByStatusOrderByOpenedAtDesc(PaperPositionStatus status);
 
+    List<PaperPositionEntity> findByStatusAndStrategyVersionOrderByOpenedAtDesc(PaperPositionStatus status, String strategyVersion);
+
     List<PaperPositionEntity> findByStatusInOrderByOpenedAtDesc(List<PaperPositionStatus> statuses);
 
     List<PaperPositionEntity> findByStatus(PaperPositionStatus status);

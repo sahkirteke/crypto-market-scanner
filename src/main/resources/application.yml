@@ -30,6 +30,7 @@ binance:
 
 scanner:
   safe-mode: true
+  strategy-version: V20
   blacklist: []
 
   scheduler:
@@ -77,6 +78,103 @@ scanner:
     eliminated-threshold: 50
     direction-difference-threshold: 10
 
+  v20:
+    enabled: true
+    entry-mode: immediate
+    allow-multiple-entries-per-scan: true
+    max-new-entries-per-scan: null
+    max-open-long-positions: null
+    max-open-short-positions: null
+    prevent-same-symbol-opposite-position: true
+    disable-layer2-filters-by-default: true
+    disable-v18-early-exit: true
+    disable-v19-market-regime-short-filter: true
+    long:
+      min-signal-score: 9
+      rsi-min: 38
+      rsi-max: 62
+      adx-min: 16
+      adx-max: 38
+      atr-pct-min: 1.2
+      atr-pct-max: 3.4
+      ema20-ema50-comp-pct-min: -3.0
+      ema20-ema50-comp-pct-max: 2.0
+      close-ema20-dist-pct-min: -3.0
+      close-ema20-dist-pct-max: 2.5
+      dist-from-low20-base-min-pct: 0.8
+      dist-from-low20-base-max-pct: 9.0
+      di-diff-base-min-exclusive: -12
+      four-hour-taker-buy-min-exclusive: 0.47
+      close-position-min-exclusive: 0.20
+      volume-ratio20-max: 2.0
+      range-pct-max: 4.2
+      funding-negative-threshold: -0.00002000
+      funding-positive-threshold: 0.00007500
+      one-hour-taker-buy-min-exclusive: 0.49
+      dist-from-low20-entry-min-pct: 0.5
+      dist-from-low20-entry-max-pct: 6.0
+      di-diff-entry-min: -5
+    short:
+      min-signal-score: 9
+      rsi-min: 38
+      rsi-max: 62
+      adx-min: 16
+      adx-max: 38
+      atr-pct-min: 1.2
+      atr-pct-max: 3.4
+      ema20-ema50-comp-pct-min: -2.0
+      ema20-ema50-comp-pct-max: 3.0
+      close-ema20-dist-pct-min: -2.5
+      close-ema20-dist-pct-max: 3.0
+      dist-from-high20-base-min-pct: 0.8
+      dist-from-high20-base-max-pct: 9.0
+      di-diff-base-max-exclusive: 12
+      four-hour-taker-buy-max-exclusive: 0.53
+      close-position-max-exclusive: 0.80
+      volume-ratio20-max: 2.0
+      range-pct-max: 4.2
+      funding-negative-threshold: -0.00007500
+      funding-positive-threshold: 0.00002000
+      one-hour-taker-buy-max-exclusive: 0.51
+      dist-from-high20-entry-min-pct: 0.5
+      dist-from-high20-entry-max-pct: 6.0
+      di-diff-entry-max: 5
+      funding-ma3-min: 0.000075
+      four-hour-taker-buy-entry-max: 0.47
+    score:
+      min-signal-score: 9
+      adx-ideal-min: 18
+      adx-ideal-max: 32
+      atr-ideal-min: 1.4
+      atr-ideal-max: 3.0
+      volume-ratio-ideal-min: 0.50
+      volume-ratio-ideal-max: 1.50
+      range-pct-low-max: 3.2
+      long:
+        dist-low20-ideal-min-pct: 1.0
+        dist-low20-ideal-max-pct: 7.0
+        close-position-ideal-min: 0.25
+        close-position-ideal-max: 0.85
+        bb-position-ideal-min: 0.25
+        bb-position-ideal-max: 0.80
+        funding-ma3-positive-support: 0.000055
+        funding-ma3-negative-support: -0.00002000
+        one-hour-strong-taker-min: 0.51
+        one-hour-close-position-ideal-min: 0.30
+        one-hour-close-position-ideal-max: 0.85
+      short:
+        dist-high20-ideal-min-pct: 1.0
+        dist-high20-ideal-max-pct: 7.0
+        close-position-ideal-min: 0.15
+        close-position-ideal-max: 0.75
+        bb-position-ideal-min: 0.20
+        bb-position-ideal-max: 0.75
+        funding-ma3-positive-support: 0.00002000
+        funding-ma3-negative-support: -0.000055
+        one-hour-strong-taker-buy-max: 0.49
+        one-hour-close-position-ideal-min: 0.15
+        one-hour-close-position-ideal-max: 0.70
+
   entry-candidate:
     enabled: true
     max-candidates: 10
@@ -103,8 +201,20 @@ scanner:
 
   paper:
     enabled: true
-    default-notional-usdt: 100
-    leverage: 3
+    strategy-version: V20
+    margin-usdt: 100
+    leverage: 5
+    position-notional-usdt: 500
+    notional-usdt: 500
+    default-notional-usdt: 500
+    pnl:
+      write-unleveraged-and-leveraged: true
+    fee:
+      mode: MAKER
+      maker-fee-pct: 0.0002
+      taker-fee-pct: 0.0004
+      slippage-pct: 0.0005
+      log-zone: Europe/Istanbul
     allow-multiple-open-same-symbol: false
     max-open-positions: 5
     max-open-long-positions: 3
@@ -125,9 +235,31 @@ scanner:
     trailing-atr-multiplier: 1.2
 
   paper-cost:
-    leverage: 3
+    leverage: 5
     taker-fee-pct: 0.0004
+    maker-fee-pct: 0.0002
     slippage-pct: 0.0005
+
+  single-tp-sl:
+    enabled: true
+    long-tp-pct: 0.0200
+    long-sl-pct: 0.0140
+    short-tp-pct: 0.0200
+    short-sl-pct: 0.0140
+    conservative-stop-first: true
+
+  trailing:
+    enabled: false
+
+  partial-take-profit:
+    enabled: false
+
+  intrabar-exit:
+    enabled: true
+    interval: "5m"
+    cron: "10 */5 * * * *"
+    zone: "Europe/Istanbul"
+    kline-limit: 3
 
   paper-exit:
     enabled: true
@@ -149,3 +281,5 @@ logging:
     reactor.netty.resources.DefaultPooledConnectionProvider: ERROR
     reactor.netty.channel.FluxReceive: ERROR
     org.springframework.web.reactive.function.client.ExchangeFunctions: ERROR
+# V20 = LONG v14 base + SHORT v17_2 final. Taker ratio standard uses takerBuyBaseVolume / volume.
+# If base volume is unavailable/zero the V20 signal evaluator returns DATA_NOT_READY.
