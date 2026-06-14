@@ -114,7 +114,7 @@ public class PaperPositionService {
         if (signal.getSide() == null) {
             return reject(signal, "SIDE_MISSING");
         }
-        if (signal.getEntryPrice() == null || signal.getEntryPrice().compareTo(BigDecimal.ZERO) <= 0) {
+        if (!isV20Enabled() && (signal.getEntryPrice() == null || signal.getEntryPrice().compareTo(BigDecimal.ZERO) <= 0)) {
             return reject(signal, "INVALID_ENTRY_PRICE");
         }
         if (signal.getScanRunId() == null) {
@@ -158,7 +158,7 @@ public class PaperPositionService {
         }
 
         BookTicker bookTicker = resolveBookTicker(signal);
-        if (bookTicker == null && binanceFuturesClient != null) {
+        if (bookTicker == null && (isV20Enabled() || binanceFuturesClient != null)) {
             return reject(signal, "MISSING_BOOK_TICKER");
         }
         BigDecimal entryPrice = bookTicker == null ? signal.getEntryPrice() : bookTicker.getMidPrice();
@@ -590,9 +590,7 @@ public class PaperPositionService {
                 && !signal.getSymbol().isBlank()
                 && signal.getSide() != null
                 && isStrongSignal(signal)
-                && signal.getScore() != null
-                && signal.getEntryPrice() != null
-                && signal.getEntryPrice().compareTo(BigDecimal.ZERO) > 0;
+                && signal.getScore() != null;
     }
 
     private Object nullToEmpty(Object value) {

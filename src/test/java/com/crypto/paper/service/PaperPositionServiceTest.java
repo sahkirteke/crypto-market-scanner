@@ -16,6 +16,7 @@ import com.crypto.common.enums.RiskLevel;
 import com.crypto.common.enums.ScanType;
 import com.crypto.common.service.JsonlDecisionLogService;
 import com.crypto.binance.client.BinanceFuturesClient;
+import com.crypto.domain.model.BookTicker;
 import com.crypto.domain.model.EntrySignal;
 import com.crypto.paper.log.V20PaperJsonlLogService;
 import com.crypto.paper.model.PaperPositionStatus;
@@ -117,6 +118,7 @@ class PaperPositionServiceTest {
     @Test
     void v20PositionOpenedLogIsWrittenOnceAfterSaveWithPositionIdAndSnapshot() {
         scannerProperties.getV20().setEnabled(true);
+        mockBookTicker("BTCUSDT", "99", "101", "100");
         V20PaperJsonlLogService v20Log = mock(V20PaperJsonlLogService.class);
         ReflectionTestUtils.setField(service, "v20PaperJsonlLogService", v20Log);
         when(v20Log.formatTr(any())).thenReturn("2026-06-13T18:42:10.125+03:00");
@@ -159,14 +161,17 @@ class PaperPositionServiceTest {
     @Test
     void v20ImmediateEntryDoesNotRequireLegacyIndicators() {
         scannerProperties.getV20().setEnabled(true);
+        mockBookTicker("BTCUSDT", "99", "101", "100");
         V20PaperJsonlLogService v20Log = mock(V20PaperJsonlLogService.class);
         ReflectionTestUtils.setField(service, "v20PaperJsonlLogService", v20Log);
         when(v20Log.formatTr(any())).thenReturn("2026-06-13T18:42:10.125+03:00");
         EntrySignal signal = v20SignalWithoutLegacyIndicators("BTCUSDT", EntryAction.ENTER_LONG, PositionSide.LONG, "100");
+        signal.setEntryPrice(null);
 
         PaperPositionEntity opened = service.openPosition(signal);
 
         assertThat(opened).isNotNull();
+        assertThat(opened.getEntryPrice()).isEqualByComparingTo("100");
         verify(repository).save(any(PaperPositionEntity.class));
         verify(v20Log).log(any());
     }
@@ -209,6 +214,7 @@ class PaperPositionServiceTest {
         scannerProperties.getV20().setEnabled(true);
         V20PaperJsonlLogService v20Log = mock(V20PaperJsonlLogService.class);
         ReflectionTestUtils.setField(service, "v20PaperJsonlLogService", v20Log);
+        mockBookTicker("BTCUSDT", "999999999999999999999", "1000000000000000000001", "1000000000000000000000");
 
         PaperPositionEntity opened = service.openPosition(v20SignalWithoutLegacyIndicators("BTCUSDT", EntryAction.ENTER_LONG, PositionSide.LONG, "1000000000000000000000"));
 
@@ -387,6 +393,9 @@ class PaperPositionServiceTest {
     @Test
     void v20StrongCandidatesOpenMultiplePositionsInSameScan() {
         scannerProperties.getV20().setEnabled(true);
+        mockBookTicker("BTCUSDT", "99", "101", "100");
+        mockBookTicker("ETHUSDT", "99", "101", "100");
+        mockBookTicker("SOLUSDT", "99", "101", "100");
         V20PaperJsonlLogService v20Log = mock(V20PaperJsonlLogService.class);
         ReflectionTestUtils.setField(service, "v20PaperJsonlLogService", v20Log);
         when(v20Log.formatTr(any())).thenReturn("2026-06-13T18:42:10.125+03:00");
@@ -449,6 +458,29 @@ class PaperPositionServiceTest {
         signal.setShortScore(side == PositionSide.SHORT ? 9 : 0);
         signal.setSourceClassification(side == PositionSide.SHORT ? CoinClassification.STRONG_SHORT : CoinClassification.STRONG_LONG);
         return signal;
+    }
+
+    private void mockBookTicker(String symbol, String bid, String ask, String mid) {
+        BinanceFuturesClient client;
+        try {
+            client = (BinanceFuturesClient) ReflectionTestUtils.getField(service, "binanceFuturesClient");
+        } catch (IllegalArgumentException exception) {
+            client = null;
+        }
+        if (client == null) {
+            client = mock(BinanceFuturesClient.class);
+            ReflectionTestUtils.setField(service, "binanceFuturesClient", client);
+        }
+        List<BookTicker> existing = client.getAllBookTickers();
+        List<BookTicker> safeExisting = existing == null ? List.of() : existing;
+        List<BookTicker> tickers = new java.util.ArrayList<>(safeExisting);
+        tickers.add(BookTicker.builder()
+                .symbol(symbol)
+                .bidPrice(new BigDecimal(bid))
+                .askPrice(new BigDecimal(ask))
+                .midPrice(new BigDecimal(mid))
+                .build());
+        when(client.getAllBookTickers()).thenReturn(tickers);
     }
 
     private PaperPositionEntity position(PositionSide side) {
