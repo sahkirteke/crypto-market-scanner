@@ -4,6 +4,7 @@ import com.crypto.common.enums.CoinClassification;
 import com.crypto.common.enums.EntryAction;
 import com.crypto.common.enums.PositionSide;
 import com.crypto.common.enums.RiskLevel;
+import com.crypto.common.enums.ScanType;
 import com.crypto.binance.client.BinanceFuturesClient;
 import com.crypto.domain.model.BookTicker;
 import com.crypto.common.service.JsonlDecisionLogService;
@@ -77,6 +78,7 @@ public class PaperPositionService {
         List<EntrySignal> safeGeneratedSignals = generatedSignals == null ? List.of() : generatedSignals;
         List<EntrySignal> strongSignals = safeGeneratedSignals.stream()
                 .filter(this::isStrongSignal)
+                .filter(this::isV20EntryScanAllowed)
                 .toList();
         List<PaperPositionEntity> opened = openPositions(strongSignals);
         int openPositionsAfter = getOpenPositionsForValidation().size();
@@ -122,6 +124,9 @@ public class PaperPositionService {
         }
         if (signal.getSourceScanType() == null || signal.getSourceClassification() == null || signal.getCandidateId() == null) {
             return reject(signal, "SOURCE_METADATA_MISSING");
+        }
+        if (isV20Enabled() && signal.getSourceScanType() != ScanType.FOUR_HOUR) {
+            return reject(signal, "V20_ONLY_FOUR_HOUR_SCAN_ENTRY");
         }
         if (isV20Enabled()) {
             if (!hasRequiredV20EntryData(signal)) {
@@ -591,6 +596,10 @@ public class PaperPositionService {
                 && signal.getSide() != null
                 && isStrongSignal(signal)
                 && signal.getScore() != null;
+    }
+
+    private boolean isV20EntryScanAllowed(EntrySignal signal) {
+        return !isV20Enabled() || (signal != null && signal.getSourceScanType() == ScanType.FOUR_HOUR);
     }
 
     private Object nullToEmpty(Object value) {

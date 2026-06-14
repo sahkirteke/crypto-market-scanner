@@ -128,7 +128,7 @@ class PaperPositionServiceTest {
             return p;
         });
 
-        PaperPositionEntity opened = service.openPosition(signal("BTCUSDT", EntryAction.ENTER_LONG, PositionSide.LONG, "100", RiskLevel.LOW));
+        PaperPositionEntity opened = service.openPosition(v20SignalWithoutLegacyIndicators("BTCUSDT", EntryAction.ENTER_LONG, PositionSide.LONG, "100"));
 
         ArgumentCaptor<Map> captor = ArgumentCaptor.forClass(Map.class);
         verify(v20Log, Mockito.times(1)).log(captor.capture());
@@ -412,6 +412,32 @@ class PaperPositionServiceTest {
         verify(v20Log, Mockito.times(3)).log(any());
     }
 
+    @Test
+    void oneHourScanDoesNotOpenV20Position() {
+        scannerProperties.getV20().setEnabled(true);
+        mockBookTicker("BTCUSDT", "99", "101", "100");
+        EntrySignal signal = v20SignalWithoutLegacyIndicators("BTCUSDT", EntryAction.ENTER_LONG, PositionSide.LONG, "100");
+        signal.setSourceScanType(ScanType.ONE_HOUR);
+
+        PaperPositionEntity opened = service.openPosition(signal);
+
+        assertThat(opened).isNull();
+        verify(repository, never()).save(any(PaperPositionEntity.class));
+    }
+
+    @Test
+    void fourHourScanCanOpenV20Position() {
+        scannerProperties.getV20().setEnabled(true);
+        mockBookTicker("BTCUSDT", "99", "101", "100");
+        EntrySignal signal = v20SignalWithoutLegacyIndicators("BTCUSDT", EntryAction.ENTER_LONG, PositionSide.LONG, "100");
+
+        PaperPositionEntity opened = service.openPosition(signal);
+
+        assertThat(opened).isNotNull();
+        assertThat(opened.getSourceScanType()).isEqualTo(ScanType.FOUR_HOUR);
+        verify(repository).save(any(PaperPositionEntity.class));
+    }
+
     private EntrySignal signal(String symbol, EntryAction action, PositionSide side, String entryPrice, RiskLevel riskLevel) {
         return EntrySignal.builder()
                 .scanRunId(77L)
@@ -447,6 +473,7 @@ class PaperPositionServiceTest {
     private EntrySignal v20SignalWithoutLegacyIndicators(String symbol, EntryAction action, PositionSide side, String entryPrice) {
         EntrySignal signal = signal(symbol, action, side, entryPrice, RiskLevel.LOW);
         signal.setEntryTrigger("V20_IMMEDIATE");
+        signal.setSourceScanType(ScanType.FOUR_HOUR);
         signal.setClose1h(null);
         signal.setEma20_1h(null);
         signal.setRsi14_1h(null);

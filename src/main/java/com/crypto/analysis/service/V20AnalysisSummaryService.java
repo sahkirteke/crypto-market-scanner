@@ -42,10 +42,13 @@ public class V20AnalysisSummaryService {
                 .filter(p -> start == null || (p.getClosedAt() != null && !p.getClosedAt().isBefore(start)))
                 .filter(p -> end == null || (p.getClosedAt() != null && !p.getClosedAt().isAfter(end)))
                 .toList();
+        List<PaperPositionEntity> validClosed = closed.stream()
+                .filter(summaryService::isValidClosedV20Trade)
+                .toList();
         List<PaperPositionEntity> open = paperPositionRepository.findByStatusOrderByOpenedAtDesc(PaperPositionStatus.OPEN).stream()
                 .filter(p -> "V20".equalsIgnoreCase(p.getStrategyVersion()))
                 .toList();
-        V20PaperSummaryReport report = summaryService.summarize(closed);
+        V20PaperSummaryReport report = summaryService.summarize(validClosed);
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("strategyVersion", "V20");
         response.put("timezone", "Europe/Istanbul");
@@ -57,7 +60,7 @@ public class V20AnalysisSummaryService {
         summary.put("short", toMap(report.shortSummary()));
         response.put("summary", summary);
         response.put("openPositions", openPositions(open));
-        response.put("recentClosedPositions", closed.stream().limit(limit == null ? 20 : Math.max(0, limit)).map(this::closedItem).toList());
+        response.put("recentClosedPositions", validClosed.stream().limit(limit == null ? 20 : Math.max(0, limit)).map(this::closedItem).toList());
         return response;
     }
 

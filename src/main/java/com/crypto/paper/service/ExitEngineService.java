@@ -173,6 +173,11 @@ public class ExitEngineService {
         }
 
         if (isV20(position)) {
+            if (!"5m".equalsIgnoreCase(effectiveInterval)) {
+                log.debug("PAPER_V20_NON_5M_EXIT_CHECK_SKIPPED id={} symbol={} interval={}",
+                        position.getId(), position.getSymbol(), effectiveInterval);
+                return position;
+            }
             return evaluateV20PositionWithCandle(position, candle, effectiveInterval);
         }
 
@@ -426,14 +431,9 @@ public class ExitEngineService {
             return position;
         }
         if (isV20(position)) {
-            return evaluateV20PositionWithCandle(position, KlineCandle.builder()
-                    .openTime(candleOpenTime)
-                    .closeTime(candleCloseTime)
-                    .high(candleHigh)
-                    .low(candleLow)
-                    .close(candleClose)
-                    .interval("1h")
-                    .build(), "1h");
+            log.debug("PAPER_V20_LEGACY_CANDLE_EVALUATION_SKIPPED id={} symbol={} interval=1h",
+                    position.getId(), position.getSymbol());
+            return position;
         }
 
         Instant now = Instant.now();
@@ -522,6 +522,9 @@ public class ExitEngineService {
 
 
     public boolean shouldSignalInvalidate(PaperPositionEntity p, BigDecimal close1h, BigDecimal ema20, BigDecimal macdHist, MarketRegime marketRegime) {
+        if (isV20(p)) {
+            return false;
+        }
         if (p.getSide() == PositionSide.SHORT) {
             return gt(close1h, ema20) && gt(macdHist, BigDecimal.ZERO) && marketRegime != MarketRegime.RISK_OFF;
         }
@@ -529,6 +532,9 @@ public class ExitEngineService {
     }
 
     public boolean shouldMarketRegimeExit(PaperPositionEntity p, MarketRegime marketRegime, Integer shortScore) {
+        if (isV20(p)) {
+            return false;
+        }
         if (p.getSide() == PositionSide.LONG) {
             return marketRegime == MarketRegime.PANIC;
         }
@@ -536,6 +542,9 @@ public class ExitEngineService {
     }
 
     public boolean shouldOppositeSignalExit(PaperPositionEntity p, CoinClassification classification, Integer longScore, Integer shortScore) {
+        if (isV20(p)) {
+            return false;
+        }
         if (p.getSide() == PositionSide.LONG) {
             return classification == CoinClassification.STRONG_SHORT && intValue(shortScore, 0) >= 85;
         }
@@ -557,6 +566,9 @@ public class ExitEngineService {
                 atr = defaultBigDecimal(snapshot.getAtr14(), atr);
             }
             PaperPositionEntity evaluated = evaluatePositionOnCandle(position, last.getOpenTime(), last.getCloseTime(), last.getHigh(), last.getLow(), last.getClose(), atr);
+            if (isV20(evaluated)) {
+                return evaluated;
+            }
             if (evaluated.getStatus() != PaperPositionStatus.CLOSED && snapshot != null && marketScanRunRepository != null) {
                 MarketScanRunEntity run = marketScanRunRepository.findTopByStatusOrderByScanTimeUtcDesc("COMPLETED").orElse(null);
                 if (run != null && shouldSignalInvalidate(evaluated, snapshot.getClose(), snapshot.getEma20(), snapshot.getMacdHist(), run.getMarketRegime())) {

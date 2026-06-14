@@ -19,6 +19,7 @@ public class V20PaperSummaryService {
     public V20PaperSummaryReport summarize(List<PaperPositionEntity> positions) {
         List<PaperPositionEntity> v20 = (positions == null ? List.<PaperPositionEntity>of() : positions).stream()
                 .filter(p -> p != null && "V20".equalsIgnoreCase(p.getStrategyVersion()))
+                .filter(this::isValidClosedV20Trade)
                 .toList();
         return new V20PaperSummaryReport(summary("LONG", v20, PositionSide.LONG), summary("SHORT", v20, PositionSide.SHORT), summary("TOTAL", v20, null));
     }
@@ -43,4 +44,13 @@ public class V20PaperSummaryService {
     private BigDecimal pct(BigDecimal part, BigDecimal total) { return total == null || total.compareTo(BigDecimal.ZERO) == 0 ? zero() : part.multiply(BigDecimal.valueOf(100)).divide(total, SCALE, RoundingMode.HALF_UP); }
     private BigDecimal value(BigDecimal value) { return value == null ? BigDecimal.ZERO : value; }
     private BigDecimal zero() { return BigDecimal.ZERO.setScale(SCALE, RoundingMode.HALF_UP); }
+    public boolean isValidClosedV20Trade(PaperPositionEntity position) {
+        return position != null
+                && "V20".equalsIgnoreCase(position.getStrategyVersion())
+                && ("TAKE_PROFIT".equals(position.getExitReason()) || "STOP_LOSS".equals(position.getExitReason()))
+                && position.getUnleveragedNetPnlUsdt() != null
+                && position.getLeveragedNetPnlUsdt() != null
+                && position.getUnleveragedTotalFeeUsdt() != null
+                && position.getLeveragedTotalFeeUsdt() != null;
+    }
 }

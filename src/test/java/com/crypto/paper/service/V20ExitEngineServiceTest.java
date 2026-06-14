@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.crypto.common.enums.MarketRegime;
 import com.crypto.common.enums.PositionSide;
 import com.crypto.paper.log.V20PaperJsonlLogService;
 import com.crypto.paper.model.KlineCandle;
@@ -84,6 +85,42 @@ class V20ExitEngineServiceTest {
     }
 
     @Test
+    void v20PositionNeverClosesWithSignalInvalidation() {
+        PaperPositionEntity p = longPosition();
+
+        boolean invalidated = service.shouldSignalInvalidate(
+                p,
+                new BigDecimal("95"),
+                new BigDecimal("100"),
+                new BigDecimal("-1"),
+                MarketRegime.CHOP
+        );
+        service.evaluatePositionOnCandle(p, Instant.EPOCH, Instant.EPOCH.plusSeconds(3600),
+                new BigDecimal("101"), new BigDecimal("99"), new BigDecimal("95"), new BigDecimal("1"));
+
+        assertThat(invalidated).isFalse();
+        assertThat(p.getStatus()).isEqualTo(PaperPositionStatus.OPEN);
+        assertThat(p.getExitReason()).isNull();
+    }
+
+    @Test
+    void v20PositionDoesNotEnterLegacyExitBranch() {
+        PaperPositionEntity p = longPosition();
+        p.setTp1(new BigDecimal("101"));
+        p.setTp2(new BigDecimal("102"));
+        p.setCurrentStop(new BigDecimal("99"));
+        p.setTrailingActive(true);
+
+        service.evaluatePositionOnCandle(p, Instant.EPOCH, Instant.EPOCH.plusSeconds(3600),
+                new BigDecimal("102.50"), new BigDecimal("98.50"), new BigDecimal("101"), new BigDecimal("1"));
+
+        assertThat(p.getStatus()).isEqualTo(PaperPositionStatus.OPEN);
+        assertThat(p.getExitReason()).isNull();
+        assertThat(p.getTp1Hit()).isFalse();
+        assertThat(p.getTp2Hit()).isFalse();
+    }
+
+    @Test
     void closedPositionHasPnlAndFees() {
         PaperPositionEntity p = longPosition();
         service.evaluatePositionWithCandle(p, candle("103", "100", 1), "5m");
@@ -95,6 +132,29 @@ class V20ExitEngineServiceTest {
         assertThat(p.getRawRealizedPnlPct()).isNotNull();
         assertThat(p.getNetRealizedPnlPct()).isNotNull();
         assertThat(p.getLeveragedNetRealizedPnlPct()).isNotNull();
+    }
+
+    @Test
+    void v20ClosedPositionAlwaysHasPnlFields() {
+        PaperPositionEntity p = longPosition();
+
+        service.evaluatePositionWithCandle(p, candle("103", "100", 1), "5m");
+
+        assertThat(p.getStatus()).isEqualTo(PaperPositionStatus.CLOSED);
+        assertThat(p.getExitReason()).isIn("TAKE_PROFIT", "STOP_LOSS");
+        assertThat(p.getRawPnlPct()).isNotNull();
+        assertThat(p.getUnleveragedRawPnlUsdt()).isNotNull();
+        assertThat(p.getUnleveragedEntryFeeUsdt()).isNotNull();
+        assertThat(p.getUnleveragedExitFeeUsdt()).isNotNull();
+        assertThat(p.getUnleveragedTotalFeeUsdt()).isNotNull();
+        assertThat(p.getUnleveragedNetPnlUsdt()).isNotNull();
+        assertThat(p.getUnleveragedNetPnlPct()).isNotNull();
+        assertThat(p.getLeveragedRawPnlUsdt()).isNotNull();
+        assertThat(p.getLeveragedEntryFeeUsdt()).isNotNull();
+        assertThat(p.getLeveragedExitFeeUsdt()).isNotNull();
+        assertThat(p.getLeveragedTotalFeeUsdt()).isNotNull();
+        assertThat(p.getLeveragedNetPnlUsdt()).isNotNull();
+        assertThat(p.getLeveragedNetPnlPct()).isNotNull();
     }
 
 

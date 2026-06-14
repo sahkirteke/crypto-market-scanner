@@ -63,9 +63,40 @@ class V20AnalysisSummaryServiceTest {
         assertThat(response.get("strategyVersion")).isEqualTo("V20");
     }
 
+    @Test
+    void v20SummaryDoesNotCountNullPnlSignalInvalidationAsNormalTrade() {
+        PaperPositionRepository repo = mock(PaperPositionRepository.class);
+        ScannerProperties properties = new ScannerProperties();
+        V20PnlCalculator calculator = new V20PnlCalculator(properties);
+        V20AnalysisSummaryService service = new V20AnalysisSummaryService(repo, properties, calculator, new V20PaperSummaryService(calculator));
+        when(repo.findByStatusOrderByClosedAtDesc(PaperPositionStatus.CLOSED)).thenReturn(List.of(
+                position(PositionSide.LONG, "TAKE_PROFIT", "10"),
+                invalidSignalInvalidationPosition()
+        ));
+        when(repo.findByStatusOrderByOpenedAtDesc(PaperPositionStatus.OPEN)).thenReturn(List.of());
+
+        Map<String, Object> response = service.summary();
+        Map<String, Object> summary = (Map<String, Object>) response.get("summary");
+        Map<String, Object> total = (Map<String, Object>) summary.get("total");
+        List<Map<String, Object>> recentClosed = (List<Map<String, Object>>) response.get("recentClosedPositions");
+
+        assertThat(total.get("tradeCount")).isEqualTo(1);
+        assertThat(recentClosed).hasSize(1);
+        assertThat(recentClosed.get(0).get("exitReason")).isEqualTo("TAKE_PROFIT");
+    }
+
     private PaperPositionEntity position(PositionSide side, String reason, String pnl) {
         return PaperPositionEntity.builder().strategyVersion("V20").side(side).exitReason(reason).closedAt(Instant.parse("2026-06-13T12:00:00Z"))
                 .leveragedNetPnlUsdt(new BigDecimal(pnl)).leveragedTotalFeeUsdt(new BigDecimal("0.5"))
                 .unleveragedNetPnlUsdt(new BigDecimal(pnl)).unleveragedTotalFeeUsdt(new BigDecimal("0.1")).build();
+    }
+
+    private PaperPositionEntity invalidSignalInvalidationPosition() {
+        return PaperPositionEntity.builder()
+                .strategyVersion("V20")
+                .side(PositionSide.LONG)
+                .exitReason("SIGNAL_INVALIDATION")
+                .closedAt(Instant.parse("2026-06-13T13:00:00Z"))
+                .build();
     }
 }
