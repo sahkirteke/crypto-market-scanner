@@ -1,0 +1,24 @@
+ALTER TABLE coin_scan_results ADD COLUMN IF NOT EXISTS close_1h NUMERIC(30, 12);
+ALTER TABLE coin_scan_results ADD COLUMN IF NOT EXISTS ema20_1h NUMERIC(30, 12);
+ALTER TABLE coin_scan_results ADD COLUMN IF NOT EXISTS rsi14_1h NUMERIC(20, 8);
+ALTER TABLE coin_scan_results ADD COLUMN IF NOT EXISTS volume_ratio_1h NUMERIC(20, 8);
+ALTER TABLE coin_scan_results ADD COLUMN IF NOT EXISTS close_4h NUMERIC(30, 12);
+ALTER TABLE coin_scan_results ADD COLUMN IF NOT EXISTS ema20_4h NUMERIC(30, 12);
+ALTER TABLE coin_scan_results ADD COLUMN IF NOT EXISTS ema50_4h NUMERIC(30, 12);
+ALTER TABLE coin_scan_results ADD COLUMN IF NOT EXISTS ema200_4h NUMERIC(30, 12);
+ALTER TABLE coin_scan_results ADD COLUMN IF NOT EXISTS rsi14_4h NUMERIC(20, 8);
+ALTER TABLE coin_scan_results ADD COLUMN IF NOT EXISTS macd_hist_4h NUMERIC(30, 12);
+ALTER TABLE coin_scan_results ADD COLUMN IF NOT EXISTS atr14_4h NUMERIC(30, 12);
+ALTER TABLE coin_scan_results ADD COLUMN IF NOT EXISTS volume_ratio_4h NUMERIC(20, 8);
+
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS entry_priority_score INTEGER;
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS entry_close_4h NUMERIC(30, 12);
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS entry_ema20_4h NUMERIC(30, 12);
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS entry_ema50_4h NUMERIC(30, 12);
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS entry_ema200_4h NUMERIC(30, 12);
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS entry_rsi14_4h NUMERIC(20, 8);
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS entry_macd_hist_4h NUMERIC(30, 12);
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS entry_atr14_4h NUMERIC(30, 12);
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS entry_volume_ratio_4h NUMERIC(20, 8);
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS four_hour_alignment VARCHAR(32);
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS cooldown_penalty_applied BOOLEAN;

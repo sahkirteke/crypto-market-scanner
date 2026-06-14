@@ -35,6 +35,7 @@ public class EntrySignalService {
     private final ScannerProperties scannerProperties;
     private final EntryCandidateService entryCandidateService;
     private final BollingerScoreService bollingerScoreService;
+    private final EntryPriorityService entryPriorityService;
 
     @Autowired(required = false)
     private BinanceFuturesClient binanceFuturesClient;
@@ -87,57 +88,35 @@ public class EntrySignalService {
         if (candidate.getSide() == null) {
             return blocked(signal, "SIDE_MISSING");
         }
-        applyTechnicalSnapshot(signal);
-        applyBollingerScore(signal);
-        if (entryScoreValue(signal) < intValue(config.getMinEnterScore(), 75)) {
-            return blocked(signal, "ENTRY_SCORE_TOO_LOW");
-        }
-        if (isStrong(candidate.getSourceClassification())
-                && entryScoreValue(signal) < intValue(config.getMinStrongEnterScore(), 80)) {
-            return blocked(signal, "STRONG_SCORE_TOO_LOW");
-        }
         if (candidate.getSourceClassification() == CoinClassification.WATCHLIST) {
             return blocked(signal, "WATCHLIST_NOT_ENTRY_ELIGIBLE");
         }
-        if (candidate.getRiskLevel() == RiskLevel.HIGH && !booleanValue(config.getAllowHighRiskEntry(), false)) {
-            return blocked(signal, "HIGH_RISK_BLOCKED");
-        }
-        if (candidate.getRiskLevel() == RiskLevel.MEDIUM && !booleanValue(config.getAllowMediumRiskEntry(), true)) {
-            return blocked(signal, "MEDIUM_RISK_BLOCKED");
-        }
+        applyTechnicalSnapshot(signal);
+        applyBollingerScore(signal);
+        applyEntryPriority(signal);
+
         if (candidate.getValidUntilUtc() != null && !candidate.getValidUntilUtc().isAfter(Instant.now())) {
             return blocked(signal, "CANDIDATE_EXPIRED");
         }
         if (candidate.getMarketRegime() == MarketRegime.PANIC) {
-            return blocked(signal, "MARKET_PANIC_BLOCKED");
+            return blocked(signal, "MARKET_PANIC_NO_NEW_ENTRY");
         }
         if (paperPositionRepository != null && paperPositionRepository.existsBySymbolAndStatusIn(candidate.getSymbol(), List.of(PaperPositionStatus.OPEN, PaperPositionStatus.PARTIALLY_CLOSED))) {
-            return blocked(signal, "SYMBOL_ALREADY_OPEN");
+            return blocked(signal, "IN_POSITION_NO_ENTRY");
         }
         if (greaterThan(candidate.getSpreadPct(), bigDecimalValue(config.getMaxSpreadPct(), "0.08"))) {
-            return blocked(signal, "SPREAD_TOO_HIGH");
+            return blocked(signal, "HIGH_SPREAD");
         }
-        if (lessThan(candidate.getQuoteVolume24h(), bigDecimalValue(config.getMinQuoteVolume24h(), "30000000"))) {
-            return blocked(signal, "VOLUME_TOO_LOW");
+        if (!hasRequiredTechnical(signal)) {
+            return blocked(signal, "DATA_NOT_READY");
         }
-        if (booleanValue(config.getBlockMarketChop(), false) && hasTag(candidate, ReasonTag.MARKET_CHOP)) {
-            return blocked(signal, "MARKET_CHOP_BLOCKED");
-        }
-        if (booleanValue(config.getRequireVolumeConfirmed(), false)
-                && !nullSafe(candidate.getReasons()).contains(ReasonTag.VOLUME_CONFIRMED)) {
-            return blocked(signal, "VOLUME_NOT_CONFIRMED");
+        if (entryScoreValue(signal) < intValue(scannerProperties.getPaper().getMinEntryPriorityScore(), 65)) {
+            signal.getWarnings().add(ReasonTag.ENTRY_PRIORITY_TOO_LOW);
+            return blocked(signal, "ENTRY_PRIORITY_TOO_LOW");
         }
 
         if (candidate.getSide() == PositionSide.LONG) {
-            if (greaterThan(candidate.getPriceChange24hPct(), bigDecimalValue(config.getMaxLong24hChangePct(), "18"))) {
-                return blocked(signal, "LONG_TOO_PUMPED");
-            }
-            if (hasWarning(candidate, ReasonTag.RSI_OVERBOUGHT)) {
-                return blocked(signal, "RSI_OVERBOUGHT_LONG_BLOCKED");
-            }
-            if (hasWarning(candidate, ReasonTag.LONG_CROWDED)) {
-                return blocked(signal, "LONG_CROWDED_BLOCKED");
-            }
+            addLongSoftWarnings(signal);
             String triggerBlock = validateLongTrigger(signal);
             if (triggerBlock != null) {
                 return blocked(signal, triggerBlock);
@@ -148,15 +127,7 @@ public class EntrySignalService {
         }
 
         if (candidate.getSide() == PositionSide.SHORT) {
-            if (lessThan(candidate.getPriceChange24hPct(), bigDecimalValue(config.getMaxShort24hDumpPct(), "-18"))) {
-                return blocked(signal, "SHORT_TOO_DUMPED");
-            }
-            if (hasWarning(candidate, ReasonTag.SHORT_EXTREME_OVERSOLD_RISK)) {
-                signal.getWarnings().add(ReasonTag.SHORT_EXTREME_OVERSOLD_RISK);
-            }
-            if (hasWarning(candidate, ReasonTag.SHORT_CROWDED)) {
-                return blocked(signal, "SHORT_CROWDED_BLOCKED");
-            }
+            addShortSoftWarnings(signal);
             String triggerBlock = validateShortTrigger(signal);
             if (triggerBlock != null) {
                 return blocked(signal, triggerBlock);
@@ -205,6 +176,25 @@ public class EntrySignalService {
                 .entryPriorityScore(candidate.getEntryPriorityScore())
                 .scannerScore(candidate.getScore())
                 .marketRegime(candidate.getMarketRegime())
+                .close4h(candidate.getClose4h())
+                .ema20_4h(candidate.getEma20_4h())
+                .ema50_4h(candidate.getEma50_4h())
+                .ema200_4h(candidate.getEma200_4h())
+                .rsi14_4h(candidate.getRsi14_4h())
+                .macdHist_4h(candidate.getMacdHist_4h())
+                .atr14_4h(candidate.getAtr14_4h())
+                .volumeRatio_4h(candidate.getVolumeRatio_4h())
+                .fourHourAlignment(candidate.getFourHourAlignment())
+                .riskPenalty(candidate.getRiskPenalty())
+                .spreadPenalty(candidate.getSpreadPenalty())
+                .fundingPenalty(candidate.getFundingPenalty())
+                .sidePenalty(candidate.getSidePenalty())
+                .fourHourPenalty(candidate.getFourHourPenalty())
+                .symbolCooldownPenalty(candidate.getSymbolCooldownPenalty())
+                .volumeConfirmationBonus(candidate.getVolumeConfirmationBonus())
+                .marketRegimeAlignmentBonus(candidate.getMarketRegimeAlignmentBonus())
+                .fourHourAlignmentBonus(candidate.getFourHourAlignmentBonus())
+                .cooldownPenaltyApplied(candidate.getCooldownPenaltyApplied())
                 .entryTrigger(candidate.getCandidateReason())
                 .signalTime(Instant.now())
                 .build();
@@ -254,26 +244,60 @@ public class EntrySignalService {
     private void writeSignalDecision(EntrySignal signal) {
         if (jsonlDecisionLogService != null && signal != null && signal.getSymbol() != null) {
             Map<String, Object> event = new LinkedHashMap<>();
+            event.put("time", signal.getSignalTime());
             event.put("event", "ENTRY_SIGNAL_EVALUATED");
+            event.put("scanRunId", signal.getScanRunId());
+            event.put("candidateId", signal.getCandidateId());
             event.put("symbol", signal.getSymbol());
             event.put("side", signal.getSide() == null ? "" : signal.getSide().name());
             event.put("action", signal.getAction() == null ? "" : signal.getAction().name());
-            event.put("reason", signal.getSignalReason() == null ? "" : signal.getSignalReason());
             event.put("blockReason", signal.getBlockReason() == null ? "" : signal.getBlockReason());
-            event.put("score", signal.getScore() == null ? 0 : signal.getScore());
-            event.put("baseEntryScore", signal.getBaseEntryScore());
-            event.put("bbScore", signal.getBbScore());
-            event.put("finalEntryScore", signal.getFinalEntryScore());
-            event.put("bbReasons", signal.getBbReasons());
-            event.put("bbPercentB", signal.getBbPercentB());
-            event.put("bbWidth", signal.getBbWidth());
-            event.put("bbUpper", signal.getBbUpper());
-            event.put("bbMiddle", signal.getBbMiddle());
-            event.put("bbLower", signal.getBbLower());
-            event.put("bbUpperTouched", signal.getBbUpperTouched());
-            event.put("bbLowerTouched", signal.getBbLowerTouched());
-            event.put("bbUpperClosedOutside", signal.getBbUpperClosedOutside());
-            event.put("bbLowerClosedOutside", signal.getBbLowerClosedOutside());
+            event.put("entryPriorityScore", signal.getEntryPriorityScore());
+            event.put("scannerScore", signal.getScannerScore());
+            event.put("riskLevel", signal.getRiskLevel() == null ? "" : signal.getRiskLevel().name());
+            event.put("marketRegime", signal.getMarketRegime() == null ? "" : signal.getMarketRegime().name());
+            event.put("marketBreadthPct", signal.getMarketBreadthPct());
+            event.put("close1h", signal.getClose1h());
+            event.put("previousClose1h", signal.getPreviousClose1h());
+            event.put("previous1hHigh", signal.getPrevious1hHigh());
+            event.put("previous1hLow", signal.getPrevious1hLow());
+            event.put("ema20_1h", signal.getEma20_1h());
+            event.put("ema50_1h", signal.getEma50_1h());
+            event.put("ema200_1h", signal.getEma200_1h());
+            event.put("rsi14_1h", signal.getRsi14_1h());
+            event.put("previousRsi14_1h", signal.getPreviousRsi14_1h());
+            event.put("macdHist_1h", signal.getMacdHist_1h());
+            event.put("previousMacdHist_1h", signal.getPreviousMacdHist_1h());
+            event.put("atr14_1h", signal.getAtr14_1h());
+            event.put("volumeRatio_1h", signal.getVolumeRatio_1h());
+            event.put("close4h", signal.getClose4h());
+            event.put("ema20_4h", signal.getEma20_4h());
+            event.put("ema50_4h", signal.getEma50_4h());
+            event.put("ema200_4h", signal.getEma200_4h());
+            event.put("rsi14_4h", signal.getRsi14_4h());
+            event.put("macdHist_4h", signal.getMacdHist_4h());
+            event.put("atr14_4h", signal.getAtr14_4h());
+            event.put("volumeRatio_4h", signal.getVolumeRatio_4h());
+            event.put("fourHourAlignment", signal.getFourHourAlignment() == null ? "" : signal.getFourHourAlignment().name());
+            event.put("riskPenalty", signal.getRiskPenalty());
+            event.put("spreadPenalty", signal.getSpreadPenalty());
+            event.put("fundingPenalty", signal.getFundingPenalty());
+            event.put("sidePenalty", signal.getSidePenalty());
+            event.put("fourHourPenalty", signal.getFourHourPenalty());
+            event.put("symbolCooldownPenalty", signal.getSymbolCooldownPenalty());
+            event.put("volumeConfirmationBonus", signal.getVolumeConfirmationBonus());
+            event.put("marketRegimeAlignmentBonus", signal.getMarketRegimeAlignmentBonus());
+            event.put("fourHourAlignmentBonus", signal.getFourHourAlignmentBonus());
+            event.put("finalEntryPriorityScore", signal.getFinalEntryScore());
+            event.put("fundingRate", signal.getFundingRate());
+            event.put("spreadPct", signal.getSpreadPct());
+            event.put("priceChange24hPct", signal.getPriceChange24hPct());
+            event.put("openPositionCount", signal.getOpenPositionCount());
+            event.put("openShortPositionCount", signal.getOpenShortPositionCount());
+            event.put("newEntriesInCurrentScan", signal.getNewEntriesInCurrentScan());
+            event.put("reasons", signal.getReasons());
+            event.put("warnings", signal.getWarnings());
+            event.put("configSnapshot", entryPriorityService.configSnapshot());
             jsonlDecisionLogService.logEntry(event);
         }
     }
@@ -309,6 +333,8 @@ public class EntrySignalService {
             signal.setPrevious1hHigh(snapshot.getPreviousHigh());
             signal.setPrevious1hLow(snapshot.getPreviousLow());
             signal.setEma20_1h(snapshot.getEma20());
+            signal.setEma50_1h(snapshot.getEma50());
+            signal.setEma200_1h(snapshot.getEma200());
             signal.setRsi14_1h(snapshot.getRsi14());
             signal.setPreviousRsi14_1h(snapshot.getPreviousRsi14());
             signal.setMacdHist_1h(snapshot.getMacdHist());
@@ -324,6 +350,20 @@ public class EntrySignalService {
             signal.setBbLowerTouched(snapshot.getBbLowerTouched());
             signal.setBbUpperClosedOutside(snapshot.getBbUpperClosedOutside());
             signal.setBbLowerClosedOutside(snapshot.getBbLowerClosedOutside());
+            List<Kline> closed4h = nullSafeKlines(binanceFuturesClient.getKlines(signal.getSymbol(), "4h", 250)).stream()
+                    .filter(k -> Boolean.TRUE.equals(k.getClosed()))
+                    .toList();
+            if (closed4h.size() >= 220) {
+                TechnicalSnapshot four = indicatorService.calculateFourHour(signal.getSymbol(), closed4h);
+                signal.setClose4h(four.getClose());
+                signal.setEma20_4h(four.getEma20());
+                signal.setEma50_4h(four.getEma50());
+                signal.setEma200_4h(four.getEma200());
+                signal.setRsi14_4h(four.getRsi14());
+                signal.setMacdHist_4h(four.getMacdHist());
+                signal.setAtr14_4h(four.getAtr14());
+                signal.setVolumeRatio_4h(four.getVolumeRatio());
+            }
         } catch (Exception exception) {
             log.warn("ENTRY_SIGNAL_TECHNICAL_UNAVAILABLE symbol={} reason={}", signal.getSymbol(), exception.getMessage());
         }
@@ -377,7 +417,6 @@ public class EntrySignalService {
         }
         if (!gt(signal.getClose1h(), signal.getEma20_1h())) return "LONG_CLOSE_BELOW_EMA20";
         if (!gt(signal.getMacdHist_1h(), BigDecimal.ZERO)) return "LONG_MACD_NOT_POSITIVE";
-        if (lt(signal.getRsi14_1h(), new BigDecimal("45")) || gt(signal.getRsi14_1h(), new BigDecimal("68"))) return "LONG_RSI_OUT_OF_RANGE";
         if (!gt(signal.getVolumeRatio_1h(), BigDecimal.ONE)) return "VOLUME_NOT_CONFIRMED";
         boolean breakout = gt(signal.getClose1h(), signal.getPrevious1hHigh());
         boolean emaCross = lt(signal.getPreviousClose1h(), signal.getEma20_1h()) && gt(signal.getClose1h(), signal.getEma20_1h());
@@ -407,6 +446,77 @@ public class EntrySignalService {
         else if (macdAccel) signal.setEntryTrigger("SHORT_MACD_ACCELERATION");
         else return "NO_SHORT_ENTRY_TRIGGER";
         return null;
+    }
+
+    private void applyEntryPriority(EntrySignal signal) {
+        if (signal == null) return;
+        List<com.crypto.persistence.entity.PaperPositionEntity> openPositions = paperPositionRepository == null
+                ? List.of()
+                : paperPositionRepository.findByStatusInOrderByOpenedAtDesc(List.of(PaperPositionStatus.OPEN, PaperPositionStatus.PARTIALLY_CLOSED));
+        signal.setOpenPositionCount(openPositions.size());
+        signal.setOpenShortPositionCount((int) openPositions.stream().filter(p -> p.getSide() == PositionSide.SHORT).count());
+        signal.setNewEntriesInCurrentScan(0);
+        boolean cooldown = recentStopLossCount(signal) >= intValue(scannerProperties.getEntryPriority().getSymbolRecentStopCountThreshold(), 2);
+        signal.setCooldownPenaltyApplied(cooldown);
+        if (cooldown) {
+            signal.getWarnings().add(ReasonTag.SYMBOL_RECENT_STOP_PENALTY);
+            log.warn("SYMBOL_RECENT_STOP_PENALTY symbol={}", signal.getSymbol());
+        }
+        EntryPriorityService.PriorityBreakdown breakdown = entryPriorityService.calculate(signal, null, cooldown);
+        signal.setEntryPriorityScore(breakdown.finalEntryPriorityScore());
+        signal.setFinalEntryScore(BigDecimal.valueOf(breakdown.finalEntryPriorityScore()));
+        signal.setRiskPenalty(breakdown.riskPenalty());
+        signal.setSpreadPenalty(breakdown.spreadPenalty());
+        signal.setFundingPenalty(breakdown.fundingPenalty());
+        signal.setSidePenalty(breakdown.sidePenalty());
+        signal.setFourHourPenalty(breakdown.fourHourPenalty());
+        signal.setSymbolCooldownPenalty(breakdown.symbolCooldownPenalty());
+        signal.setVolumeConfirmationBonus(breakdown.volumeConfirmationBonus());
+        signal.setMarketRegimeAlignmentBonus(breakdown.marketRegimeAlignmentBonus());
+        signal.setFourHourAlignmentBonus(breakdown.fourHourAlignmentBonus());
+        signal.setFourHourAlignment(breakdown.fourHourAlignment());
+        signal.setRiskLevel(entryPriorityService.adjustedRiskLevel(EntryPriorityService.PriorityInput.from(signal, null, cooldown), breakdown));
+        if (breakdown.fourHourAlignment() == com.crypto.common.enums.FourHourAlignment.AGAINST_4H_TREND) {
+            signal.getWarnings().add(ReasonTag.AGAINST_4H_TREND);
+        }
+    }
+
+    private long recentStopLossCount(EntrySignal signal) {
+        if (paperPositionRepository == null || signal == null || signal.getSymbol() == null) return 0;
+        Instant since = Instant.now().minusSeconds(intValue(scannerProperties.getEntryPriority().getSymbolRecentStopCountWindowHours(), 24) * 3600L);
+        return paperPositionRepository.findByStatusAndSymbolOrderByClosedAtDesc(PaperPositionStatus.CLOSED, signal.getSymbol(), org.springframework.data.domain.PageRequest.of(0, 20))
+                .stream()
+                .filter(p -> p.getClosedAt() != null && p.getClosedAt().isAfter(since))
+                .filter(p -> "STOP_LOSS".equals(p.getExitReason()))
+                .count();
+    }
+
+    private boolean hasRequiredTechnical(EntrySignal signal) {
+        if (binanceFuturesClient == null) {
+            return true;
+        }
+        return signal.getClose1h() != null && signal.getPreviousClose1h() != null && signal.getPrevious1hHigh() != null
+                && signal.getPrevious1hLow() != null && signal.getEma20_1h() != null && signal.getEma50_1h() != null
+                && signal.getEma200_1h() != null && signal.getRsi14_1h() != null && signal.getPreviousRsi14_1h() != null
+                && signal.getMacdHist_1h() != null && signal.getPreviousMacdHist_1h() != null && signal.getAtr14_1h() != null
+                && signal.getVolumeRatio_1h() != null && signal.getClose4h() != null && signal.getEma20_4h() != null
+                && signal.getEma50_4h() != null && signal.getEma200_4h() != null && signal.getRsi14_4h() != null
+                && signal.getMacdHist_4h() != null && signal.getAtr14_4h() != null && signal.getVolumeRatio_4h() != null;
+    }
+
+    private void addLongSoftWarnings(EntrySignal signal) {
+        if (gt(signal.getRsi14_1h(), new BigDecimal("75"))) signal.getWarnings().add(ReasonTag.RSI_OVERBOUGHT);
+        if (ge(signal.getFundingRate(), scannerProperties.getFunding().getDangerPositive())) signal.getWarnings().add(ReasonTag.LONG_CROWDED);
+        if (gt(signal.getPriceChange24hPct(), new BigDecimal("15"))) signal.getWarnings().add(ReasonTag.LATE_LONG_RISK);
+        if (lt(signal.getClose4h(), signal.getEma20_4h()) || lt(signal.getMacdHist_4h(), BigDecimal.ZERO)) signal.getWarnings().add(ReasonTag.AGAINST_4H_TREND);
+    }
+
+    private void addShortSoftWarnings(EntrySignal signal) {
+        if (lt(signal.getRsi14_1h(), new BigDecimal("30")) || lt(signal.getRsi14_4h(), new BigDecimal("30"))) signal.getWarnings().add(ReasonTag.SHORT_OVERSOLD_WARNING);
+        if (lt(signal.getPriceChange24hPct(), new BigDecimal("-15"))) signal.getWarnings().add(ReasonTag.SHORT_EXTREME_LATE_DUMP_RISK);
+        if (le(signal.getFundingRate(), scannerProperties.getFunding().getDangerNegative())) signal.getWarnings().add(ReasonTag.SHORT_CROWDED);
+        if (gt(signal.getClose4h(), signal.getEma20_4h()) || gt(signal.getMacdHist_4h(), BigDecimal.ZERO)) signal.getWarnings().add(ReasonTag.AGAINST_4H_TREND);
+        if (signal.getMarketRegime() != MarketRegime.RISK_OFF) signal.getWarnings().add(ReasonTag.SHORT_MARKET_REGIME_MISMATCH);
     }
 
     private Comparator<EntrySignal> signalComparator() {

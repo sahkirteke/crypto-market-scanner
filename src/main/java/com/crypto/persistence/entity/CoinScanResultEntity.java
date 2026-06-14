@@ -81,6 +81,32 @@ public class CoinScanResultEntity {
     @Column(name = "market_breadth_pct", precision = 20, scale = 8)
     private BigDecimal marketBreadthPct;
 
+
+    @Column(name = "close_1h", precision = 30, scale = 12)
+    private BigDecimal close1h;
+    @Column(name = "ema20_1h", precision = 30, scale = 12)
+    private BigDecimal ema20_1h;
+    @Column(name = "rsi14_1h", precision = 20, scale = 8)
+    private BigDecimal rsi14_1h;
+    @Column(name = "volume_ratio_1h", precision = 20, scale = 8)
+    private BigDecimal volumeRatio_1h;
+    @Column(name = "close_4h", precision = 30, scale = 12)
+    private BigDecimal close4h;
+    @Column(name = "ema20_4h", precision = 30, scale = 12)
+    private BigDecimal ema20_4h;
+    @Column(name = "ema50_4h", precision = 30, scale = 12)
+    private BigDecimal ema50_4h;
+    @Column(name = "ema200_4h", precision = 30, scale = 12)
+    private BigDecimal ema200_4h;
+    @Column(name = "rsi14_4h", precision = 20, scale = 8)
+    private BigDecimal rsi14_4h;
+    @Column(name = "macd_hist_4h", precision = 30, scale = 12)
+    private BigDecimal macdHist_4h;
+    @Column(name = "atr14_4h", precision = 30, scale = 12)
+    private BigDecimal atr14_4h;
+    @Column(name = "volume_ratio_4h", precision = 20, scale = 8)
+    private BigDecimal volumeRatio_4h;
+
     @Column(name = "reasons_json", columnDefinition = "TEXT")
     private String reasonsJson;
 

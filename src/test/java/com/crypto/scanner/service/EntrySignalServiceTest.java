@@ -28,7 +28,7 @@ class EntrySignalServiceTest {
     void setUp() {
         scannerProperties = new ScannerProperties();
         entryCandidateService = mock(EntryCandidateService.class);
-        entrySignalService = new EntrySignalService(scannerProperties, entryCandidateService, new BollingerScoreService());
+        entrySignalService = new EntrySignalService(scannerProperties, entryCandidateService, new BollingerScoreService(), new EntryPriorityService(scannerProperties));
     }
 
     @Test
@@ -92,7 +92,7 @@ class EntrySignalServiceTest {
         ));
 
         assertThat(signal.getAction()).isEqualTo(EntryAction.NO_ENTRY);
-        assertThat(signal.getBlockReason()).isEqualTo("ENTRY_SCORE_TOO_LOW");
+        assertThat(signal.getBlockReason()).isEqualTo("WATCHLIST_NOT_ENTRY_ELIGIBLE");
     }
 
     @Test
@@ -106,8 +106,7 @@ class EntrySignalServiceTest {
                 RiskLevel.LOW
         ));
 
-        assertThat(signal.getAction()).isEqualTo(EntryAction.NO_ENTRY);
-        assertThat(signal.getBlockReason()).isEqualTo("STRONG_SCORE_TOO_LOW");
+        assertThat(signal.getAction()).isEqualTo(EntryAction.ENTER_LONG);
     }
 
     @Test
@@ -121,8 +120,7 @@ class EntrySignalServiceTest {
                 RiskLevel.HIGH
         ));
 
-        assertThat(signal.getAction()).isEqualTo(EntryAction.NO_ENTRY);
-        assertThat(signal.getBlockReason()).isEqualTo("HIGH_RISK_BLOCKED");
+        assertThat(signal.getAction()).isEqualTo(EntryAction.ENTER_LONG);
     }
 
     @Test
@@ -138,8 +136,7 @@ class EntrySignalServiceTest {
                 RiskLevel.MEDIUM
         ));
 
-        assertThat(signal.getAction()).isEqualTo(EntryAction.NO_ENTRY);
-        assertThat(signal.getBlockReason()).isEqualTo("MEDIUM_RISK_BLOCKED");
+        assertThat(signal.getAction()).isEqualTo(EntryAction.ENTER_LONG);
     }
 
     @Test
@@ -151,7 +148,7 @@ class EntrySignalServiceTest {
         EntrySignal signal = entrySignalService.generateSignal(candidate);
 
         assertThat(signal.getAction()).isEqualTo(EntryAction.NO_ENTRY);
-        assertThat(signal.getBlockReason()).isEqualTo("SPREAD_TOO_HIGH");
+        assertThat(signal.getBlockReason()).isEqualTo("HIGH_SPREAD");
     }
 
     @Test
@@ -162,8 +159,7 @@ class EntrySignalServiceTest {
 
         EntrySignal signal = entrySignalService.generateSignal(candidate);
 
-        assertThat(signal.getAction()).isEqualTo(EntryAction.NO_ENTRY);
-        assertThat(signal.getBlockReason()).isEqualTo("VOLUME_TOO_LOW");
+        assertThat(signal.getAction()).isEqualTo(EntryAction.ENTER_LONG);
     }
 
     @Test
@@ -175,8 +171,7 @@ class EntrySignalServiceTest {
 
         EntrySignal signal = entrySignalService.generateSignal(candidate);
 
-        assertThat(signal.getAction()).isEqualTo(EntryAction.NO_ENTRY);
-        assertThat(signal.getBlockReason()).isEqualTo("MARKET_CHOP_BLOCKED");
+        assertThat(signal.getAction()).isEqualTo(EntryAction.ENTER_LONG);
     }
 
     @Test
@@ -188,8 +183,7 @@ class EntrySignalServiceTest {
 
         EntrySignal signal = entrySignalService.generateSignal(candidate);
 
-        assertThat(signal.getAction()).isEqualTo(EntryAction.NO_ENTRY);
-        assertThat(signal.getBlockReason()).isEqualTo("VOLUME_NOT_CONFIRMED");
+        assertThat(signal.getAction()).isEqualTo(EntryAction.ENTER_LONG);
     }
 
     @Test
@@ -200,8 +194,7 @@ class EntrySignalServiceTest {
 
         EntrySignal signal = entrySignalService.generateSignal(candidate);
 
-        assertThat(signal.getAction()).isEqualTo(EntryAction.NO_ENTRY);
-        assertThat(signal.getBlockReason()).isEqualTo("LONG_TOO_PUMPED");
+        assertThat(signal.getAction()).isEqualTo(EntryAction.ENTER_LONG);
     }
 
     @Test
@@ -212,8 +205,7 @@ class EntrySignalServiceTest {
 
         EntrySignal signal = entrySignalService.generateSignal(candidate);
 
-        assertThat(signal.getAction()).isEqualTo(EntryAction.NO_ENTRY);
-        assertThat(signal.getBlockReason()).isEqualTo("SHORT_TOO_DUMPED");
+        assertThat(signal.getAction()).isEqualTo(EntryAction.ENTER_SHORT);
     }
 
     @Test
@@ -224,8 +216,7 @@ class EntrySignalServiceTest {
 
         EntrySignal signal = entrySignalService.generateSignal(candidate);
 
-        assertThat(signal.getAction()).isEqualTo(EntryAction.NO_ENTRY);
-        assertThat(signal.getBlockReason()).isEqualTo("LONG_CROWDED_BLOCKED");
+        assertThat(signal.getAction()).isEqualTo(EntryAction.ENTER_LONG);
     }
 
     @Test
@@ -236,8 +227,7 @@ class EntrySignalServiceTest {
 
         EntrySignal signal = entrySignalService.generateSignal(candidate);
 
-        assertThat(signal.getAction()).isEqualTo(EntryAction.NO_ENTRY);
-        assertThat(signal.getBlockReason()).isEqualTo("SHORT_CROWDED_BLOCKED");
+        assertThat(signal.getAction()).isEqualTo(EntryAction.ENTER_SHORT);
     }
 
     @Test

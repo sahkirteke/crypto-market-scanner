@@ -23,6 +23,7 @@ public class ScannerProperties {
     private EntryCandidate entryCandidate = new EntryCandidate();
     private EntrySignal entrySignal = new EntrySignal();
     private Paper paper = new Paper();
+    private EntryPriority entryPriority = new EntryPriority();
     private PaperExit paperExit = new PaperExit();
     private PaperRisk paperRisk = new PaperRisk();
     private PaperCost paperCost = new PaperCost();
@@ -124,6 +125,46 @@ public class ScannerProperties {
         private Integer maxOpenShortPositions = 3;
         private Boolean allowMediumRisk = true;
         private Boolean allowHighRisk = false;
+        private Integer minEntryPriorityScore = 65;
+    }
+
+
+    @Getter
+    @Setter
+    public static class EntryPriority {
+        private Integer riskPenaltyLow = 0;
+        private Integer riskPenaltyMedium = 5;
+        private Integer riskPenaltyHigh = 15;
+        private BigDecimal spreadPenaltyLowThreshold = new BigDecimal("0.03");
+        private BigDecimal spreadPenaltyMidThreshold = new BigDecimal("0.06");
+        private Integer spreadPenaltyMid = 3;
+        private Integer spreadPenaltyHigh = 6;
+        private Integer fundingWarningPenalty = 5;
+        private Integer fundingDangerPenalty = 10;
+        private BigDecimal volumeBonusStrongThreshold = new BigDecimal("1.2");
+        private Integer volumeBonusStrong = 5;
+        private Integer volumeBonusStrongWith4hConfirmation = 8;
+        private Integer volumeBonusNormal = 2;
+        private Integer regimeAlignmentBonus = 5;
+        private Integer regimeOppositePenalty = 10;
+        private Integer chopPenalty = 5;
+        private Integer fourHourAlignmentBonus = 10;
+        private Integer fourHourStrongAlignmentBonus = 20;
+        private Integer fourHourAgainstTrendPenaltyLong = 15;
+        private Integer fourHourAgainstTrendPenaltyShort = 20;
+        private Integer fourHourMacdOppositePenalty = 10;
+        private Integer fourHourRsiLateLongPenalty = 10;
+        private Integer fourHourRsiLateShortPenalty = 15;
+        private Integer shortNotRiskOffPenalty = 20;
+        private Integer shortBtc4hUpPenalty = 15;
+        private Integer shortSymbol4hUpPenalty = 20;
+        private Integer shortSymbolMacdPositivePenalty = 10;
+        private Integer shortRsiLowPenalty = 10;
+        private Integer shortPriceDumpPenalty = 10;
+        private Integer shortNegativeFundingPenalty = 10;
+        private Integer symbolRecentStopCountWindowHours = 24;
+        private Integer symbolRecentStopCountThreshold = 2;
+        private Integer symbolRecentStopPenalty = 25;
     }
 
 

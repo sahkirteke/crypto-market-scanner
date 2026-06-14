@@ -42,7 +42,8 @@ class EntryCandidateServiceTest {
                 scannerProperties,
                 marketScanRunRepository,
                 coinScanResultRepository,
-                new JsonTextMapper(new ObjectMapper())
+                new JsonTextMapper(new ObjectMapper()),
+                new EntryPriorityService(scannerProperties)
         );
     }
 
@@ -94,7 +95,7 @@ class EntryCandidateServiceTest {
                 coin("BNBUSDT", CoinClassification.STRONG_LONG, DirectionBias.LONG, 90, RiskLevel.HIGH)
         ), List.of(), List.of()));
 
-        assertThat(candidates).isEmpty();
+        assertThat(candidates).hasSize(1);
     }
 
     @Test
@@ -104,7 +105,7 @@ class EntryCandidateServiceTest {
 
         List<EntryCandidate> candidates = entryCandidateService.selectCandidates(scanResult(List.of(coin), List.of(), List.of()));
 
-        assertThat(candidates).isEmpty();
+        assertThat(candidates).hasSize(1);
     }
 
     @Test
@@ -114,7 +115,7 @@ class EntryCandidateServiceTest {
 
         List<EntryCandidate> candidates = entryCandidateService.selectCandidates(scanResult(List.of(), List.of(coin), List.of()));
 
-        assertThat(candidates).isEmpty();
+        assertThat(candidates).hasSize(1);
     }
 
     @Test
@@ -124,7 +125,7 @@ class EntryCandidateServiceTest {
 
         List<EntryCandidate> candidates = entryCandidateService.selectCandidates(scanResult(List.of(coin), List.of(), List.of()));
 
-        assertThat(candidates).isEmpty();
+        assertThat(candidates).hasSize(1);
     }
 
     @Test
@@ -134,7 +135,7 @@ class EntryCandidateServiceTest {
 
         List<EntryCandidate> candidates = entryCandidateService.selectCandidates(scanResult(List.of(), List.of(coin), List.of()));
 
-        assertThat(candidates).isEmpty();
+        assertThat(candidates).hasSize(1);
     }
 
     @Test

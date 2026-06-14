@@ -49,6 +49,18 @@ public class MarketScanPersistenceMapper {
         entity.setFundingRate(result.getFundingRate());
         entity.setOpenInterest(result.getOpenInterest());
         entity.setMarketBreadthPct(result.getMarketBreadthPct());
+        entity.setClose1h(result.getClose1h());
+        entity.setEma20_1h(result.getEma20_1h());
+        entity.setRsi14_1h(result.getRsi14_1h());
+        entity.setVolumeRatio_1h(result.getVolumeRatio_1h());
+        entity.setClose4h(result.getClose4h());
+        entity.setEma20_4h(result.getEma20_4h());
+        entity.setEma50_4h(result.getEma50_4h());
+        entity.setEma200_4h(result.getEma200_4h());
+        entity.setRsi14_4h(result.getRsi14_4h());
+        entity.setMacdHist_4h(result.getMacdHist_4h());
+        entity.setAtr14_4h(result.getAtr14_4h());
+        entity.setVolumeRatio_4h(result.getVolumeRatio_4h());
         entity.setReasonsJson(jsonTextMapper.toJson(result.getReasons()));
         entity.setWarningsJson(jsonTextMapper.toJson(result.getWarnings()));
         entity.setEliminatedReason(result.getEliminatedReason());

@@ -2,6 +2,7 @@ package com.crypto.domain.model;
 
 import com.crypto.common.enums.CoinClassification;
 import com.crypto.common.enums.DirectionBias;
+import com.crypto.common.enums.FourHourAlignment;
 import com.crypto.common.enums.MarketRegime;
 import com.crypto.common.enums.PositionSide;
 import com.crypto.common.enums.ReasonTag;
@@ -47,6 +48,29 @@ public class EntryCandidate {
     private Instant createdAt;
     private Instant validFromUtc;
     private Instant validUntilUtc;
+    private BigDecimal close1h;
+    private BigDecimal ema20_1h;
+    private BigDecimal rsi14_1h;
+    private BigDecimal volumeRatio_1h;
+    private BigDecimal close4h;
+    private BigDecimal ema20_4h;
+    private BigDecimal ema50_4h;
+    private BigDecimal ema200_4h;
+    private BigDecimal rsi14_4h;
+    private BigDecimal macdHist_4h;
+    private BigDecimal atr14_4h;
+    private BigDecimal volumeRatio_4h;
+    private FourHourAlignment fourHourAlignment;
+    private Integer riskPenalty;
+    private Integer spreadPenalty;
+    private Integer fundingPenalty;
+    private Integer sidePenalty;
+    private Integer fourHourPenalty;
+    private Integer symbolCooldownPenalty;
+    private Integer volumeConfirmationBonus;
+    private Integer marketRegimeAlignmentBonus;
+    private Integer fourHourAlignmentBonus;
+    private Boolean cooldownPenaltyApplied;
     @Builder.Default
     private List<ReasonTag> reasons = new ArrayList<>();
     @Builder.Default

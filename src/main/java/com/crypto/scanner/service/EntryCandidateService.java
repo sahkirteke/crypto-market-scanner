@@ -41,6 +41,7 @@ public class EntryCandidateService {
     private final MarketScanRunRepository marketScanRunRepository;
     private final CoinScanResultRepository coinScanResultRepository;
     private final JsonTextMapper jsonTextMapper;
+    private final EntryPriorityService entryPriorityService;
 
     @Autowired(required = false)
     private EntryCandidateRepository entryCandidateRepository;
@@ -123,37 +124,13 @@ public class EntryCandidateService {
             return List.of();
         }
 
-        if (result.getRiskLevel() == RiskLevel.HIGH && !Boolean.TRUE.equals(config.getAllowHighRisk())) {
-            logRejected(result, "HIGH_RISK_BLOCKED");
-            return List.of();
-        }
-
         if (hasTag(result, ReasonTag.MARKET_PANIC)) {
             logRejected(result, "MARKET_PANIC_BLOCKED");
             return List.of();
         }
 
-        if (side == PositionSide.LONG && hasTag(result, ReasonTag.LONG_CROWDED)) {
-            logRejected(result, "LONG_CROWDED_BLOCKED");
-            return List.of();
-        }
-
-        if (side == PositionSide.SHORT && hasTag(result, ReasonTag.SHORT_CROWDED)) {
-            logRejected(result, "SHORT_CROWDED_BLOCKED");
-            return List.of();
-        }
-
-        if (side == PositionSide.LONG && hasTag(result, ReasonTag.RSI_OVERBOUGHT)) {
-            logRejected(result, "RSI_OVERBOUGHT_LONG_BLOCKED");
-            return List.of();
-        }
-
-        if (side == PositionSide.SHORT && hasTag(result, ReasonTag.SHORT_EXTREME_OVERSOLD_RISK)) {
-            logRejected(result, "EXTREME_OVERSOLD_SHORT_BLOCKED");
-            return List.of();
-        }
-
         EntryCandidate candidate = toEntryCandidate(result, side);
+        applyPriority(candidate);
         return List.of(candidate);
     }
 
@@ -237,7 +214,7 @@ public class EntryCandidateService {
     }
 
     private Comparator<EntryCandidate> candidateComparator() {
-        return Comparator.comparing(EntryCandidate::getScore, Comparator.nullsLast(Comparator.reverseOrder()))
+        return Comparator.comparing(EntryCandidate::getEntryPriorityScore, Comparator.nullsLast(Comparator.reverseOrder()))
                 .thenComparing(candidate -> riskRank(candidate.getRiskLevel()))
                 .thenComparing(EntryCandidate::getQuoteVolume24h, Comparator.nullsLast(Comparator.reverseOrder()));
     }
@@ -261,13 +238,59 @@ public class EntryCandidateService {
                 .openInterest(result.getOpenInterest())
                 .marketBreadthPct(result.getMarketBreadthPct())
                 .marketRegime(result.getMarketRegime())
-                .reasons(nullSafe(result.getReasons()))
-                .warnings(nullSafe(result.getWarnings()))
+                .reasons(new ArrayList<>(nullSafe(result.getReasons())))
+                .warnings(new ArrayList<>(nullSafe(result.getWarnings())))
                 .candidateReason(candidateReason(result, side))
                 .createdAt(Instant.now())
                 .validFromUtc(result.getScanTime() == null ? Instant.now() : result.getScanTime())
                 .validUntilUtc((result.getScanTime() == null ? Instant.now() : result.getScanTime()).plusSeconds(3600))
+                .close1h(result.getClose1h())
+                .ema20_1h(result.getEma20_1h())
+                .rsi14_1h(result.getRsi14_1h())
+                .volumeRatio_1h(result.getVolumeRatio_1h())
+                .close4h(result.getClose4h())
+                .ema20_4h(result.getEma20_4h())
+                .ema50_4h(result.getEma50_4h())
+                .ema200_4h(result.getEma200_4h())
+                .rsi14_4h(result.getRsi14_4h())
+                .macdHist_4h(result.getMacdHist_4h())
+                .atr14_4h(result.getAtr14_4h())
+                .volumeRatio_4h(result.getVolumeRatio_4h())
                 .build();
+    }
+
+    private void applyPriority(EntryCandidate candidate) {
+        if (candidate == null) {
+            return;
+        }
+        com.crypto.domain.model.TechnicalSnapshot fourHour = com.crypto.domain.model.TechnicalSnapshot.builder()
+                .close(candidate.getClose4h())
+                .ema20(candidate.getEma20_4h())
+                .ema50(candidate.getEma50_4h())
+                .ema200(candidate.getEma200_4h())
+                .rsi14(candidate.getRsi14_4h())
+                .macdHist(candidate.getMacdHist_4h())
+                .atr14(candidate.getAtr14_4h())
+                .volumeRatio(candidate.getVolumeRatio_4h())
+                .build();
+        EntryPriorityService.PriorityBreakdown breakdown = entryPriorityService.calculate(candidate, fourHour, null, 0);
+        candidate.setEntryPriorityScore(breakdown.finalEntryPriorityScore());
+        candidate.setFourHourAlignment(breakdown.fourHourAlignment());
+        candidate.setRiskPenalty(breakdown.riskPenalty());
+        candidate.setSpreadPenalty(breakdown.spreadPenalty());
+        candidate.setFundingPenalty(breakdown.fundingPenalty());
+        candidate.setSidePenalty(breakdown.sidePenalty());
+        candidate.setFourHourPenalty(breakdown.fourHourPenalty());
+        candidate.setSymbolCooldownPenalty(breakdown.symbolCooldownPenalty());
+        candidate.setVolumeConfirmationBonus(breakdown.volumeConfirmationBonus());
+        candidate.setMarketRegimeAlignmentBonus(breakdown.marketRegimeAlignmentBonus());
+        candidate.setFourHourAlignmentBonus(breakdown.fourHourAlignmentBonus());
+        candidate.setCooldownPenaltyApplied(false);
+        candidate.setRiskLevel(entryPriorityService.adjustedRiskLevel(
+                EntryPriorityService.PriorityInput.from(candidate, fourHour, null, false), breakdown));
+        if (breakdown.fourHourAlignment() == com.crypto.common.enums.FourHourAlignment.AGAINST_4H_TREND) {
+            candidate.getWarnings().add(ReasonTag.AGAINST_4H_TREND);
+        }
     }
 
 
@@ -334,6 +357,18 @@ public class EntryCandidateService {
                 .reasons(parseReasonTags(entity.getReasonsJson(), entity.getSymbol(), "reasons"))
                 .warnings(parseReasonTags(entity.getWarningsJson(), entity.getSymbol(), "warnings"))
                 .scanTime(scanTime == null ? entity.getCreatedAt() : scanTime)
+                .close1h(entity.getClose1h())
+                .ema20_1h(entity.getEma20_1h())
+                .rsi14_1h(entity.getRsi14_1h())
+                .volumeRatio_1h(entity.getVolumeRatio_1h())
+                .close4h(entity.getClose4h())
+                .ema20_4h(entity.getEma20_4h())
+                .ema50_4h(entity.getEma50_4h())
+                .ema200_4h(entity.getEma200_4h())
+                .rsi14_4h(entity.getRsi14_4h())
+                .macdHist_4h(entity.getMacdHist_4h())
+                .atr14_4h(entity.getAtr14_4h())
+                .volumeRatio_4h(entity.getVolumeRatio_4h())
                 .build();
     }
 

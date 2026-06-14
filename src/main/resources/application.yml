@@ -111,6 +111,41 @@ scanner:
     max-open-short-positions: 3
     allow-medium-risk: true
     allow-high-risk: false
+    min-entry-priority-score: 65
+
+  entry-priority:
+    risk-penalty-low: 0
+    risk-penalty-medium: 5
+    risk-penalty-high: 15
+    spread-penalty-low-threshold: 0.03
+    spread-penalty-mid-threshold: 0.06
+    spread-penalty-mid: 3
+    spread-penalty-high: 6
+    funding-warning-penalty: 5
+    funding-danger-penalty: 10
+    volume-bonus-strong-threshold: 1.2
+    volume-bonus-strong: 5
+    volume-bonus-strong-with-4h-confirmation: 8
+    volume-bonus-normal: 2
+    regime-alignment-bonus: 5
+    regime-opposite-penalty: 10
+    chop-penalty: 5
+    four-hour-alignment-bonus: 10
+    four-hour-strong-alignment-bonus: 20
+    four-hour-against-trend-penalty-long: 15
+    four-hour-against-trend-penalty-short: 20
+    four-hour-macd-opposite-penalty: 10
+    four-hour-rsi-late-long-penalty: 10
+    four-hour-rsi-late-short-penalty: 15
+    short-not-risk-off-penalty: 20
+    short-btc-4h-up-penalty: 15
+    short-symbol-4h-up-penalty: 20
+    short-rsi-low-penalty: 10
+    short-price-dump-penalty: 10
+    short-negative-funding-penalty: 10
+    symbol-recent-stop-count-window-hours: 24
+    symbol-recent-stop-count-threshold: 2
+    symbol-recent-stop-penalty: 25
 
   paper-risk:
     atr-stop-multiplier: 1.2
@@ -142,6 +177,11 @@ scanner:
     intrabar-zone: "Europe/Istanbul"
     intrabar-kline-limit: 3
 logging:
+  jsonl:
+    scanner-path: logs/scanner
+    entry-path: logs/entry
+    paper-path: logs/paper
+    append-only: true
   pattern:
     dateformat: "yyyy-MM-dd HH:mm:ss.SSS,Europe/Istanbul"
   level:

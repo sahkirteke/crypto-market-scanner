@@ -116,12 +116,6 @@ public class PaperPositionService {
         if (!hasRequiredEntryIndicators(signal)) {
             return reject(signal, "DATA_NOT_READY");
         }
-        if (signal.getRiskLevel() == RiskLevel.HIGH && !booleanValue(config.getAllowHighRisk(), false)) {
-            return reject(signal, "HIGH_RISK_BLOCKED");
-        }
-        if (signal.getRiskLevel() == RiskLevel.MEDIUM && !booleanValue(config.getAllowMediumRisk(), true)) {
-            return reject(signal, "MEDIUM_RISK_BLOCKED");
-        }
         if (!booleanValue(config.getAllowMultipleOpenSameSymbol(), false)
                 && paperPositionRepository.existsBySymbolAndStatusIn(signal.getSymbol(), activeStatuses())) {
             return reject(signal, "SYMBOL_ALREADY_OPEN");
@@ -188,6 +182,17 @@ public class PaperPositionService {
                 .entryScore(signal.getScore())
                 .marketRegime(signal.getMarketRegime())
                 .entrySignalScore(signal.getScore())
+                .entryPriorityScore(signal.getEntryPriorityScore())
+                .entryClose4h(signal.getClose4h())
+                .entryEma20_4h(signal.getEma20_4h())
+                .entryEma50_4h(signal.getEma50_4h())
+                .entryEma200_4h(signal.getEma200_4h())
+                .entryRsi14_4h(signal.getRsi14_4h())
+                .entryMacdHist_4h(signal.getMacdHist_4h())
+                .entryAtr14_4h(signal.getAtr14_4h())
+                .entryVolumeRatio_4h(signal.getVolumeRatio_4h())
+                .fourHourAlignment(signal.getFourHourAlignment())
+                .cooldownPenaltyApplied(signal.getCooldownPenaltyApplied())
                 .entryBbScore(signal.getBbScore())
                 .entryBbPercentB(signal.getBbPercentB())
                 .entryBbWidth(signal.getBbWidth())
@@ -449,7 +454,11 @@ public class PaperPositionService {
                 && signal.getRsi14_1h() != null
                 && signal.getMacdHist_1h() != null
                 && signal.getAtr14_1h() != null
-                && signal.getVolumeRatio_1h() != null;
+                && signal.getVolumeRatio_1h() != null
+                && signal.getClose4h() != null
+                && signal.getEma20_4h() != null
+                && signal.getRsi14_4h() != null
+                && signal.getMacdHist_4h() != null;
     }
 
     private Object nullToEmpty(Object value) {

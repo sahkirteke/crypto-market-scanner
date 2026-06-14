@@ -455,6 +455,22 @@ public class CoinScoringService {
         if (input.getMarketRegimeResult() != null) {
             result.setMarketBreadthPct(input.getMarketRegimeResult().getMarketBreadthPct());
         }
+        if (input.getOneHour() != null) {
+            result.setClose1h(input.getOneHour().getClose());
+            result.setEma20_1h(input.getOneHour().getEma20());
+            result.setRsi14_1h(input.getOneHour().getRsi14());
+            result.setVolumeRatio_1h(input.getOneHour().getVolumeRatio());
+        }
+        if (input.getFourHour() != null) {
+            result.setClose4h(input.getFourHour().getClose());
+            result.setEma20_4h(input.getFourHour().getEma20());
+            result.setEma50_4h(input.getFourHour().getEma50());
+            result.setEma200_4h(input.getFourHour().getEma200());
+            result.setRsi14_4h(input.getFourHour().getRsi14());
+            result.setMacdHist_4h(input.getFourHour().getMacdHist());
+            result.setAtr14_4h(input.getFourHour().getAtr14());
+            result.setVolumeRatio_4h(input.getFourHour().getVolumeRatio());
+        }
     }
 
     private void logScored(CoinScanResult result) {

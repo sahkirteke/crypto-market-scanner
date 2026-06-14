@@ -10,6 +10,11 @@ public record StrategyAnalysisResponse(
         List<ClassificationPerformanceResponse> byClassification,
         List<RiskPerformanceResponse> byRiskLevel,
         List<ExitReasonPerformanceResponse> byExitReason,
+        List<PerformanceBreakdownResponse> byFourHourAlignment,
+        List<PerformanceBreakdownResponse> bySideAndFourHourAlignment,
+        List<PerformanceBreakdownResponse> byEntryPriorityBucket,
+        RMetricsResponse rMetrics,
+        List<PerformanceBreakdownResponse> bySymbolCooldownImpact,
         List<String> observations
 ) {
 }

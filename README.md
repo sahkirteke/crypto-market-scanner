@@ -77,3 +77,17 @@ mvn spring-boot:run -Dspring-boot.run.profiles=manual-final-smoke
 
 - Endpoint list: [`docs/API_ENDPOINTS.md`](docs/API_ENDPOINTS.md)
 - Smoke-test curl list: [`docs/SMOKE_TEST_CURLS.md`](docs/SMOKE_TEST_CURLS.md)
+
+## V1.2.4 MULTI-TIMEFRAME ENTRY POLICY
+
+1H timeframe is the entry trigger timeframe. 4H timeframe is used for direction, momentum, quality, risk classification, warnings, and entry priority scoring. 4H data is not a hard gate: AGAINST_4H_TREND candidates remain eligible, receive a major priority penalty, and cannot be classified as LOW risk.
+
+Alignment definitions:
+
+* `LONG_ALIGNED`: `close4h > ema20_4h` and `macdHist_4h > 0`.
+* `LONG_STRONG_ALIGNED`: `close4h > ema20_4h`, `ema20_4h > ema50_4h`, `macdHist_4h > 0`, and `50 <= rsi14_4h <= 70`.
+* `SHORT_ALIGNED`: `close4h < ema20_4h` and `macdHist_4h < 0`.
+* `SHORT_STRONG_ALIGNED`: `close4h < ema20_4h`, `ema20_4h < ema50_4h`, `macdHist_4h < 0`, and `30 <= rsi14_4h <= 50`.
+* `AGAINST_4H_TREND`: LONG with `close4h < ema20_4h`, or SHORT with `close4h > ema20_4h`.
+
+The policy keeps hard gates limited to system/data safety conditions such as missing data, missing book ticker, high spread, market panic, in-position duplicate protection, position limits, scan entry limits, invalid quantity, and existing open position for the same symbol. RSI, funding, 24h price change, CHOP, weak volume, and 4H mismatch are handled as warnings, risk-level inputs, and entry-priority penalties instead of hard entry bans.

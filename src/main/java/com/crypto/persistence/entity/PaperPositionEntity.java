@@ -3,6 +3,7 @@ package com.crypto.persistence.entity;
 import com.crypto.common.enums.CoinClassification;
 import com.crypto.common.enums.DirectionBias;
 import com.crypto.common.enums.EntryAction;
+import com.crypto.common.enums.FourHourAlignment;
 import com.crypto.common.enums.MarketRegime;
 import com.crypto.common.enums.PositionSide;
 import com.crypto.common.enums.RiskLevel;
@@ -48,6 +49,31 @@ public class PaperPositionEntity {
 
     @Column(name = "source_candidate_id")
     private Long sourceCandidateId;
+
+
+    @Column(name = "entry_priority_score")
+    private Integer entryPriorityScore;
+    @Column(name = "entry_close_4h", precision = 30, scale = 12)
+    private BigDecimal entryClose4h;
+    @Column(name = "entry_ema20_4h", precision = 30, scale = 12)
+    private BigDecimal entryEma20_4h;
+    @Column(name = "entry_ema50_4h", precision = 30, scale = 12)
+    private BigDecimal entryEma50_4h;
+    @Column(name = "entry_ema200_4h", precision = 30, scale = 12)
+    private BigDecimal entryEma200_4h;
+    @Column(name = "entry_rsi14_4h", precision = 20, scale = 8)
+    private BigDecimal entryRsi14_4h;
+    @Column(name = "entry_macd_hist_4h", precision = 30, scale = 12)
+    private BigDecimal entryMacdHist_4h;
+    @Column(name = "entry_atr14_4h", precision = 30, scale = 12)
+    private BigDecimal entryAtr14_4h;
+    @Column(name = "entry_volume_ratio_4h", precision = 20, scale = 8)
+    private BigDecimal entryVolumeRatio_4h;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "four_hour_alignment", length = 32)
+    private FourHourAlignment fourHourAlignment;
+    @Column(name = "cooldown_penalty_applied")
+    private Boolean cooldownPenaltyApplied;
 
     @Column(name = "entry_close_1h", precision = 30, scale = 12)
     private BigDecimal entryClose1h;
