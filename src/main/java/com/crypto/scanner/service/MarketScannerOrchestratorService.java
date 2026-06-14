@@ -4,6 +4,7 @@ import com.crypto.common.enums.ScanType;
 import com.crypto.domain.model.MarketScanResult;
 import com.crypto.persistence.entity.MarketScanRunEntity;
 import com.crypto.persistence.service.MarketScanPersistenceService;
+import com.crypto.scanner.log.V20ScoreScanJsonlLogService;
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Service;
 public class MarketScannerOrchestratorService {
     private final MarketScannerService marketScannerService;
     private final MarketScanPersistenceService marketScanPersistenceService;
+    private final V20ScoreScanJsonlLogService v20ScoreScanJsonlLogService;
 
     public MarketScanResult runAndPersist(ScanType scanType) {
         return runScanAndPersist(scanType);
@@ -26,6 +28,7 @@ public class MarketScannerOrchestratorService {
             MarketScanResult result = marketScannerService.runScan(scanType);
             MarketScanRunEntity savedRun = marketScanPersistenceService.saveCompletedScan(result);
             result.setScanRunId(savedRun.getId());
+            v20ScoreScanJsonlLogService.logFourHourScores(result);
             log.info("SCAN_PERSISTED scanRunId={} scanType={}", savedRun.getId(), scanType);
             return result;
         } catch (RuntimeException exception) {
