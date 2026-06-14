@@ -123,7 +123,11 @@ public class PaperPositionService {
         if (signal.getSourceScanType() == null || signal.getSourceClassification() == null || signal.getCandidateId() == null) {
             return reject(signal, "SOURCE_METADATA_MISSING");
         }
-        if (!hasRequiredEntryIndicators(signal)) {
+        if (isV20Enabled()) {
+            if (!hasRequiredV20EntryData(signal)) {
+                return reject(signal, "V20_DATA_NOT_READY");
+            }
+        } else if (!hasRequiredEntryIndicators(signal)) {
             return reject(signal, "DATA_NOT_READY");
         }
         if (signal.getRiskLevel() == RiskLevel.HIGH && !booleanValue(config.getAllowHighRisk(), false)) {
@@ -178,6 +182,9 @@ public class PaperPositionService {
         BigDecimal leveragedNotionalUsdt = marginUsdt.multiply(BigDecimal.valueOf(paperLeverage));
         BigDecimal notionalUsdt = isV20Enabled() ? leveragedNotionalUsdt : bigDecimalValue(config.getDefaultNotionalUsdt(), "100");
         BigDecimal quantity = notionalUsdt.divide(entryPrice, QUANTITY_SCALE, RoundingMode.DOWN);
+        if (quantity.compareTo(BigDecimal.ZERO) <= 0) {
+            return reject(signal, "INVALID_QUANTITY");
+        }
         Instant openedAt = Instant.now();
         PaperPositionEntity position = PaperPositionEntity.builder()
                 .sourceScanRunId(signal.getScanRunId())
@@ -574,6 +581,18 @@ public class PaperPositionService {
                 && signal.getMacdHist_1h() != null
                 && signal.getAtr14_1h() != null
                 && signal.getVolumeRatio_1h() != null;
+    }
+
+    private boolean hasRequiredV20EntryData(EntrySignal signal) {
+        return signal != null
+                && isEnterAction(signal.getAction())
+                && signal.getSymbol() != null
+                && !signal.getSymbol().isBlank()
+                && signal.getSide() != null
+                && isStrongSignal(signal)
+                && signal.getScore() != null
+                && signal.getEntryPrice() != null
+                && signal.getEntryPrice().compareTo(BigDecimal.ZERO) > 0;
     }
 
     private Object nullToEmpty(Object value) {

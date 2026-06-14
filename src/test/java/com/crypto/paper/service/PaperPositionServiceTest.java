@@ -15,6 +15,7 @@ import com.crypto.common.enums.ReasonTag;
 import com.crypto.common.enums.RiskLevel;
 import com.crypto.common.enums.ScanType;
 import com.crypto.common.service.JsonlDecisionLogService;
+import com.crypto.binance.client.BinanceFuturesClient;
 import com.crypto.domain.model.EntrySignal;
 import com.crypto.paper.log.V20PaperJsonlLogService;
 import com.crypto.paper.model.PaperPositionStatus;
@@ -152,6 +153,67 @@ class PaperPositionServiceTest {
         PaperPositionEntity opened = service.openPosition(signal("BTCUSDT", EntryAction.NO_ENTRY, PositionSide.LONG, "10", RiskLevel.LOW));
 
         assertThat(opened).isNull();
+        verify(v20Log, never()).log(any());
+    }
+
+    @Test
+    void v20ImmediateEntryDoesNotRequireLegacyIndicators() {
+        scannerProperties.getV20().setEnabled(true);
+        V20PaperJsonlLogService v20Log = mock(V20PaperJsonlLogService.class);
+        ReflectionTestUtils.setField(service, "v20PaperJsonlLogService", v20Log);
+        when(v20Log.formatTr(any())).thenReturn("2026-06-13T18:42:10.125+03:00");
+        EntrySignal signal = v20SignalWithoutLegacyIndicators("BTCUSDT", EntryAction.ENTER_LONG, PositionSide.LONG, "100");
+
+        PaperPositionEntity opened = service.openPosition(signal);
+
+        assertThat(opened).isNotNull();
+        verify(repository).save(any(PaperPositionEntity.class));
+        verify(v20Log).log(any());
+    }
+
+    @Test
+    void legacyEntryStillRequiresLegacyIndicators() {
+        scannerProperties.getV20().setEnabled(false);
+        EntrySignal signal = signal("BTCUSDT", EntryAction.ENTER_LONG, PositionSide.LONG, "100", RiskLevel.LOW);
+        signal.setClose1h(null);
+        signal.setEma20_1h(null);
+        signal.setRsi14_1h(null);
+        signal.setMacdHist_1h(null);
+        signal.setAtr14_1h(null);
+        signal.setVolumeRatio_1h(null);
+
+        PaperPositionEntity opened = service.openPosition(signal);
+
+        assertThat(opened).isNull();
+        verify(repository, never()).save(any(PaperPositionEntity.class));
+    }
+
+    @Test
+    void v20EntryRejectsMissingBookTicker() {
+        scannerProperties.getV20().setEnabled(true);
+        BinanceFuturesClient client = mock(BinanceFuturesClient.class);
+        ReflectionTestUtils.setField(service, "binanceFuturesClient", client);
+        V20PaperJsonlLogService v20Log = mock(V20PaperJsonlLogService.class);
+        ReflectionTestUtils.setField(service, "v20PaperJsonlLogService", v20Log);
+        when(client.getAllBookTickers()).thenReturn(List.of());
+
+        PaperPositionEntity opened = service.openPosition(v20SignalWithoutLegacyIndicators("BTCUSDT", EntryAction.ENTER_LONG, PositionSide.LONG, "100"));
+
+        assertThat(opened).isNull();
+        verify(repository, never()).save(any(PaperPositionEntity.class));
+        verify(v20Log, never()).log(any());
+    }
+
+    @Test
+    void v20EntryRejectsInvalidQuantity() {
+        scannerProperties.getV20().setEnabled(true);
+        V20PaperJsonlLogService v20Log = mock(V20PaperJsonlLogService.class);
+        ReflectionTestUtils.setField(service, "v20PaperJsonlLogService", v20Log);
+
+        PaperPositionEntity opened = service.openPosition(v20SignalWithoutLegacyIndicators("BTCUSDT", EntryAction.ENTER_LONG, PositionSide.LONG, "1000000000000000000000"));
+
+        assertThat(opened).isNull();
+        verify(repository, never()).save(any(PaperPositionEntity.class));
         verify(v20Log, never()).log(any());
     }
 
@@ -322,6 +384,25 @@ class PaperPositionServiceTest {
         verify(repository, Mockito.times(2)).save(any(PaperPositionEntity.class));
     }
 
+    @Test
+    void v20StrongCandidatesOpenMultiplePositionsInSameScan() {
+        scannerProperties.getV20().setEnabled(true);
+        V20PaperJsonlLogService v20Log = mock(V20PaperJsonlLogService.class);
+        ReflectionTestUtils.setField(service, "v20PaperJsonlLogService", v20Log);
+        when(v20Log.formatTr(any())).thenReturn("2026-06-13T18:42:10.125+03:00");
+        List<EntrySignal> signals = List.of(
+                v20SignalWithoutLegacyIndicators("BTCUSDT", EntryAction.ENTER_LONG, PositionSide.LONG, "100"),
+                v20SignalWithoutLegacyIndicators("ETHUSDT", EntryAction.ENTER_SHORT, PositionSide.SHORT, "100"),
+                v20SignalWithoutLegacyIndicators("SOLUSDT", EntryAction.ENTER_LONG, PositionSide.LONG, "100")
+        );
+
+        List<PaperPositionEntity> opened = service.openPositions(signals);
+
+        assertThat(opened).hasSize(3);
+        verify(repository, Mockito.times(3)).save(any(PaperPositionEntity.class));
+        verify(v20Log, Mockito.times(3)).log(any());
+    }
+
     private EntrySignal signal(String symbol, EntryAction action, PositionSide side, String entryPrice, RiskLevel riskLevel) {
         return EntrySignal.builder()
                 .scanRunId(77L)
@@ -352,6 +433,22 @@ class PaperPositionServiceTest {
                 .reasons(List.of(ReasonTag.VOLUME_CONFIRMED))
                 .warnings(List.of(ReasonTag.FUNDING_NORMAL))
                 .build();
+    }
+
+    private EntrySignal v20SignalWithoutLegacyIndicators(String symbol, EntryAction action, PositionSide side, String entryPrice) {
+        EntrySignal signal = signal(symbol, action, side, entryPrice, RiskLevel.LOW);
+        signal.setEntryTrigger("V20_IMMEDIATE");
+        signal.setClose1h(null);
+        signal.setEma20_1h(null);
+        signal.setRsi14_1h(null);
+        signal.setMacdHist_1h(null);
+        signal.setAtr14_1h(null);
+        signal.setVolumeRatio_1h(null);
+        signal.setScore(9);
+        signal.setLongScore(side == PositionSide.LONG ? 9 : 0);
+        signal.setShortScore(side == PositionSide.SHORT ? 9 : 0);
+        signal.setSourceClassification(side == PositionSide.SHORT ? CoinClassification.STRONG_SHORT : CoinClassification.STRONG_LONG);
+        return signal;
     }
 
     private PaperPositionEntity position(PositionSide side) {
