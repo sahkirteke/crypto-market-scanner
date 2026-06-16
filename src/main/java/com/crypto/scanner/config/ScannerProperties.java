@@ -24,6 +24,7 @@ public class ScannerProperties {
     private EntrySignal entrySignal = new EntrySignal();
     private Paper paper = new Paper();
     private EntryPriority entryPriority = new EntryPriority();
+    private Exit exit = new Exit();
     private PaperExit paperExit = new PaperExit();
     private PaperRisk paperRisk = new PaperRisk();
     private PaperCost paperCost = new PaperCost();
@@ -192,6 +193,14 @@ public class ScannerProperties {
         private Integer leverage = 3;
         private BigDecimal takerFeePct = new BigDecimal("0.0004");
         private BigDecimal slippagePct = new BigDecimal("0.0005");
+    }
+
+    @Getter
+    @Setter
+    public static class Exit {
+        private Boolean longNoFollowThroughEnabled = true;
+        private Integer longNoFollowThroughMinutes = 15;
+        private BigDecimal longNoFollowThroughMfeThresholdPct = new BigDecimal("0.40");
     }
 
     @Getter

@@ -391,6 +391,119 @@ class ExitEngineServiceIntrabarTest {
         assertThat(captor.getValue()).containsEntry("exitReason", "TAKE_PROFIT");
     }
 
+    @Test
+    void longNoFollowThroughEarlyExitClosesAfterFifteenMinutesWithWeakMfeAndCloseAtEntry() {
+        ExitEngineService service = service();
+        PaperPositionEntity position = noFollowThroughPosition(PositionSide.LONG);
+
+        service.evaluatePositionWithCandle(position, candle(candleOpen, candleClose, "100.30", "99.80", "100.00"), "5m");
+        service.evaluatePositionWithCandle(position, candle(candleOpen.plusSeconds(300), candleClose.plusSeconds(300), "100.25", "99.85", "99.95"), "5m");
+        PaperPositionEntity result = service.evaluatePositionWithCandle(position,
+                candle(candleOpen.plusSeconds(600), candleClose.plusSeconds(600), "100.20", "99.90", "100.00"), "5m");
+
+        assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.CLOSED);
+        assertThat(result.getExitReason()).isEqualTo("LONG_NO_FOLLOW_THROUGH_EARLY_EXIT");
+    }
+
+    @Test
+    void longNoFollowThroughEarlyExitDoesNotCloseWhenMfeReachesThreshold() {
+        ExitEngineService service = service();
+        PaperPositionEntity position = noFollowThroughPosition(PositionSide.LONG);
+
+        service.evaluatePositionWithCandle(position, candle(candleOpen, candleClose, "100.42", "99.80", "100.00"), "5m");
+        service.evaluatePositionWithCandle(position, candle(candleOpen.plusSeconds(300), candleClose.plusSeconds(300), "100.25", "99.85", "99.95"), "5m");
+        PaperPositionEntity result = service.evaluatePositionWithCandle(position,
+                candle(candleOpen.plusSeconds(600), candleClose.plusSeconds(600), "100.20", "99.90", "100.00"), "5m");
+
+        assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.OPEN);
+        assertThat(result.getExitReason()).isNull();
+    }
+
+    @Test
+    void longNoFollowThroughEarlyExitDoesNotCloseWhenCurrentClosedFiveMinuteCloseIsAboveEntry() {
+        ExitEngineService service = service();
+        PaperPositionEntity position = noFollowThroughPosition(PositionSide.LONG);
+
+        service.evaluatePositionWithCandle(position, candle(candleOpen, candleClose, "100.30", "99.80", "100.00"), "5m");
+        service.evaluatePositionWithCandle(position, candle(candleOpen.plusSeconds(300), candleClose.plusSeconds(300), "100.25", "99.85", "99.95"), "5m");
+        PaperPositionEntity result = service.evaluatePositionWithCandle(position,
+                candle(candleOpen.plusSeconds(600), candleClose.plusSeconds(600), "100.20", "99.90", "100.01"), "5m");
+
+        assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.OPEN);
+        assertThat(result.getExitReason()).isNull();
+    }
+
+    @Test
+    void longNoFollowThroughEarlyExitDoesNotCloseAfterTp1Hit() {
+        ExitEngineService service = service();
+        PaperPositionEntity position = noFollowThroughPosition(PositionSide.LONG);
+        position.setTp1Hit(true);
+        position.setStatus(PaperPositionStatus.OPEN);
+
+        service.evaluatePositionWithCandle(position, candle(candleOpen, candleClose, "100.30", "99.80", "100.00"), "5m");
+        service.evaluatePositionWithCandle(position, candle(candleOpen.plusSeconds(300), candleClose.plusSeconds(300), "100.25", "99.85", "99.95"), "5m");
+        PaperPositionEntity result = service.evaluatePositionWithCandle(position,
+                candle(candleOpen.plusSeconds(600), candleClose.plusSeconds(600), "100.20", "99.90", "100.00"), "5m");
+
+        assertThat(result.getStatus()).isNotEqualTo(PaperPositionStatus.CLOSED);
+        assertThat(result.getExitReason()).isNull();
+    }
+
+    @Test
+    void longNoFollowThroughEarlyExitDoesNotApplyToShortPositions() {
+        ExitEngineService service = service();
+        PaperPositionEntity position = noFollowThroughPosition(PositionSide.SHORT);
+
+        service.evaluatePositionWithCandle(position, candle(candleOpen, candleClose, "100.30", "99.80", "100.00"), "5m");
+        service.evaluatePositionWithCandle(position, candle(candleOpen.plusSeconds(300), candleClose.plusSeconds(300), "100.25", "99.85", "99.95"), "5m");
+        PaperPositionEntity result = service.evaluatePositionWithCandle(position,
+                candle(candleOpen.plusSeconds(600), candleClose.plusSeconds(600), "100.20", "99.90", "100.00"), "5m");
+
+        assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.OPEN);
+        assertThat(result.getExitReason()).isNull();
+    }
+
+    @Test
+    void longNoFollowThroughEarlyExitDoesNotCloseBeforeConfiguredMinutes() {
+        ExitEngineService service = service();
+        PaperPositionEntity position = noFollowThroughPosition(PositionSide.LONG);
+
+        service.evaluatePositionWithCandle(position, candle(candleOpen, candleClose, "100.30", "99.80", "100.00"), "5m");
+        service.evaluatePositionWithCandle(position, candle(candleOpen.plusSeconds(300), candleClose.plusSeconds(300), "100.25", "99.85", "99.95"), "5m");
+        PaperPositionEntity result = service.evaluatePositionWithCandle(position,
+                candle(candleOpen.plusSeconds(301), candleClose.plusSeconds(301), "100.20", "99.90", "100.00"), "5m");
+
+        assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.OPEN);
+        assertThat(result.getExitReason()).isNull();
+    }
+
+    @Test
+    void stopLossWinsWhenSameFiveMinuteCandleAlsoMatchesLongNoFollowThroughEarlyExit() {
+        ExitEngineService service = service();
+        PaperPositionEntity position = noFollowThroughPosition(PositionSide.LONG);
+
+        service.evaluatePositionWithCandle(position, candle(candleOpen, candleClose, "100.30", "99.80", "100.00"), "5m");
+        service.evaluatePositionWithCandle(position, candle(candleOpen.plusSeconds(300), candleClose.plusSeconds(300), "100.25", "99.85", "99.95"), "5m");
+        PaperPositionEntity result = service.evaluatePositionWithCandle(position,
+                candle(candleOpen.plusSeconds(600), candleClose.plusSeconds(600), "100.20", "99.40", "100.00"), "5m");
+
+        assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.CLOSED);
+        assertThat(result.getExitReason()).isEqualTo("STOP_LOSS");
+    }
+
+    @Test
+    void longNoFollowThroughEarlyExitDoesNotCloseWithoutAtLeastThreeClosedFiveMinuteCandles() {
+        ExitEngineService service = service();
+        PaperPositionEntity position = noFollowThroughPosition(PositionSide.LONG);
+
+        service.evaluatePositionWithCandle(position, candle(candleOpen, candleClose, "100.30", "99.80", "100.00"), "5m");
+        PaperPositionEntity result = service.evaluatePositionWithCandle(position,
+                candle(candleOpen.plusSeconds(300), candleClose.plusSeconds(300), "100.25", "99.85", "99.95"), "5m");
+
+        assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.OPEN);
+        assertThat(result.getExitReason()).isNull();
+    }
+
     private ExitEngineService service() {
         return service(null, null);
     }
@@ -437,6 +550,15 @@ class ExitEngineServiceIntrabarTest {
     private PaperPositionEntity positionWithTp2BeyondTrailingUpdateCandle(PositionSide side) {
         PaperPositionEntity position = position(side);
         position.setTp2(side == PositionSide.LONG ? new BigDecimal("104") : new BigDecimal("96"));
+        return position;
+    }
+
+    private PaperPositionEntity noFollowThroughPosition(PositionSide side) {
+        PaperPositionEntity position = position(side);
+        position.setOpenedAt(candleOpen.minusSeconds(1));
+        position.setCurrentStop(side == PositionSide.LONG ? new BigDecimal("99.5") : new BigDecimal("100.5"));
+        position.setTp1(side == PositionSide.LONG ? new BigDecimal("110") : new BigDecimal("90"));
+        position.setTp2(side == PositionSide.LONG ? new BigDecimal("120") : new BigDecimal("80"));
         return position;
     }
 

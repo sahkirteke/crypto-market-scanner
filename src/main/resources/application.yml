@@ -167,6 +167,11 @@ scanner:
     taker-fee-pct: 0.0004
     slippage-pct: 0.0005
 
+  exit:
+    long-no-follow-through-enabled: true
+    long-no-follow-through-minutes: 15
+    long-no-follow-through-mfe-threshold-pct: 0.40
+
   paper-exit:
     enabled: true
     take-profit-pct: 1.0

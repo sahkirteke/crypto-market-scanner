@@ -189,6 +189,14 @@ public class ExitEngineService {
             return position;
         }
 
+        if (shouldLongNoFollowThroughEarlyExit(position, candle)) {
+            closeRemaining(position, candle.getClose(), PaperExitReason.LONG_NO_FOLLOW_THROUGH_EARLY_EXIT, candle.getCloseTime(), candleStartContext);
+            position.setLastExitCandleCloseTime(candle.getCloseTime());
+            log.info("PAPER_LONG_NO_FOLLOW_THROUGH_EARLY_EXIT id={} symbol={} interval={} close={} maxFavorableMovePct={} barsInPosition={}",
+                    position.getId(), position.getSymbol(), effectiveInterval, candle.getClose(), position.getMaxFavorableMovePct(), position.getBarsInPosition());
+            return position;
+        }
+
         if (tp1Hit(position, candle.getHigh(), candle.getLow(), tp1HitBefore)) {
             IntrabarEventContext tp1Context = new IntrabarEventContext(position, candle, effectiveInterval);
             position.setTp1Hit(true);
@@ -479,6 +487,40 @@ public class ExitEngineService {
         return calculateUnrealizedPnlPct(p, close).compareTo(BigDecimal.ZERO) <= 0;
     }
 
+    private boolean shouldLongNoFollowThroughEarlyExit(PaperPositionEntity position, KlineCandle candle) {
+        ScannerProperties.Exit exitConfig = exitConfig();
+        if (!booleanValue(exitConfig.getLongNoFollowThroughEnabled(), true)) {
+            return false;
+        }
+        if (position == null || candle == null || position.getSide() != PositionSide.LONG || position.getStatus() != PaperPositionStatus.OPEN) {
+            return false;
+        }
+        if (Boolean.TRUE.equals(position.getTp1Hit()) || position.getOpenedAt() == null || candle.getCloseTime() == null
+                || position.getEntryPrice() == null || candle.getClose() == null) {
+            return false;
+        }
+        if (!"5m".equalsIgnoreCase(defaultString(candle.getInterval(), ""))) {
+            return false;
+        }
+        if (intValue(position.getBarsInPosition(), 0) < 3) {
+            return false;
+        }
+        int minimumMinutes = intValue(exitConfig.getLongNoFollowThroughMinutes(), 15);
+        long elapsedMinutes = Math.max(0, Duration.between(position.getOpenedAt(), candle.getCloseTime()).toMinutes());
+        if (elapsedMinutes < minimumMinutes) {
+            return false;
+        }
+        BigDecimal maxFavorableMovePct = maxFavorableMovePctSinceEntry(position);
+        BigDecimal thresholdPct = defaultBigDecimal(exitConfig.getLongNoFollowThroughMfeThresholdPct(), new BigDecimal("0.40"));
+        return lt(maxFavorableMovePct, thresholdPct) && le(candle.getClose(), position.getEntryPrice());
+    }
+
+    private BigDecimal maxFavorableMovePctSinceEntry(PaperPositionEntity position) {
+        BigDecimal entryPrice = position.getEntryPrice();
+        BigDecimal maxHighSinceEntry = max(defaultBigDecimal(position.getHighestPriceSinceEntry(), entryPrice), entryPrice);
+        return pct(maxHighSinceEntry.subtract(entryPrice), entryPrice);
+    }
+
     private PaperExitReason resolveStrategicExit(PaperPositionEntity p) {
         if (marketScanRunRepository == null || coinScanResultRepository == null) return null;
         MarketScanRunEntity run = marketScanRunRepository.findTopByStatusOrderByScanTimeUtcDesc("COMPLETED").orElse(null);
@@ -723,6 +765,7 @@ public class ExitEngineService {
             case TRAILING_STOP -> "TRAILING_FIRST";
             case TIME_STOP -> "TIME_STOP";
             case SIGNAL_INVALIDATION -> "SIGNAL_INVALIDATION";
+            case LONG_NO_FOLLOW_THROUGH_EARLY_EXIT -> "LONG_NO_FOLLOW_THROUGH_EARLY_EXIT";
             case MARKET_REGIME_EXIT -> "MARKET_REGIME_EXIT";
             case OPPOSITE_SIGNAL_EXIT -> "OPPOSITE_SIGNAL_EXIT";
             default -> reason.name();
@@ -736,6 +779,7 @@ public class ExitEngineService {
             case TAKE_PROFIT, PARTIAL_TP1, PARTIAL_TP2 -> "TP_" + suffix;
             case TRAILING_STOP -> "TRAILING_" + suffix;
             case TIME_STOP -> "TIME_STOP";
+            case LONG_NO_FOLLOW_THROUGH_EARLY_EXIT -> "MARKET_PROTECTIVE_" + suffix;
             case SIGNAL_INVALIDATION, MARKET_REGIME_EXIT, OPPOSITE_SIGNAL_EXIT -> "SCAN";
             default -> reason.name();
         };
@@ -958,6 +1002,7 @@ public class ExitEngineService {
     private List<PaperPositionStatus> activeStatuses() { return List.of(PaperPositionStatus.OPEN, PaperPositionStatus.PARTIALLY_CLOSED); }
     private ScannerProperties.PaperExit paperExitConfig() { return scannerProperties.getPaperExit() == null ? new ScannerProperties.PaperExit() : scannerProperties.getPaperExit(); }
     private ScannerProperties.PaperCost costConfig() { return scannerProperties.getPaperCost() == null ? new ScannerProperties.PaperCost() : scannerProperties.getPaperCost(); }
+    private ScannerProperties.Exit exitConfig() { return scannerProperties.getExit() == null ? new ScannerProperties.Exit() : scannerProperties.getExit(); }
     private BigDecimal pct(BigDecimal numerator, BigDecimal denominator) { return numerator.divide(denominator, PCT_SCALE + 4, RoundingMode.HALF_UP).multiply(ONE_HUNDRED).setScale(PCT_SCALE, RoundingMode.HALF_UP); }
     private BigDecimal defaultBigDecimal(BigDecimal primary, BigDecimal fallback) { return primary == null ? fallback : primary; }
     private String defaultString(String value, String defaultValue) { return value == null || value.isBlank() ? defaultValue : value; }
