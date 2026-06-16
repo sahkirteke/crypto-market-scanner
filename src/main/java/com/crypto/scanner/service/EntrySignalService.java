@@ -110,6 +110,10 @@ public class EntrySignalService {
         if (!hasRequiredTechnical(signal)) {
             return blocked(signal, "DATA_NOT_READY");
         }
+        if (shouldBypassLongLateBbOutsideChase(signal, config)) {
+            signal.getWarnings().add(ReasonTag.LONG_LATE_BB_OUTSIDE_CHASE_BYPASS);
+            return blocked(signal, "LONG_BYPASS_LATE_BB_OUTSIDE_CHASE");
+        }
         if (entryScoreValue(signal) < intValue(scannerProperties.getPaper().getMinEntryPriorityScore(), 65)) {
             signal.getWarnings().add(ReasonTag.ENTRY_PRIORITY_TOO_LOW);
             return blocked(signal, "ENTRY_PRIORITY_TOO_LOW");
@@ -446,6 +450,21 @@ public class EntrySignalService {
         else if (macdAccel) signal.setEntryTrigger("SHORT_MACD_ACCELERATION");
         else return "NO_SHORT_ENTRY_TRIGGER";
         return null;
+    }
+
+    private boolean shouldBypassLongLateBbOutsideChase(EntrySignal signal, ScannerProperties.EntrySignal config) {
+        if (signal == null || signal.getSide() != PositionSide.LONG || !booleanValue(config.getLongLateBbOutsideChaseBypassEnabled(), true)) {
+            return false;
+        }
+        BigDecimal priceChange = signal.getPriceChange24hPct();
+        if (priceChange == null || priceChange.compareTo(bigDecimalValue(config.getLongLateBbOutsidePriceChangeThresholdPct(), "5")) < 0) {
+            return false;
+        }
+        BigDecimal percentBThreshold = bigDecimalValue(config.getLongLateBbOutsideBbPercentBThreshold(), "1.0");
+        boolean percentBOutside = signal.getBbPercentB() != null && signal.getBbPercentB().compareTo(percentBThreshold) >= 0;
+        boolean upperClosedOutside = Boolean.TRUE.equals(signal.getBbUpperClosedOutside());
+        boolean outsideReason = signal.getBbReasons() != null && signal.getBbReasons().contains("LONG_BB_OUTSIDE_CHASE");
+        return percentBOutside || upperClosedOutside || outsideReason;
     }
 
     private void applyEntryPriority(EntrySignal signal) {

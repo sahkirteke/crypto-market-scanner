@@ -98,6 +98,9 @@ scanner:
     max-long-24h-change-pct: 18
     max-short-24h-dump-pct: -18
     min-quote-volume-24h: 30000000
+    long-late-bb-outside-chase-bypass-enabled: true
+    long-late-bb-outside-price-change-threshold-pct: 5
+    long-late-bb-outside-bb-percent-b-threshold: 1.0
     block-market-chop: false
     require-volume-confirmed: false
 

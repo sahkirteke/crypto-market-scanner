@@ -1,6 +1,7 @@
 package com.crypto.scanner.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -13,6 +14,7 @@ import com.crypto.common.enums.ReasonTag;
 import com.crypto.common.enums.RiskLevel;
 import com.crypto.domain.model.EntryCandidate;
 import com.crypto.domain.model.EntrySignal;
+import com.crypto.scanner.model.BollingerScoreResult;
 import com.crypto.scanner.config.ScannerProperties;
 import java.math.BigDecimal;
 import java.util.List;
@@ -231,6 +233,107 @@ class EntrySignalServiceTest {
     }
 
     @Test
+    void longLateBbOutsideChaseBypassWhenPriceChangeAndPercentBOutside() {
+        setBollingerResult(new BigDecimal("1.02"), false, List.of());
+        EntryCandidate candidate = candidate("BTCUSDT", PositionSide.LONG, CoinClassification.STRONG_LONG,
+                DirectionBias.LONG, 90, RiskLevel.LOW);
+        candidate.setPriceChange24hPct(new BigDecimal("5.1"));
+
+        EntrySignal signal = entrySignalService.generateSignal(candidate);
+
+        assertThat(signal.getAction()).isEqualTo(EntryAction.NO_ENTRY);
+        assertThat(signal.getBlockReason()).isEqualTo("LONG_BYPASS_LATE_BB_OUTSIDE_CHASE");
+        assertThat(signal.getWarnings()).contains(ReasonTag.LONG_LATE_BB_OUTSIDE_CHASE_BYPASS);
+    }
+
+    @Test
+    void longLateBbOutsideChaseBypassDoesNotRunBelowPriceChangeThreshold() {
+        setBollingerResult(new BigDecimal("1.05"), false, List.of());
+        EntryCandidate candidate = candidate("BTCUSDT", PositionSide.LONG, CoinClassification.STRONG_LONG,
+                DirectionBias.LONG, 90, RiskLevel.LOW);
+        candidate.setPriceChange24hPct(new BigDecimal("4.9"));
+
+        EntrySignal signal = entrySignalService.generateSignal(candidate);
+
+        assertThat(signal.getAction()).isEqualTo(EntryAction.ENTER_LONG);
+    }
+
+    @Test
+    void longLateBbOutsideChaseBypassDoesNotRunWhenBollingerIsNotOutside() {
+        setBollingerResult(new BigDecimal("0.95"), false, List.of());
+        EntryCandidate candidate = candidate("BTCUSDT", PositionSide.LONG, CoinClassification.STRONG_LONG,
+                DirectionBias.LONG, 90, RiskLevel.LOW);
+        candidate.setPriceChange24hPct(new BigDecimal("5.5"));
+
+        EntrySignal signal = entrySignalService.generateSignal(candidate);
+
+        assertThat(signal.getAction()).isEqualTo(EntryAction.ENTER_LONG);
+    }
+
+    @Test
+    void longLateBbOutsideChaseBypassWhenUpperClosedOutside() {
+        setBollingerResult(new BigDecimal("0.95"), true, List.of());
+        EntryCandidate candidate = candidate("BTCUSDT", PositionSide.LONG, CoinClassification.STRONG_LONG,
+                DirectionBias.LONG, 90, RiskLevel.LOW);
+        candidate.setPriceChange24hPct(new BigDecimal("5.5"));
+
+        EntrySignal signal = entrySignalService.generateSignal(candidate);
+
+        assertThat(signal.getAction()).isEqualTo(EntryAction.NO_ENTRY);
+        assertThat(signal.getBlockReason()).isEqualTo("LONG_BYPASS_LATE_BB_OUTSIDE_CHASE");
+    }
+
+    @Test
+    void longLateBbOutsideChaseBypassWhenOutsideReasonExists() {
+        setBollingerResult(new BigDecimal("0.95"), false, List.of("LONG_BB_OUTSIDE_CHASE"));
+        EntryCandidate candidate = candidate("BTCUSDT", PositionSide.LONG, CoinClassification.STRONG_LONG,
+                DirectionBias.LONG, 90, RiskLevel.LOW);
+        candidate.setPriceChange24hPct(new BigDecimal("5.5"));
+
+        EntrySignal signal = entrySignalService.generateSignal(candidate);
+
+        assertThat(signal.getAction()).isEqualTo(EntryAction.NO_ENTRY);
+        assertThat(signal.getBlockReason()).isEqualTo("LONG_BYPASS_LATE_BB_OUTSIDE_CHASE");
+    }
+
+    @Test
+    void longLateBbOutsideChaseBypassDoesNotApplyToShort() {
+        setBollingerResult(new BigDecimal("1.05"), true, List.of("LONG_BB_OUTSIDE_CHASE"));
+        EntryCandidate candidate = candidate("BTCUSDT", PositionSide.SHORT, CoinClassification.STRONG_SHORT,
+                DirectionBias.SHORT, 90, RiskLevel.LOW);
+        candidate.setPriceChange24hPct(new BigDecimal("5.5"));
+
+        EntrySignal signal = entrySignalService.generateSignal(candidate);
+
+        assertThat(signal.getAction()).isEqualTo(EntryAction.ENTER_SHORT);
+        assertThat(signal.getBlockReason()).isNull();
+    }
+
+    @Test
+    void longLateBbOutsideChaseBypassDoesNotRunWhenPriceChangeIsNull() {
+        setBollingerResult(new BigDecimal("1.05"), false, List.of());
+        EntryCandidate candidate = candidate("BTCUSDT", PositionSide.LONG, CoinClassification.STRONG_LONG,
+                DirectionBias.LONG, 90, RiskLevel.LOW);
+        candidate.setPriceChange24hPct(null);
+
+        EntrySignal signal = entrySignalService.generateSignal(candidate);
+
+        assertThat(signal.getAction()).isEqualTo(EntryAction.ENTER_LONG);
+    }
+
+    @Test
+    void longLateBbOutsideChaseBypassDoesNotRunWhenBollingerDataIsNull() {
+        setBollingerResult(null, null, null);
+        EntryCandidate candidate = candidate("BTCUSDT", PositionSide.LONG, CoinClassification.STRONG_LONG,
+                DirectionBias.LONG, 90, RiskLevel.LOW);
+        candidate.setPriceChange24hPct(new BigDecimal("5.5"));
+
+        EntrySignal signal = entrySignalService.generateSignal(candidate);
+
+        assertThat(signal.getAction()).isEqualTo(EntryAction.ENTER_LONG);
+    }
+
+    @Test
     void generateSignalsFromLatestScanCallsEntryCandidateService() {
         EntryCandidate candidate = candidate("BTCUSDT", PositionSide.LONG, CoinClassification.STRONG_LONG,
                 DirectionBias.LONG, 90, RiskLevel.LOW);
@@ -240,6 +343,17 @@ class EntrySignalServiceTest {
 
         assertThat(signals).hasSize(1);
         verify(entryCandidateService).selectCandidatesFromLatestScan();
+    }
+
+    private void setBollingerResult(BigDecimal bbPercentB, Boolean bbUpperClosedOutside, List<String> bbReasons) {
+        BollingerScoreService bollingerScoreService = mock(BollingerScoreService.class);
+        when(bollingerScoreService.calculate(any(), any(), any(), any())).thenReturn(BollingerScoreResult.builder()
+                .bbScore(BigDecimal.ZERO)
+                .bbPercentB(bbPercentB)
+                .bbUpperClosedOutside(bbUpperClosedOutside)
+                .bbReasons(bbReasons)
+                .build());
+        entrySignalService = new EntrySignalService(scannerProperties, entryCandidateService, bollingerScoreService, new EntryPriorityService(scannerProperties));
     }
 
     private EntryCandidate candidate(

@@ -109,6 +109,9 @@ public class ScannerProperties {
         private BigDecimal maxLong24hChangePct = BigDecimal.valueOf(18);
         private BigDecimal maxShort24hDumpPct = BigDecimal.valueOf(-18);
         private BigDecimal minQuoteVolume24h = BigDecimal.valueOf(30_000_000L);
+        private Boolean longLateBbOutsideChaseBypassEnabled = true;
+        private BigDecimal longLateBbOutsidePriceChangeThresholdPct = new BigDecimal("5");
+        private BigDecimal longLateBbOutsideBbPercentBThreshold = new BigDecimal("1.0");
         private Boolean blockMarketChop = false;
         private Boolean requireVolumeConfirmed = false;
     }
