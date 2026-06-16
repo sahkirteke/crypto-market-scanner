@@ -114,6 +114,11 @@ public class EntrySignalService {
             signal.getWarnings().add(ReasonTag.LONG_LATE_BB_OUTSIDE_CHASE_BYPASS);
             return blocked(signal, "LONG_BYPASS_LATE_BB_OUTSIDE_CHASE");
         }
+        if (shouldBypassShortLateBbDownChase(signal)) {
+            signal.getWarnings().add(ReasonTag.SHORT_LATE_BB_DOWN_CHASE_BYPASS);
+            return blocked(signal, "SHORT_LATE_BB_DOWN_CHASE_BYPASS");
+        }
+        applyShortBbUpperReversalBonus(signal);
         if (entryScoreValue(signal) < intValue(scannerProperties.getPaper().getMinEntryPriorityScore(), 65)) {
             signal.getWarnings().add(ReasonTag.ENTRY_PRIORITY_TOO_LOW);
             return blocked(signal, "ENTRY_PRIORITY_TOO_LOW");
@@ -462,6 +467,46 @@ public class EntrySignalService {
         }
         BigDecimal percentBThreshold = bigDecimalValue(config.getLongLateBbOutsideBbPercentBThreshold(), "1.0");
         boolean percentBOutside = signal.getBbPercentB() != null && signal.getBbPercentB().compareTo(percentBThreshold) >= 0;
+        boolean upperClosedOutside = Boolean.TRUE.equals(signal.getBbUpperClosedOutside());
+        boolean outsideReason = signal.getBbReasons() != null && signal.getBbReasons().contains("LONG_BB_OUTSIDE_CHASE");
+        return percentBOutside || upperClosedOutside || outsideReason;
+    }
+
+    private boolean shouldBypassShortLateBbDownChase(EntrySignal signal) {
+        if (signal == null || signal.getSide() != PositionSide.SHORT) {
+            return false;
+        }
+        BigDecimal priceChange = signal.getPriceChange24hPct();
+        if (priceChange == null || priceChange.compareTo(new BigDecimal("-5")) > 0) {
+            return false;
+        }
+        boolean percentBOutside = signal.getBbPercentB() != null && signal.getBbPercentB().compareTo(BigDecimal.ZERO) <= 0;
+        boolean lowerClosedOutside = Boolean.TRUE.equals(signal.getBbLowerClosedOutside());
+        boolean outsideReason = signal.getBbReasons() != null && signal.getBbReasons().contains("SHORT_BB_OUTSIDE_CHASE");
+        return percentBOutside || lowerClosedOutside || outsideReason;
+    }
+
+    private void applyShortBbUpperReversalBonus(EntrySignal signal) {
+        if (!shouldApplyShortBbUpperReversalBonus(signal)) {
+            return;
+        }
+        BigDecimal bonus = new BigDecimal("2");
+        signal.setEntryPriorityScore(intValue(signal.getEntryPriorityScore(), 0) + bonus.intValue());
+        BigDecimal finalEntryScore = signal.getFinalEntryScore() == null ? BigDecimal.ZERO : signal.getFinalEntryScore();
+        signal.setFinalEntryScore(finalEntryScore.add(bonus));
+        signal.setScore(signal.getFinalEntryScore().intValue());
+        signal.getReasons().add(ReasonTag.SHORT_BB_UPPER_REVERSAL_BONUS);
+    }
+
+    private boolean shouldApplyShortBbUpperReversalBonus(EntrySignal signal) {
+        if (signal == null || signal.getSide() != PositionSide.SHORT) {
+            return false;
+        }
+        BigDecimal priceChange = signal.getPriceChange24hPct();
+        if (priceChange == null || priceChange.compareTo(new BigDecimal("5")) < 0) {
+            return false;
+        }
+        boolean percentBOutside = signal.getBbPercentB() != null && signal.getBbPercentB().compareTo(BigDecimal.ONE) >= 0;
         boolean upperClosedOutside = Boolean.TRUE.equals(signal.getBbUpperClosedOutside());
         boolean outsideReason = signal.getBbReasons() != null && signal.getBbReasons().contains("LONG_BB_OUTSIDE_CHASE");
         return percentBOutside || upperClosedOutside || outsideReason;

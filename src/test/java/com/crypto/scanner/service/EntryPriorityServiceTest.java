@@ -39,7 +39,7 @@ class EntryPriorityServiceTest {
                 new BigDecimal("105"), new BigDecimal("100"), true));
 
         assertThat(breakdown.fourHourAlignment()).isEqualTo(FourHourAlignment.AGAINST_4H_TREND);
-        assertThat(breakdown.sidePenalty()).isEqualTo(-95);
+        assertThat(breakdown.sidePenalty()).isEqualTo(-10);
         assertThat(breakdown.symbolCooldownPenalty()).isEqualTo(-25);
         assertThat(breakdown.finalEntryPriorityScore()).isLessThan(0);
     }

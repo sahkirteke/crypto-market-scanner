@@ -170,6 +170,7 @@ public class EntryPriorityService {
             if (gt(i.rsi14_4h(), new BigDecimal("75"))) penalty -= intValue(cfg.getFourHourRsiLateLongPenalty(), 10);
             if (lt(i.rsi14_4h(), new BigDecimal("45"))) penalty -= 5;
         } else if (i.side() == PositionSide.SHORT) {
+            if (gt(i.btcClose4h(), i.btcEma20_4h())) penalty -= intValue(cfg.getShortBtc4hUpPenalty(), 15);
             if (gt(i.close4h(), i.ema20_4h())) penalty -= intValue(cfg.getFourHourAgainstTrendPenaltyShort(), 20);
             if (gt(i.macdHist_4h(), BigDecimal.ZERO)) penalty -= intValue(cfg.getFourHourMacdOppositePenalty(), 10);
             if (lt(i.rsi14_4h(), new BigDecimal("30"))) penalty -= intValue(cfg.getFourHourRsiLateShortPenalty(), 15);
@@ -181,14 +182,8 @@ public class EntryPriorityService {
     private int sidePenalty(PriorityInput i, ScannerProperties.EntryPriority cfg) {
         if (i.side() != PositionSide.SHORT) return 0;
         int penalty = 0;
-        ScannerProperties.Funding f = scannerProperties.getFunding();
-        if (i.marketRegime() != MarketRegime.RISK_OFF) penalty -= intValue(cfg.getShortNotRiskOffPenalty(), 20);
-        if (gt(i.btcClose4h(), i.btcEma20_4h())) penalty -= intValue(cfg.getShortBtc4hUpPenalty(), 15);
-        if (gt(i.close4h(), i.ema20_4h())) penalty -= intValue(cfg.getShortSymbol4hUpPenalty(), 20);
-        if (gt(i.macdHist_4h(), BigDecimal.ZERO)) penalty -= intValue(cfg.getShortSymbolMacdPositivePenalty(), 10);
         if (lt(i.rsi14_1h(), new BigDecimal("35"))) penalty -= intValue(cfg.getShortRsiLowPenalty(), 10);
         if (lt(i.priceChange24hPct(), new BigDecimal("-10"))) penalty -= intValue(cfg.getShortPriceDumpPenalty(), 10);
-        if (lt(i.fundingRate(), f.getWarningNegative())) penalty -= intValue(cfg.getShortNegativeFundingPenalty(), 10);
         return penalty;
     }
 
