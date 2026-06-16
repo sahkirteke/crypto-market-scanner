@@ -169,6 +169,17 @@ public class ScannerProperties {
         private Integer symbolRecentStopCountWindowHours = 24;
         private Integer symbolRecentStopCountThreshold = 2;
         private Integer symbolRecentStopPenalty = 25;
+        private Boolean fiveMinuteBbTimingEnabled = true;
+        private Integer fiveMinuteBbPenalty = 3;
+        private Integer fiveMinuteWindowBars = 4;
+        private BigDecimal long5mChaseBbPercentB = new BigDecimal("1.0");
+        private BigDecimal long5mChaseWindowReturnPct = new BigDecimal("0.35");
+        private BigDecimal long5mWeaknessWindowReturnPct = new BigDecimal("-0.25");
+        private BigDecimal long5mWeaknessBbPercentB = new BigDecimal("0.40");
+        private BigDecimal short5mChaseBbPercentB = new BigDecimal("0.0");
+        private BigDecimal short5mChaseWindowReturnPct = new BigDecimal("-0.35");
+        private BigDecimal short5mWeaknessWindowReturnPct = new BigDecimal("0.25");
+        private BigDecimal short5mWeaknessBbPercentB = new BigDecimal("0.60");
     }
 
 

@@ -149,6 +149,17 @@ scanner:
     symbol-recent-stop-count-window-hours: 24
     symbol-recent-stop-count-threshold: 2
     symbol-recent-stop-penalty: 25
+    five-minute-bb-timing-enabled: true
+    five-minute-bb-penalty: 3
+    five-minute-window-bars: 4
+    long-5m-chase-bb-percent-b: 1.0
+    long-5m-chase-window-return-pct: 0.35
+    long-5m-weakness-window-return-pct: -0.25
+    long-5m-weakness-bb-percent-b: 0.40
+    short-5m-chase-bb-percent-b: 0.0
+    short-5m-chase-window-return-pct: -0.35
+    short-5m-weakness-window-return-pct: 0.25
+    short-5m-weakness-bb-percent-b: 0.60
 
   paper-risk:
     atr-stop-multiplier: 1.2

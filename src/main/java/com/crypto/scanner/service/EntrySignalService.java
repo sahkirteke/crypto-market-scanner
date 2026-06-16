@@ -17,6 +17,7 @@ import com.crypto.domain.model.EntrySignal;
 import com.crypto.scanner.config.ScannerProperties;
 import com.crypto.scanner.model.BollingerScoreResult;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
@@ -119,6 +120,7 @@ public class EntrySignalService {
             return blocked(signal, "SHORT_LATE_BB_DOWN_CHASE_BYPASS");
         }
         applyShortBbUpperReversalBonus(signal);
+        applyFiveMinuteBbTimingPenalty(signal);
         if (entryScoreValue(signal) < intValue(scannerProperties.getPaper().getMinEntryPriorityScore(), 65)) {
             signal.getWarnings().add(ReasonTag.ENTRY_PRIORITY_TOO_LOW);
             return blocked(signal, "ENTRY_PRIORITY_TOO_LOW");
@@ -510,6 +512,123 @@ public class EntrySignalService {
         boolean upperClosedOutside = Boolean.TRUE.equals(signal.getBbUpperClosedOutside());
         boolean outsideReason = signal.getBbReasons() != null && signal.getBbReasons().contains("LONG_BB_OUTSIDE_CHASE");
         return percentBOutside || upperClosedOutside || outsideReason;
+    }
+
+    private void applyFiveMinuteBbTimingPenalty(EntrySignal signal) {
+        ScannerProperties.EntryPriority config = scannerProperties.getEntryPriority();
+        if (signal == null || signal.getSide() == null || binanceFuturesClient == null
+                || !booleanValue(config.getFiveMinuteBbTimingEnabled(), true)) {
+            return;
+        }
+        try {
+            int windowBars = Math.max(1, intValue(config.getFiveMinuteWindowBars(), 4));
+            int limit = Math.max(20, windowBars) + 5;
+            List<Kline> closed = nullSafeKlines(binanceFuturesClient.getKlines(signal.getSymbol(), "5m", limit)).stream()
+                    .filter(kline -> kline != null && Boolean.TRUE.equals(kline.getClosed()))
+                    .filter(kline -> kline.getOpen() != null && kline.getClose() != null)
+                    .toList();
+            if (closed.size() < Math.max(20, windowBars)) {
+                return;
+            }
+            List<Kline> window = closed.subList(closed.size() - windowBars, closed.size());
+            BigDecimal lastPercentB = fiveMinuteBbPercentB(closed);
+            if (lastPercentB == null) {
+                return;
+            }
+            int greenCount = (int) window.stream().filter(kline -> gt(kline.getClose(), kline.getOpen())).count();
+            int redCount = (int) window.stream().filter(kline -> lt(kline.getClose(), kline.getOpen())).count();
+            BigDecimal windowReturnPct = windowReturnPct(window);
+            ReasonTag penaltyReason = fiveMinuteTimingReason(signal.getSide(), lastPercentB, greenCount, redCount, windowReturnPct, config);
+            if (penaltyReason != null) {
+                applyEntryPriorityPenalty(signal, intValue(config.getFiveMinuteBbPenalty(), 3), penaltyReason);
+            }
+        } catch (Exception exception) {
+            log.debug("ENTRY_5M_BB_TIMING_UNAVAILABLE symbol={} reason={}", signal.getSymbol(), exception.getMessage());
+        }
+    }
+
+    private ReasonTag fiveMinuteTimingReason(
+            PositionSide side,
+            BigDecimal lastPercentB,
+            int greenCount,
+            int redCount,
+            BigDecimal windowReturnPct,
+            ScannerProperties.EntryPriority config
+    ) {
+        if (side == PositionSide.LONG) {
+            if (ge(lastPercentB, config.getLong5mChaseBbPercentB())
+                    && greenCount >= 3
+                    && ge(windowReturnPct, config.getLong5mChaseWindowReturnPct())) {
+                return ReasonTag.LONG_5M_BB_MICRO_CHASE_RISK;
+            }
+            if (redCount >= 3
+                    && le(windowReturnPct, config.getLong5mWeaknessWindowReturnPct())
+                    && le(lastPercentB, config.getLong5mWeaknessBbPercentB())) {
+                return ReasonTag.LONG_5M_MICRO_WEAKNESS;
+            }
+        }
+        if (side == PositionSide.SHORT) {
+            if (le(lastPercentB, config.getShort5mChaseBbPercentB())
+                    && redCount >= 3
+                    && le(windowReturnPct, config.getShort5mChaseWindowReturnPct())) {
+                return ReasonTag.SHORT_5M_BB_MICRO_CHASE_RISK;
+            }
+            if (greenCount >= 3
+                    && ge(windowReturnPct, config.getShort5mWeaknessWindowReturnPct())
+                    && ge(lastPercentB, config.getShort5mWeaknessBbPercentB())) {
+                return ReasonTag.SHORT_5M_MICRO_WEAKNESS;
+            }
+        }
+        return null;
+    }
+
+    private void applyEntryPriorityPenalty(EntrySignal signal, int penalty, ReasonTag reason) {
+        int positivePenalty = Math.max(0, penalty);
+        signal.setEntryPriorityScore(intValue(signal.getEntryPriorityScore(), 0) - positivePenalty);
+        BigDecimal finalEntryScore = signal.getFinalEntryScore() == null ? BigDecimal.ZERO : signal.getFinalEntryScore();
+        signal.setFinalEntryScore(finalEntryScore.subtract(BigDecimal.valueOf(positivePenalty)));
+        signal.setScore(signal.getFinalEntryScore().intValue());
+        signal.getWarnings().add(reason);
+    }
+
+    private BigDecimal fiveMinuteBbPercentB(List<Kline> closed) {
+        if (closed == null || closed.size() < 20) {
+            return null;
+        }
+        List<Kline> lastTwenty = closed.subList(closed.size() - 20, closed.size());
+        List<BigDecimal> closes = lastTwenty.stream().map(Kline::getClose).filter(close -> close != null).toList();
+        if (closes.size() < 20) {
+            return null;
+        }
+        BigDecimal sum = closes.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal middle = sum.divide(BigDecimal.valueOf(closes.size()), 12, RoundingMode.HALF_UP);
+        BigDecimal variance = closes.stream()
+                .map(close -> close.subtract(middle).pow(2))
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .divide(BigDecimal.valueOf(closes.size()), 12, RoundingMode.HALF_UP);
+        BigDecimal standardDeviation = BigDecimal.valueOf(Math.sqrt(variance.doubleValue()));
+        BigDecimal upper = middle.add(standardDeviation.multiply(new BigDecimal("2")));
+        BigDecimal lower = middle.subtract(standardDeviation.multiply(new BigDecimal("2")));
+        BigDecimal width = upper.subtract(lower);
+        if (width.compareTo(BigDecimal.ZERO) == 0) {
+            return null;
+        }
+        BigDecimal close = closes.get(closes.size() - 1);
+        return close.subtract(lower).divide(width, 12, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal windowReturnPct(List<Kline> window) {
+        if (window == null || window.isEmpty()) {
+            return null;
+        }
+        BigDecimal firstOpen = window.get(0).getOpen();
+        BigDecimal lastClose = window.get(window.size() - 1).getClose();
+        if (firstOpen == null || firstOpen.compareTo(BigDecimal.ZERO) == 0 || lastClose == null) {
+            return null;
+        }
+        return lastClose.subtract(firstOpen)
+                .divide(firstOpen, 12, RoundingMode.HALF_UP)
+                .multiply(new BigDecimal("100"));
     }
 
     private void applyEntryPriority(EntrySignal signal) {

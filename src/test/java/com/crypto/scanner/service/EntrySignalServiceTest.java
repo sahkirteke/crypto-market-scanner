@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.crypto.binance.client.BinanceFuturesClient;
 import com.crypto.common.enums.CoinClassification;
 import com.crypto.common.enums.DirectionBias;
 import com.crypto.common.enums.EntryAction;
@@ -14,12 +15,16 @@ import com.crypto.common.enums.ReasonTag;
 import com.crypto.common.enums.RiskLevel;
 import com.crypto.domain.model.EntryCandidate;
 import com.crypto.domain.model.EntrySignal;
+import com.crypto.domain.model.Kline;
 import com.crypto.scanner.model.BollingerScoreResult;
 import com.crypto.scanner.config.ScannerProperties;
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class EntrySignalServiceTest {
     private ScannerProperties scannerProperties;
@@ -441,6 +446,62 @@ class EntrySignalServiceTest {
     }
 
     @Test
+    void fiveMinuteBbTimingPenaltyAddsLongMicroChaseWarningAndSubtractsThreePoints() {
+        EntrySignal signal = timingSignal(PositionSide.LONG, 90);
+        setFiveMinuteKlines(risingFiveMinuteKlines("100.40"));
+
+        ReflectionTestUtils.invokeMethod(entrySignalService, "applyFiveMinuteBbTimingPenalty", signal);
+
+        assertThat(signal.getEntryPriorityScore()).isEqualTo(87);
+        assertThat(signal.getFinalEntryScore()).isEqualByComparingTo("87");
+        assertThat(signal.getWarnings()).contains(ReasonTag.LONG_5M_BB_MICRO_CHASE_RISK);
+        assertThat(signal.getAction()).isEqualTo(EntryAction.ENTER_LONG);
+        assertThat(signal.getBlockReason()).isNull();
+    }
+
+    @Test
+    void fiveMinuteBbTimingPenaltyDoesNotApplyWhenBollingerOnlyWithoutFourCandleMove() {
+        EntrySignal signal = timingSignal(PositionSide.LONG, 90);
+        setFiveMinuteKlines(risingFiveMinuteKlines("100.20"));
+
+        ReflectionTestUtils.invokeMethod(entrySignalService, "applyFiveMinuteBbTimingPenalty", signal);
+
+        assertThat(signal.getEntryPriorityScore()).isEqualTo(90);
+        assertThat(signal.getWarnings()).doesNotContain(ReasonTag.LONG_5M_BB_MICRO_CHASE_RISK);
+        assertThat(signal.getBlockReason()).isNull();
+    }
+
+    @Test
+    void fiveMinuteBbTimingPenaltyAddsShortMicroChaseWarningAndSubtractsThreePoints() {
+        EntrySignal signal = timingSignal(PositionSide.SHORT, 90);
+        setFiveMinuteKlines(fallingFiveMinuteKlines("99.50"));
+
+        ReflectionTestUtils.invokeMethod(entrySignalService, "applyFiveMinuteBbTimingPenalty", signal);
+
+        assertThat(signal.getEntryPriorityScore()).isEqualTo(87);
+        assertThat(signal.getFinalEntryScore()).isEqualByComparingTo("87");
+        assertThat(signal.getWarnings()).contains(ReasonTag.SHORT_5M_BB_MICRO_CHASE_RISK);
+        assertThat(signal.getAction()).isEqualTo(EntryAction.ENTER_SHORT);
+        assertThat(signal.getBlockReason()).isNull();
+    }
+
+    @Test
+    void fiveMinuteBbTimingPenaltySkipsMissingClosedFiveMinuteWindow() {
+        EntrySignal signal = timingSignal(PositionSide.SHORT, 90);
+        setFiveMinuteKlines(List.of(kline("100", "100", false), kline("100", "99.5", false)));
+
+        ReflectionTestUtils.invokeMethod(entrySignalService, "applyFiveMinuteBbTimingPenalty", signal);
+
+        assertThat(signal.getEntryPriorityScore()).isEqualTo(90);
+        assertThat(signal.getWarnings()).doesNotContain(
+                ReasonTag.LONG_5M_BB_MICRO_CHASE_RISK,
+                ReasonTag.LONG_5M_MICRO_WEAKNESS,
+                ReasonTag.SHORT_5M_BB_MICRO_CHASE_RISK,
+                ReasonTag.SHORT_5M_MICRO_WEAKNESS
+        );
+    }
+
+    @Test
     void generateSignalsFromLatestScanCallsEntryCandidateService() {
         EntryCandidate candidate = candidate("BTCUSDT", PositionSide.LONG, CoinClassification.STRONG_LONG,
                 DirectionBias.LONG, 90, RiskLevel.LOW);
@@ -471,6 +532,65 @@ class EntrySignalServiceTest {
                 .bbReasons(bbReasons)
                 .build());
         entrySignalService = new EntrySignalService(scannerProperties, entryCandidateService, bollingerScoreService, new EntryPriorityService(scannerProperties));
+    }
+
+    private void setFiveMinuteKlines(List<Kline> klines) {
+        BinanceFuturesClient client = mock(BinanceFuturesClient.class);
+        when(client.getKlines("BTCUSDT", "5m", 25)).thenReturn(klines);
+        ReflectionTestUtils.setField(entrySignalService, "binanceFuturesClient", client);
+    }
+
+    private EntrySignal timingSignal(PositionSide side, int score) {
+        return EntrySignal.builder()
+                .symbol("BTCUSDT")
+                .side(side)
+                .action(side == PositionSide.LONG ? EntryAction.ENTER_LONG : EntryAction.ENTER_SHORT)
+                .entryPriorityScore(score)
+                .finalEntryScore(BigDecimal.valueOf(score))
+                .score(score)
+                .warnings(new ArrayList<>())
+                .reasons(new ArrayList<>())
+                .build();
+    }
+
+    private List<Kline> risingFiveMinuteKlines(String finalClose) {
+        List<Kline> klines = flatFiveMinuteKlines(21);
+        klines.add(kline("100.00", "100.10", true));
+        klines.add(kline("100.10", "100.20", true));
+        klines.add(kline("100.20", "100.30", true));
+        klines.add(kline("100.30", finalClose, true));
+        return klines;
+    }
+
+    private List<Kline> fallingFiveMinuteKlines(String finalClose) {
+        List<Kline> klines = flatFiveMinuteKlines(21);
+        klines.add(kline("100.00", "99.90", true));
+        klines.add(kline("99.90", "99.80", true));
+        klines.add(kline("99.80", "99.70", true));
+        klines.add(kline("99.70", finalClose, true));
+        return klines;
+    }
+
+    private List<Kline> flatFiveMinuteKlines(int count) {
+        List<Kline> klines = new ArrayList<>();
+        for (int index = 0; index < count; index++) {
+            klines.add(kline("100.00", "100.00", true));
+        }
+        return klines;
+    }
+
+    private Kline kline(String open, String close, boolean closed) {
+        return Kline.builder()
+                .symbol("BTCUSDT")
+                .interval("5m")
+                .openTime(Instant.parse("2026-06-07T10:00:00Z"))
+                .open(new BigDecimal(open))
+                .high(new BigDecimal(open).max(new BigDecimal(close)))
+                .low(new BigDecimal(open).min(new BigDecimal(close)))
+                .close(new BigDecimal(close))
+                .closeTime(Instant.parse("2026-06-07T10:04:59Z"))
+                .closed(closed)
+                .build();
     }
 
     private EntryCandidate candidate(
