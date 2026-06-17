@@ -189,14 +189,6 @@ public class ExitEngineService {
             return position;
         }
 
-        if (shouldLongNoFollowThroughEarlyExit(position, candle)) {
-            closeRemaining(position, candle.getClose(), PaperExitReason.LONG_NO_FOLLOW_THROUGH_EARLY_EXIT, candle.getCloseTime(), candleStartContext);
-            position.setLastExitCandleCloseTime(candle.getCloseTime());
-            log.info("PAPER_LONG_NO_FOLLOW_THROUGH_EARLY_EXIT id={} symbol={} interval={} close={} maxFavorableMovePct={} barsInPosition={}",
-                    position.getId(), position.getSymbol(), effectiveInterval, candle.getClose(), position.getMaxFavorableMovePct(), position.getBarsInPosition());
-            return position;
-        }
-
         if (tp1Hit(position, candle.getHigh(), candle.getLow(), tp1HitBefore)) {
             IntrabarEventContext tp1Context = new IntrabarEventContext(position, candle, effectiveInterval);
             position.setTp1Hit(true);
@@ -217,6 +209,13 @@ public class ExitEngineService {
         updateStatus(position);
         updateTrailing(position, candle.getHigh(), candle.getLow(), fallbackAtr(position), candle.getCloseTime(),
                 new IntrabarEventContext(position, candle, effectiveInterval));
+        if (shouldLongNoFollowThroughEarlyExit(position, candle)) {
+            closeRemaining(position, candle.getClose(), PaperExitReason.LONG_NO_FOLLOW_THROUGH_EARLY_EXIT, candle.getCloseTime(), candleStartContext);
+            position.setLastExitCandleCloseTime(candle.getCloseTime());
+            log.info("PAPER_LONG_NO_FOLLOW_THROUGH_EARLY_EXIT id={} symbol={} interval={} close={} maxFavorableMovePct={} maxAdverseMovePct={}",
+                    position.getId(), position.getSymbol(), effectiveInterval, candle.getClose(), position.getMaxFavorableMovePct(), position.getMaxAdverseMovePct());
+            return position;
+        }
         position.setLastExitCandleCloseTime(candle.getCloseTime());
         log.info("PAPER_POSITION_EVALUATED id={} symbol={} interval={} candleHigh={} candleLow={} status={} remainingPct={}",
                 position.getId(), position.getSymbol(), effectiveInterval, candle.getHigh(), candle.getLow(), position.getStatus(), position.getRemainingPositionPct());
@@ -502,12 +501,11 @@ public class ExitEngineService {
         if (!"5m".equalsIgnoreCase(defaultString(candle.getInterval(), ""))) {
             return false;
         }
-        if (intValue(position.getBarsInPosition(), 0) < 3) {
-            return false;
-        }
-        int minimumMinutes = intValue(exitConfig.getLongNoFollowThroughMinutes(), 15);
+        int minimumMinutes = intValue(exitConfig.getLongNoFollowThroughMinutes(), 10);
         long elapsedMinutes = Math.max(0, Duration.between(position.getOpenedAt(), candle.getCloseTime()).toMinutes());
-        if (elapsedMinutes < minimumMinutes) {
+        BigDecimal maxAdverseMovePct = maxAdverseMovePctSinceEntry(position);
+        BigDecimal adverseThresholdPct = defaultBigDecimal(exitConfig.getLongNoFollowThroughMaxAdverseThresholdPct(), new BigDecimal("-0.80"));
+        if (elapsedMinutes < minimumMinutes && !le(maxAdverseMovePct, adverseThresholdPct)) {
             return false;
         }
         BigDecimal maxFavorableMovePct = maxFavorableMovePctSinceEntry(position);
@@ -519,6 +517,15 @@ public class ExitEngineService {
         BigDecimal entryPrice = position.getEntryPrice();
         BigDecimal maxHighSinceEntry = max(defaultBigDecimal(position.getHighestPriceSinceEntry(), entryPrice), entryPrice);
         return pct(maxHighSinceEntry.subtract(entryPrice), entryPrice);
+    }
+
+    private BigDecimal maxAdverseMovePctSinceEntry(PaperPositionEntity position) {
+        if (position.getMaxAdverseMovePct() != null) {
+            return position.getMaxAdverseMovePct();
+        }
+        BigDecimal entryPrice = position.getEntryPrice();
+        BigDecimal lowestPriceSinceEntry = min(defaultBigDecimal(position.getLowestPriceSinceEntry(), entryPrice), entryPrice);
+        return pct(lowestPriceSinceEntry.subtract(entryPrice), entryPrice);
     }
 
     private PaperExitReason resolveStrategicExit(PaperPositionEntity p) {

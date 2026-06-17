@@ -170,7 +170,7 @@ public class ScannerProperties {
         private Integer symbolRecentStopCountThreshold = 2;
         private Integer symbolRecentStopPenalty = 25;
         private Boolean fiveMinuteBbTimingEnabled = true;
-        private Integer fiveMinuteBbPenalty = 3;
+        private Integer fiveMinuteBbPenalty = 5;
         private Integer fiveMinuteWindowBars = 4;
         private BigDecimal long5mChaseBbPercentB = new BigDecimal("1.0");
         private BigDecimal long5mChaseWindowReturnPct = new BigDecimal("0.35");
@@ -210,8 +210,9 @@ public class ScannerProperties {
     @Setter
     public static class Exit {
         private Boolean longNoFollowThroughEnabled = true;
-        private Integer longNoFollowThroughMinutes = 15;
+        private Integer longNoFollowThroughMinutes = 10;
         private BigDecimal longNoFollowThroughMfeThresholdPct = new BigDecimal("0.40");
+        private BigDecimal longNoFollowThroughMaxAdverseThresholdPct = new BigDecimal("-0.80");
     }
 
     @Getter

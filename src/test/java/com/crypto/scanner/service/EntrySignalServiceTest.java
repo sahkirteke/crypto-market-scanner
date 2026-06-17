@@ -452,8 +452,8 @@ class EntrySignalServiceTest {
 
         ReflectionTestUtils.invokeMethod(entrySignalService, "applyFiveMinuteBbTimingPenalty", signal);
 
-        assertThat(signal.getEntryPriorityScore()).isEqualTo(87);
-        assertThat(signal.getFinalEntryScore()).isEqualByComparingTo("87");
+        assertThat(signal.getEntryPriorityScore()).isEqualTo(85);
+        assertThat(signal.getFinalEntryScore()).isEqualByComparingTo("85");
         assertThat(signal.getWarnings()).contains(ReasonTag.LONG_5M_BB_MICRO_CHASE_RISK);
         assertThat(signal.getAction()).isEqualTo(EntryAction.ENTER_LONG);
         assertThat(signal.getBlockReason()).isNull();
@@ -478,8 +478,8 @@ class EntrySignalServiceTest {
 
         ReflectionTestUtils.invokeMethod(entrySignalService, "applyFiveMinuteBbTimingPenalty", signal);
 
-        assertThat(signal.getEntryPriorityScore()).isEqualTo(87);
-        assertThat(signal.getFinalEntryScore()).isEqualByComparingTo("87");
+        assertThat(signal.getEntryPriorityScore()).isEqualTo(85);
+        assertThat(signal.getFinalEntryScore()).isEqualByComparingTo("85");
         assertThat(signal.getWarnings()).contains(ReasonTag.SHORT_5M_BB_MICRO_CHASE_RISK);
         assertThat(signal.getAction()).isEqualTo(EntryAction.ENTER_SHORT);
         assertThat(signal.getBlockReason()).isNull();
