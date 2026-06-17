@@ -178,6 +178,47 @@ class ExitEngineServiceTest {
         assertThat(result.getMaxAdverseMovePct()).isEqualByComparingTo("-1.00000000");
     }
 
+
+    @Test
+    void earlyExitTimeNegativeClosesOnlyBeforeTp1() {
+        ExitEngineService service = service(mock(PaperPositionRepository.class), mock(BinanceFuturesClient.class));
+        PaperPositionEntity position = position(PositionSide.LONG);
+        position.setOpenedAt(Instant.now().minusSeconds(16L * 60L));
+
+        PaperPositionEntity result = service.evaluatePosition(position, new BigDecimal("99.90"));
+
+        assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.CLOSED);
+        assertThat(result.getExitReason()).isEqualTo("EARLY_EXIT_TIME_NEGATIVE");
+    }
+
+    @Test
+    void earlyExitDoesNotRunAfterTp1Hit() {
+        ExitEngineService service = service(mock(PaperPositionRepository.class), mock(BinanceFuturesClient.class));
+        PaperPositionEntity position = position(PositionSide.LONG);
+        position.setOpenedAt(Instant.now().minusSeconds(16L * 60L));
+        position.setTp1Hit(true);
+
+        PaperPositionEntity result = service.evaluatePosition(position, new BigDecimal("99.90"));
+
+        assertThat(result.getExitReason()).isNotEqualTo("EARLY_EXIT_TIME_NEGATIVE");
+    }
+
+    @Test
+    void breakEvenStopMovesAboveAdjustedEntryAfterTp1() {
+        ExitEngineService service = service(mock(PaperPositionRepository.class), mock(BinanceFuturesClient.class));
+        PaperPositionEntity position = position(PositionSide.LONG);
+        position.setEntryPriceAdjusted(new BigDecimal("100.05"));
+        position.setCurrentStop(new BigDecimal("99"));
+        position.setTp1(new BigDecimal("101"));
+        position.setTp2(new BigDecimal("102"));
+        position.setRemainingPositionPct(new BigDecimal("100"));
+
+        PaperPositionEntity result = service.evaluatePositionOnCandle(position, Instant.now(), Instant.now(), new BigDecimal("101.1"), new BigDecimal("100"), new BigDecimal("101"), BigDecimal.ONE);
+
+        assertThat(result.getTp1Hit()).isTrue();
+        assertThat(result.getCurrentStop()).isGreaterThan(result.getEntryPriceAdjusted());
+    }
+
     @Test
     void calculatesMinutesHeldAndBarsHeld() {
         ExitEngineService service = service(mock(PaperPositionRepository.class), mock(BinanceFuturesClient.class));

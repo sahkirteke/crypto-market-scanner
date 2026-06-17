@@ -34,9 +34,41 @@ scanner:
 
   scheduler:
     enabled: true
-    one-hour-cron: "0 2 * * * *"
-    four-hour-cron: "0 2 3,7,11,15,19,23 * * *"
+    one-hour-cron: "30 0 * * * *"
+    four-hour-cron: "30 0 3,7,11,15,19,23 * * *"
     zone: "Europe/Istanbul"
+
+  exit:
+    tp:
+      max-tp1-pct: 1.40
+      max-tp2-pct: 2.00
+    stop-loss:
+      max-sl-pct: 1.00
+    break-even-after-tp1:
+      enabled: true
+      include-maker-fee: true
+      extra-slippage-pct: 0.02
+    early-exit:
+      enabled: true
+      only-before-tp1: true
+      time-negative:
+        enabled: true
+        minutes: 15
+        require-negative-pnl: true
+        max-favorable-pct: 0.40
+        exit-reason: EARLY_EXIT_TIME_NEGATIVE
+      adverse-pct:
+        enabled: true
+        adverse-pct: -0.80
+        max-favorable-pct: 0.50
+        exit-reason: EARLY_EXIT_ADVERSE_PCT
+
+  entry:
+    filters:
+      long-24h-change:
+        enabled: true
+        max-24h-change-pct: 5.00
+        reject-reason: LONG_24H_CHANGE_TOO_HIGH
 
   paper-auto:
     enabled: true

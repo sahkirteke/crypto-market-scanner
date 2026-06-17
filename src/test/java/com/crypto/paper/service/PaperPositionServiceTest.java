@@ -126,6 +126,32 @@ class PaperPositionServiceTest {
         assertThat(captor.getValue()).containsKeys("positionId", "entryPrice", "tp1", "tp2", "slPrice");
     }
 
+
+    @Test
+    void calculateRiskLevelsCapsTpAndStopFromAdjustedEntry() {
+        PaperPositionService.RiskLevels risk = service.calculateRiskLevels(PositionSide.LONG, new BigDecimal("100"), new BigDecimal("5"), scannerProperties.getPaperRisk());
+
+        assertThat(risk.initialStop()).isEqualByComparingTo("99.000000000000");
+        assertThat(risk.tp1()).isEqualByComparingTo("101.400000000000");
+        assertThat(risk.tp2()).isEqualByComparingTo("102.000000000000");
+    }
+
+    @Test
+    void rejectsLongWhen24hChangeExceedsConfiguredCapAndWritesJsonlReason() {
+        JsonlDecisionLogService jsonl = mock(JsonlDecisionLogService.class);
+        ReflectionTestUtils.setField(service, "jsonlDecisionLogService", jsonl);
+        EntrySignal signal = signal("BTCUSDT", EntryAction.ENTER_LONG, PositionSide.LONG, "10", RiskLevel.LOW);
+        signal.setPriceChange24hPct(new BigDecimal("5.01"));
+
+        PaperPositionEntity opened = service.openPosition(signal);
+
+        ArgumentCaptor<Map> captor = ArgumentCaptor.forClass(Map.class);
+        assertThat(opened).isNull();
+        verify(repository, never()).save(any(PaperPositionEntity.class));
+        verify(jsonl).logPaper(captor.capture());
+        assertThat(captor.getValue()).containsEntry("rejectReason", "LONG_24H_CHANGE_TOO_HIGH");
+    }
+
     @Test
     void noEntrySignalDoesNotOpenPosition() {
         PaperPositionEntity opened = service.openPosition(signal("BTCUSDT", EntryAction.NO_ENTRY, PositionSide.LONG, "10", RiskLevel.LOW));

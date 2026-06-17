@@ -26,13 +26,15 @@ public class ScannerProperties {
     private PaperExit paperExit = new PaperExit();
     private PaperRisk paperRisk = new PaperRisk();
     private PaperCost paperCost = new PaperCost();
+    private Exit exit = new Exit();
+    private Entry entry = new Entry();
 
     @Getter
     @Setter
     public static class Scheduler {
         private Boolean enabled = true;
-        private String oneHourCron = "0 2 * * * *";
-        private String fourHourCron = "0 2 3,7,11,15,19,23 * * *";
+        private String oneHourCron = "30 0 * * * *";
+        private String fourHourCron = "30 0 3,7,11,15,19,23 * * *";
         private String zone = "Europe/Istanbul";
     }
 
@@ -164,6 +166,85 @@ public class ScannerProperties {
         private String intrabarCron = "10 */5 * * * *";
         private String intrabarZone = "Europe/Istanbul";
         private Integer intrabarKlineLimit = 3;
+    }
+
+
+    @Getter
+    @Setter
+    public static class Exit {
+        private Tp tp = new Tp();
+        private StopLoss stopLoss = new StopLoss();
+        private BreakEvenAfterTp1 breakEvenAfterTp1 = new BreakEvenAfterTp1();
+        private EarlyExit earlyExit = new EarlyExit();
+    }
+
+    @Getter
+    @Setter
+    public static class Tp {
+        private BigDecimal maxTp1Pct = new BigDecimal("1.40");
+        private BigDecimal maxTp2Pct = new BigDecimal("2.00");
+    }
+
+    @Getter
+    @Setter
+    public static class StopLoss {
+        private BigDecimal maxSlPct = new BigDecimal("1.00");
+    }
+
+    @Getter
+    @Setter
+    public static class BreakEvenAfterTp1 {
+        private Boolean enabled = true;
+        private Boolean includeMakerFee = true;
+        private BigDecimal extraSlippagePct = new BigDecimal("0.02");
+    }
+
+    @Getter
+    @Setter
+    public static class EarlyExit {
+        private Boolean enabled = true;
+        private Boolean onlyBeforeTp1 = true;
+        private TimeNegative timeNegative = new TimeNegative();
+        private AdversePct adversePct = new AdversePct();
+    }
+
+    @Getter
+    @Setter
+    public static class TimeNegative {
+        private Boolean enabled = true;
+        private Integer minutes = 15;
+        private Boolean requireNegativePnl = true;
+        private BigDecimal maxFavorablePct = new BigDecimal("0.40");
+        private String exitReason = "EARLY_EXIT_TIME_NEGATIVE";
+    }
+
+    @Getter
+    @Setter
+    public static class AdversePct {
+        private Boolean enabled = true;
+        private BigDecimal adversePct = new BigDecimal("-0.80");
+        private BigDecimal maxFavorablePct = new BigDecimal("0.50");
+        private String exitReason = "EARLY_EXIT_ADVERSE_PCT";
+    }
+
+    @Getter
+    @Setter
+    public static class Entry {
+        private Filters filters = new Filters();
+    }
+
+    @Getter
+    @Setter
+    public static class Filters {
+        private Long24hChange long24hChange = new Long24hChange();
+    }
+
+    @Getter
+    @Setter
+    public static class Long24hChange {
+        private Boolean enabled = true;
+        private BigDecimal max24hChangePct = new BigDecimal("5.00");
+        private String rejectReason = "LONG_24H_CHANGE_TOO_HIGH";
     }
 
     @Getter

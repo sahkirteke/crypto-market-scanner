@@ -130,6 +130,9 @@ public class PaperPositionService {
         }
 
         SignalExecution execution = resolveSignalExecution(signal);
+        if (isLong24hChangeBlocked(signal, execution.signalSide())) {
+            return reject(signal, long24hChangeFilter().getRejectReason());
+        }
 
         List<PaperPositionEntity> openPositions = getOpenPositionsForValidation();
         if (openPositions.size() >= intValue(config.getMaxOpenPositions(), 5)) {
@@ -163,8 +166,9 @@ public class PaperPositionService {
                 : scannerProperties.getPaperExit();
         ScannerProperties.PaperRisk riskConfig = scannerProperties.getPaperRisk() == null ? new ScannerProperties.PaperRisk() : scannerProperties.getPaperRisk();
         ScannerProperties.PaperCost costConfig = scannerProperties.getPaperCost() == null ? new ScannerProperties.PaperCost() : scannerProperties.getPaperCost();
-        BigDecimal atr = signal.getAtr14_1h() == null ? entryPrice.multiply(new BigDecimal("0.012")) : signal.getAtr14_1h();
-        RiskLevels risk = calculateRiskLevels(execution.executionSide(), entryPrice, atr, riskConfig);
+        BigDecimal entryPriceAdjusted = adjustedEntry(execution.executionSide(), entryPrice, costConfig);
+        BigDecimal atr = signal.getAtr14_1h() == null ? entryPriceAdjusted.multiply(new BigDecimal("0.012")) : signal.getAtr14_1h();
+        RiskLevels risk = calculateRiskLevels(execution.executionSide(), entryPriceAdjusted, atr, riskConfig);
         BigDecimal notionalUsdt = bigDecimalValue(config.getDefaultNotionalUsdt(), "100");
         BigDecimal quantity = notionalUsdt.divide(entryPrice, QUANTITY_SCALE, RoundingMode.DOWN);
         Instant openedAt = Instant.now();
@@ -237,7 +241,7 @@ public class PaperPositionService {
                 .highestPriceSinceEntry(entryPrice)
                 .lowestPriceSinceEntry(entryPrice)
                 .barsInPosition(0)
-                .entryPriceAdjusted(adjustedEntry(execution.executionSide(), entryPrice, costConfig))
+                .entryPriceAdjusted(entryPriceAdjusted)
                 .totalFeePct(costConfig.getTakerFeePct().multiply(BigDecimal.valueOf(200)))
                 .totalSlippagePct(costConfig.getSlippagePct().multiply(BigDecimal.valueOf(200)))
                 .maxFavorableMovePct(BigDecimal.ZERO)
@@ -293,12 +297,16 @@ public class PaperPositionService {
     public RiskLevels calculateRiskLevels(PositionSide side, BigDecimal entryPrice, BigDecimal atr14, ScannerProperties.PaperRisk config) {
         BigDecimal raw = atr14.multiply(config.getAtrStopMultiplier());
         BigDecimal min = entryPrice.multiply(config.getMinStopDistancePct());
-        BigDecimal max = entryPrice.multiply(config.getMaxStopDistancePct());
+        BigDecimal configuredMax = entryPrice.multiply(config.getMaxStopDistancePct());
+        BigDecimal maxSlDistance = entryPrice.multiply(exitStopLossConfig().getMaxSlPct()).divide(BigDecimal.valueOf(100), 12, RoundingMode.HALF_UP);
+        BigDecimal max = configuredMax.min(maxSlDistance);
         BigDecimal distance = raw.max(min).min(max);
         BigDecimal initialStop = side == PositionSide.SHORT ? entryPrice.add(distance) : entryPrice.subtract(distance);
         BigDecimal riskPerUnit = side == PositionSide.SHORT ? initialStop.subtract(entryPrice) : entryPrice.subtract(initialStop);
-        BigDecimal tp1 = side == PositionSide.SHORT ? entryPrice.subtract(riskPerUnit.multiply(config.getTp1RMultiple())) : entryPrice.add(riskPerUnit.multiply(config.getTp1RMultiple()));
-        BigDecimal tp2 = side == PositionSide.SHORT ? entryPrice.subtract(riskPerUnit.multiply(config.getTp2RMultiple())) : entryPrice.add(riskPerUnit.multiply(config.getTp2RMultiple()));
+        BigDecimal tp1Distance = riskPerUnit.multiply(config.getTp1RMultiple()).min(entryPrice.multiply(exitTpConfig().getMaxTp1Pct()).divide(BigDecimal.valueOf(100), 12, RoundingMode.HALF_UP));
+        BigDecimal tp2Distance = riskPerUnit.multiply(config.getTp2RMultiple()).min(entryPrice.multiply(exitTpConfig().getMaxTp2Pct()).divide(BigDecimal.valueOf(100), 12, RoundingMode.HALF_UP));
+        BigDecimal tp1 = side == PositionSide.SHORT ? entryPrice.subtract(tp1Distance) : entryPrice.add(tp1Distance);
+        BigDecimal tp2 = side == PositionSide.SHORT ? entryPrice.subtract(tp2Distance) : entryPrice.add(tp2Distance);
         return new RiskLevels(initialStop, riskPerUnit, tp1, tp2);
     }
 
@@ -540,8 +548,42 @@ public class PaperPositionService {
     }
 
     private PaperPositionEntity reject(EntrySignal signal, String reason) {
-        log.info("PAPER_POSITION_REJECTED symbol={} reason={}", signal == null ? null : signal.getSymbol(), reason);
+        log.info("PAPER_POSITION_REJECTED symbol={} reason={} priceChange24hPct={}", signal == null ? null : signal.getSymbol(), reason, signal == null ? null : signal.getPriceChange24hPct());
+        if (jsonlDecisionLogService != null) {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("event", "PAPER_POSITION_REJECTED");
+            payload.put("symbol", signal == null ? "" : signal.getSymbol());
+            payload.put("rejectReason", reason);
+            payload.put("entryRejectReason", reason);
+            payload.put("priceChange24hPct", signal == null ? "" : nullToEmpty(signal.getPriceChange24hPct()));
+            payload.put("executionSide", signal == null || signal.getSide() == null ? "" : enumName(resolveSignalExecution(signal).executionSide()));
+            jsonlDecisionLogService.logPaper(payload);
+        }
         return null;
+    }
+
+    private boolean isLong24hChangeBlocked(EntrySignal signal, PositionSide executionSide) {
+        ScannerProperties.Long24hChange filter = long24hChangeFilter();
+        return executionSide == PositionSide.LONG
+                && booleanValue(filter.getEnabled(), true)
+                && signal.getPriceChange24hPct() != null
+                && signal.getPriceChange24hPct().compareTo(filter.getMax24hChangePct()) > 0;
+    }
+
+    private ScannerProperties.Long24hChange long24hChangeFilter() {
+        if (scannerProperties.getEntry() == null || scannerProperties.getEntry().getFilters() == null
+                || scannerProperties.getEntry().getFilters().getLong24hChange() == null) {
+            return new ScannerProperties.Long24hChange();
+        }
+        return scannerProperties.getEntry().getFilters().getLong24hChange();
+    }
+
+    private ScannerProperties.Tp exitTpConfig() {
+        return scannerProperties.getExit() == null || scannerProperties.getExit().getTp() == null ? new ScannerProperties.Tp() : scannerProperties.getExit().getTp();
+    }
+
+    private ScannerProperties.StopLoss exitStopLossConfig() {
+        return scannerProperties.getExit() == null || scannerProperties.getExit().getStopLoss() == null ? new ScannerProperties.StopLoss() : scannerProperties.getExit().getStopLoss();
     }
 
     private boolean booleanValue(Boolean value, boolean defaultValue) {

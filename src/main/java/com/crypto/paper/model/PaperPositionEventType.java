@@ -14,5 +14,7 @@ public enum PaperPositionEventType {
     OPPOSITE_SIGNAL_EXIT,
     TRAILING_STOP,
     STOP_LOSS,
+    EARLY_EXIT_TIME_NEGATIVE,
+    EARLY_EXIT_ADVERSE_PCT,
     CLOSED
 }

@@ -167,6 +167,15 @@ public class ExitEngineService {
         updateUnrealized(position, candle.getClose());
 
         IntrabarEventContext candleStartContext = new IntrabarEventContext(position, candle, effectiveInterval);
+        PaperExitReason earlyExitReason = resolveEarlyExit(position, candle.getClose());
+        if (earlyExitReason != null) {
+            closeRemaining(position, candle.getClose(), earlyExitReason, candle.getCloseTime(), candleStartContext);
+            position.setLastExitCandleCloseTime(candle.getCloseTime());
+            log.info("PAPER_POSITION_EARLY_EXIT id={} symbol={} interval={} reason={} currentPnlPct={} maxFavorableMovePct={}",
+                    position.getId(), position.getSymbol(), effectiveInterval, earlyExitReason, currentPnlPct(position, candle.getClose()), position.getMaxFavorableMovePct());
+            return position;
+        }
+
         BigDecimal stopBefore = position.getCurrentStop();
         boolean tp1HitBefore = Boolean.TRUE.equals(position.getTp1Hit());
         boolean tp2HitBefore = Boolean.TRUE.equals(position.getTp2Hit());
@@ -248,6 +257,13 @@ public class ExitEngineService {
                 .close(candleClose)
                 .interval("1h")
                 .build(), "1h");
+        PaperExitReason earlyExitReason = resolveEarlyExit(position, candleClose);
+        if (earlyExitReason != null) {
+            closeRemaining(position, candleClose, earlyExitReason, candleCloseTime, oneHourContext);
+            log.info("PAPER_POSITION_EARLY_EXIT id={} symbol={} interval={} reason={} currentPnlPct={} maxFavorableMovePct={}",
+                    position.getId(), position.getSymbol(), "1h", earlyExitReason, currentPnlPct(position, candleClose), position.getMaxFavorableMovePct());
+            return position;
+        }
 
         if (position.getCurrentStop() == null && position.getTp1() == null && position.getTp2() == null) {
             PaperExitReason legacy = resolveLegacyExitReason(position, calculateUnrealizedPnlPct(position, candleClose));
@@ -437,11 +453,17 @@ public class ExitEngineService {
     }
 
     private void updateBreakEvenStop(PaperPositionEntity p, Instant time, IntrabarEventContext context) {
+        if (!booleanValue(breakEvenConfig().getEnabled(), true)) return;
         BigDecimal oldStop = p.getCurrentStop();
-        BigDecimal feeBuffer = p.getEntryPrice().multiply(scannerProperties.getPaperRisk().getFeeBufferPct());
+        BigDecimal entry = defaultBigDecimal(p.getEntryPriceAdjusted(), p.getEntryPrice());
+        BigDecimal bufferPct = booleanValue(breakEvenConfig().getIncludeMakerFee(), true)
+                ? scannerProperties.getPaperRisk().getFeeBufferPct().multiply(ONE_HUNDRED)
+                : BigDecimal.ZERO;
+        bufferPct = bufferPct.add(breakEvenConfig().getExtraSlippagePct());
+        BigDecimal buffer = entry.multiply(bufferPct).divide(ONE_HUNDRED, PCT_SCALE + 4, RoundingMode.HALF_UP);
         BigDecimal newStop = p.getSide() == PositionSide.SHORT
-                ? p.getEntryPrice().subtract(feeBuffer)
-                : p.getEntryPrice().add(feeBuffer);
+                ? entry.subtract(buffer)
+                : entry.add(buffer);
         p.setCurrentStop(newStop);
         if (oldStop == null || newStop.compareTo(oldStop) != 0) {
             writeEvent(p, PaperPositionEventType.STOP_UPDATED, time, newStop, null, null, null, "STOP_UPDATED", context);
@@ -480,6 +502,32 @@ public class ExitEngineService {
             return true;
         }
         return calculateUnrealizedPnlPct(p, close).compareTo(BigDecimal.ZERO) <= 0;
+    }
+
+    private PaperExitReason resolveEarlyExit(PaperPositionEntity p, BigDecimal currentPrice) {
+        ScannerProperties.EarlyExit config = earlyExitConfig();
+        if (!booleanValue(config.getEnabled(), true)) return null;
+        if (booleanValue(config.getOnlyBeforeTp1(), true) && Boolean.TRUE.equals(p.getTp1Hit())) return null;
+        BigDecimal currentPnlPct = currentPnlPct(p, currentPrice);
+        BigDecimal maxFavorable = defaultBigDecimal(p.getMaxFavorableMovePct(), BigDecimal.ZERO);
+        ScannerProperties.TimeNegative timeNegative = config.getTimeNegative() == null ? new ScannerProperties.TimeNegative() : config.getTimeNegative();
+        if (booleanValue(timeNegative.getEnabled(), true)
+                && intValue(p.getMinutesHeld(), 0) >= intValue(timeNegative.getMinutes(), 15)
+                && (!booleanValue(timeNegative.getRequireNegativePnl(), true) || currentPnlPct.compareTo(BigDecimal.ZERO) < 0)
+                && maxFavorable.compareTo(timeNegative.getMaxFavorablePct()) < 0) {
+            return PaperExitReason.valueOf(timeNegative.getExitReason());
+        }
+        ScannerProperties.AdversePct adversePct = config.getAdversePct() == null ? new ScannerProperties.AdversePct() : config.getAdversePct();
+        if (booleanValue(adversePct.getEnabled(), true)
+                && currentPnlPct.compareTo(adversePct.getAdversePct()) <= 0
+                && maxFavorable.compareTo(adversePct.getMaxFavorablePct()) < 0) {
+            return PaperExitReason.valueOf(adversePct.getExitReason());
+        }
+        return null;
+    }
+
+    private BigDecimal currentPnlPct(PaperPositionEntity p, BigDecimal currentPrice) {
+        return rawPnlPct(p.getSide(), defaultBigDecimal(p.getEntryPriceAdjusted(), p.getEntryPrice()), currentPrice);
     }
 
     private PaperExitReason resolveStrategicExit(PaperPositionEntity p) {
@@ -911,7 +959,7 @@ public class ExitEngineService {
     }
 
     private void updatePricePath(PaperPositionEntity p, BigDecimal high, BigDecimal low, BigDecimal close) {
-        BigDecimal entry = p.getEntryPrice();
+        BigDecimal entry = defaultBigDecimal(p.getEntryPriceAdjusted(), p.getEntryPrice());
         p.setCurrentPrice(close);
         p.setHighestPrice(max(defaultBigDecimal(p.getHighestPrice(), entry), high));
         p.setLowestPrice(min(defaultBigDecimal(p.getLowestPrice(), entry), low));
@@ -956,6 +1004,8 @@ public class ExitEngineService {
     private List<PaperPositionStatus> activeStatuses() { return List.of(PaperPositionStatus.OPEN, PaperPositionStatus.PARTIALLY_CLOSED); }
     private ScannerProperties.PaperExit paperExitConfig() { return scannerProperties.getPaperExit() == null ? new ScannerProperties.PaperExit() : scannerProperties.getPaperExit(); }
     private ScannerProperties.PaperCost costConfig() { return scannerProperties.getPaperCost() == null ? new ScannerProperties.PaperCost() : scannerProperties.getPaperCost(); }
+    private ScannerProperties.BreakEvenAfterTp1 breakEvenConfig() { return scannerProperties.getExit() == null || scannerProperties.getExit().getBreakEvenAfterTp1() == null ? new ScannerProperties.BreakEvenAfterTp1() : scannerProperties.getExit().getBreakEvenAfterTp1(); }
+    private ScannerProperties.EarlyExit earlyExitConfig() { return scannerProperties.getExit() == null || scannerProperties.getExit().getEarlyExit() == null ? new ScannerProperties.EarlyExit() : scannerProperties.getExit().getEarlyExit(); }
     private BigDecimal pct(BigDecimal numerator, BigDecimal denominator) { return numerator.divide(denominator, PCT_SCALE + 4, RoundingMode.HALF_UP).multiply(ONE_HUNDRED).setScale(PCT_SCALE, RoundingMode.HALF_UP); }
     private BigDecimal defaultBigDecimal(BigDecimal primary, BigDecimal fallback) { return primary == null ? fallback : primary; }
     private String defaultString(String value, String defaultValue) { return value == null || value.isBlank() ? defaultValue : value; }
