@@ -6,6 +6,7 @@ import com.crypto.common.enums.PositionSide;
 import com.crypto.common.enums.ReasonTag;
 import com.crypto.common.enums.RiskLevel;
 import com.crypto.common.enums.MarketRegime;
+import com.crypto.common.enums.ScanType;
 import com.crypto.common.service.JsonlDecisionLogService;
 import com.crypto.binance.client.BinanceFuturesClient;
 import com.crypto.domain.model.Kline;
@@ -127,6 +128,10 @@ public class EntrySignalService {
         }
 
         if (candidate.getSide() == PositionSide.LONG) {
+            String longRejectBlock = rejectLongEntry(signal);
+            if (longRejectBlock != null) {
+                return blocked(signal, longRejectBlock);
+            }
             addLongSoftWarnings(signal);
             String triggerBlock = validateLongTrigger(signal);
             if (triggerBlock != null) {
@@ -512,6 +517,25 @@ public class EntrySignalService {
         boolean upperClosedOutside = Boolean.TRUE.equals(signal.getBbUpperClosedOutside());
         boolean outsideReason = signal.getBbReasons() != null && signal.getBbReasons().contains("LONG_BB_OUTSIDE_CHASE");
         return percentBOutside || upperClosedOutside || outsideReason;
+    }
+
+    private String rejectLongEntry(EntrySignal signal) {
+        if (signal == null || signal.getSide() != PositionSide.LONG) {
+            return null;
+        }
+        BigDecimal priceChange = signal.getPriceChange24hPct();
+        if (signal.getSourceScanType() == ScanType.ONE_HOUR
+                && (containsReason(signal, ReasonTag.RSI_IDEAL_SHORT) || gt(priceChange, new BigDecimal("5")))) {
+            return "LONG_ONE_HOUR_SHORT_RSI_OR_24H_REJECT";
+        }
+        if (ge(priceChange, new BigDecimal("5")) && lt(priceChange, new BigDecimal("8"))) {
+            return "LONG_24H_CHANGE_5_TO_8_REJECT";
+        }
+        return null;
+    }
+
+    private boolean containsReason(EntrySignal signal, ReasonTag reason) {
+        return signal != null && signal.getReasons() != null && signal.getReasons().contains(reason);
     }
 
     private void applyFiveMinuteBbTimingPenalty(EntrySignal signal) {

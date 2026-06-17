@@ -13,6 +13,7 @@ import com.crypto.common.enums.EntryAction;
 import com.crypto.common.enums.PositionSide;
 import com.crypto.common.enums.ReasonTag;
 import com.crypto.common.enums.RiskLevel;
+import com.crypto.common.enums.ScanType;
 import com.crypto.domain.model.EntryCandidate;
 import com.crypto.domain.model.EntrySignal;
 import com.crypto.domain.model.Kline;
@@ -268,7 +269,7 @@ class EntrySignalServiceTest {
         setBollingerResult(new BigDecimal("0.95"), false, List.of());
         EntryCandidate candidate = candidate("BTCUSDT", PositionSide.LONG, CoinClassification.STRONG_LONG,
                 DirectionBias.LONG, 90, RiskLevel.LOW);
-        candidate.setPriceChange24hPct(new BigDecimal("5.5"));
+        candidate.setPriceChange24hPct(new BigDecimal("8.5"));
 
         EntrySignal signal = entrySignalService.generateSignal(candidate);
 
@@ -331,11 +332,79 @@ class EntrySignalServiceTest {
         setBollingerResult(null, null, null);
         EntryCandidate candidate = candidate("BTCUSDT", PositionSide.LONG, CoinClassification.STRONG_LONG,
                 DirectionBias.LONG, 90, RiskLevel.LOW);
-        candidate.setPriceChange24hPct(new BigDecimal("5.5"));
+        candidate.setPriceChange24hPct(new BigDecimal("8.5"));
 
         EntrySignal signal = entrySignalService.generateSignal(candidate);
 
         assertThat(signal.getAction()).isEqualTo(EntryAction.ENTER_LONG);
+    }
+
+    @Test
+    void longOneHourShortRsiRejectsLongEntry() {
+        EntryCandidate candidate = candidate("BTCUSDT", PositionSide.LONG, CoinClassification.STRONG_LONG,
+                DirectionBias.LONG, 90, RiskLevel.LOW);
+        candidate.setSourceScanType(ScanType.ONE_HOUR);
+        candidate.setReasons(List.of(ReasonTag.RSI_IDEAL_SHORT));
+
+        EntrySignal signal = entrySignalService.generateSignal(candidate);
+
+        assertThat(signal.getAction()).isEqualTo(EntryAction.NO_ENTRY);
+        assertThat(signal.getBlockReason()).isEqualTo("LONG_ONE_HOUR_SHORT_RSI_OR_24H_REJECT");
+    }
+
+    @Test
+    void longOneHourPriceChangeAboveFiveRejectsLongEntry() {
+        setBollingerResult(new BigDecimal("0.50"), false, List.of());
+        EntryCandidate candidate = candidate("BTCUSDT", PositionSide.LONG, CoinClassification.STRONG_LONG,
+                DirectionBias.LONG, 90, RiskLevel.LOW);
+        candidate.setSourceScanType(ScanType.ONE_HOUR);
+        candidate.setPriceChange24hPct(new BigDecimal("5.1"));
+
+        EntrySignal signal = entrySignalService.generateSignal(candidate);
+
+        assertThat(signal.getAction()).isEqualTo(EntryAction.NO_ENTRY);
+        assertThat(signal.getBlockReason()).isEqualTo("LONG_ONE_HOUR_SHORT_RSI_OR_24H_REJECT");
+    }
+
+    @Test
+    void longPriceChangeBetweenFiveAndEightRejectsLongEntry() {
+        setBollingerResult(new BigDecimal("0.50"), false, List.of());
+        EntryCandidate candidate = candidate("BTCUSDT", PositionSide.LONG, CoinClassification.STRONG_LONG,
+                DirectionBias.LONG, 90, RiskLevel.LOW);
+        candidate.setPriceChange24hPct(new BigDecimal("5.0"));
+
+        EntrySignal signal = entrySignalService.generateSignal(candidate);
+
+        assertThat(signal.getAction()).isEqualTo(EntryAction.NO_ENTRY);
+        assertThat(signal.getBlockReason()).isEqualTo("LONG_24H_CHANGE_5_TO_8_REJECT");
+    }
+
+    @Test
+    void longRejectRulesDoNotApplyToShortEntry() {
+        EntryCandidate candidate = candidate("BTCUSDT", PositionSide.SHORT, CoinClassification.STRONG_SHORT,
+                DirectionBias.SHORT, 90, RiskLevel.LOW);
+        candidate.setSourceScanType(ScanType.ONE_HOUR);
+        candidate.setReasons(List.of(ReasonTag.RSI_IDEAL_SHORT));
+        candidate.setPriceChange24hPct(new BigDecimal("5.5"));
+
+        EntrySignal signal = entrySignalService.generateSignal(candidate);
+
+        assertThat(signal.getAction()).isEqualTo(EntryAction.ENTER_SHORT);
+        assertThat(signal.getBlockReason()).isNull();
+    }
+
+    @Test
+    void longRejectRulesIgnoreNullPriceChangeAndNullReasons() {
+        EntryCandidate candidate = candidate("BTCUSDT", PositionSide.LONG, CoinClassification.STRONG_LONG,
+                DirectionBias.LONG, 90, RiskLevel.LOW);
+        candidate.setSourceScanType(ScanType.ONE_HOUR);
+        candidate.setReasons(null);
+        candidate.setPriceChange24hPct(null);
+
+        EntrySignal signal = entrySignalService.generateSignal(candidate);
+
+        assertThat(signal.getAction()).isEqualTo(EntryAction.ENTER_LONG);
+        assertThat(signal.getBlockReason()).isNull();
     }
 
     @Test
