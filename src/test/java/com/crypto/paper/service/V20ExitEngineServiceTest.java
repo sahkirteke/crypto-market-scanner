@@ -60,6 +60,20 @@ class V20ExitEngineServiceTest {
     }
 
     @Test
+    void v20ProcessesEntryCandleWhenItClosesAfterPositionOpened() {
+        PaperPositionEntity p = longPosition();
+        p.setOpenedAt(Instant.EPOCH.plusSeconds(120));
+
+        service.evaluatePositionWithCandle(
+                p,
+                candle(Instant.EPOCH, Instant.EPOCH.plusSeconds(300), "103", "100", "102"),
+                "5m"
+        );
+
+        assertClosed(p, "TAKE_PROFIT", "102.000000000000");
+    }
+
+    @Test
     void sameFiveMinuteCandleIsNotProcessedTwice() {
         PaperPositionEntity p = longPosition();
         KlineCandle candle = candle("101", "99", 1);
@@ -213,5 +227,9 @@ class V20ExitEngineServiceTest {
     private KlineCandle candle(String high, String low, long minute) {
         return KlineCandle.builder().openTime(Instant.EPOCH.plusSeconds((minute - 1) * 300)).closeTime(Instant.EPOCH.plusSeconds(minute * 300))
                 .high(new BigDecimal(high)).low(new BigDecimal(low)).close(new BigDecimal("100")).interval("5m").build();
+    }
+    private KlineCandle candle(Instant openTime, Instant closeTime, String high, String low, String close) {
+        return KlineCandle.builder().openTime(openTime).closeTime(closeTime)
+                .high(new BigDecimal(high)).low(new BigDecimal(low)).close(new BigDecimal(close)).interval("5m").build();
     }
 }

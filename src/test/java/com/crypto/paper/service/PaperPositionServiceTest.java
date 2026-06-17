@@ -438,6 +438,25 @@ class PaperPositionServiceTest {
         verify(repository).save(any(PaperPositionEntity.class));
     }
 
+    @Test
+    void v20EntryComputesBookTickerMidPriceWhenMissing() {
+        scannerProperties.getV20().setEnabled(true);
+        BinanceFuturesClient client = mock(BinanceFuturesClient.class);
+        ReflectionTestUtils.setField(service, "binanceFuturesClient", client);
+        when(client.getAllBookTickers()).thenReturn(List.of(BookTicker.builder()
+                .symbol("BTCUSDT")
+                .bidPrice(new BigDecimal("99"))
+                .askPrice(new BigDecimal("101"))
+                .build()));
+
+        PaperPositionEntity opened = service.openPosition(v20SignalWithoutLegacyIndicators("BTCUSDT", EntryAction.ENTER_LONG, PositionSide.LONG, null));
+
+        assertThat(opened).isNotNull();
+        assertThat(opened.getEntryPrice()).isEqualByComparingTo("100");
+        assertThat(opened.getTakeProfitPrice()).isEqualByComparingTo("102.000000000000");
+        verify(repository).save(any(PaperPositionEntity.class));
+    }
+
     private EntrySignal signal(String symbol, EntryAction action, PositionSide side, String entryPrice, RiskLevel riskLevel) {
         return EntrySignal.builder()
                 .scanRunId(77L)

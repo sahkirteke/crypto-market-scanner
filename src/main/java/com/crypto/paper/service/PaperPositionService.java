@@ -462,9 +462,19 @@ public class PaperPositionService {
         List<BookTicker> tickers = binanceFuturesClient.getAllBookTickers();
         return (tickers == null ? List.<BookTicker>of() : tickers).stream()
                 .filter(ticker -> signal.getSymbol().equals(ticker.getSymbol()))
-                .filter(ticker -> ticker.getBidPrice() != null && ticker.getAskPrice() != null && ticker.getMidPrice() != null)
+                .filter(ticker -> ticker.getBidPrice() != null && ticker.getAskPrice() != null)
+                .filter(ticker -> ticker.getBidPrice().compareTo(BigDecimal.ZERO) > 0 && ticker.getAskPrice().compareTo(BigDecimal.ZERO) > 0)
+                .map(this::withMidPrice)
                 .findFirst()
                 .orElse(null);
+    }
+
+    private BookTicker withMidPrice(BookTicker ticker) {
+        if (ticker.getMidPrice() != null && ticker.getMidPrice().compareTo(BigDecimal.ZERO) > 0) {
+            return ticker;
+        }
+        ticker.setMidPrice(ticker.getBidPrice().add(ticker.getAskPrice()).divide(BigDecimal.valueOf(2), QUANTITY_SCALE, RoundingMode.HALF_UP));
+        return ticker;
     }
 
     private BigDecimal adjustedEntry(PositionSide side, BigDecimal entryPrice, ScannerProperties.PaperCost cost) {

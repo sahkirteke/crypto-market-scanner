@@ -709,9 +709,8 @@ public class ExitEngineService {
         if (position == null || position.getOpenedAt() == null) {
             return false;
         }
-        boolean candleOpenedBeforePosition = candleOpenTime != null && candleOpenTime.isBefore(position.getOpenedAt());
         boolean candleClosedBeforeOrAtPosition = candleCloseTime != null && !candleCloseTime.isAfter(position.getOpenedAt());
-        if (!candleOpenedBeforePosition && !candleClosedBeforeOrAtPosition) {
+        if (!candleClosedBeforeOrAtPosition) {
             return false;
         }
         log.info("PAPER_EXIT_CANDLE_SKIPPED_BEFORE_POSITION_OPENED id={} symbol={} interval={} openedAt={} candleOpenTime={} candleCloseTime={}",
