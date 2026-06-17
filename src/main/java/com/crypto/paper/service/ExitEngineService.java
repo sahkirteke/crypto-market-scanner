@@ -45,6 +45,7 @@ import org.springframework.stereotype.Service;
 public class ExitEngineService {
     private static final BigDecimal ONE_HUNDRED = BigDecimal.valueOf(100);
     private static final int PCT_SCALE = 8;
+    private static final int QUANTITY_SCALE = 12;
 
     private final PaperPositionRepository paperPositionRepository;
     private final BinanceFuturesClient binanceFuturesClient;
@@ -188,9 +189,7 @@ public class ExitEngineService {
                 log.info("PAPER_EXIT_CONSERVATIVE_STOP_FIRST id={} symbol={} interval={}",
                         position.getId(), position.getSymbol(), effectiveInterval);
             }
-            PaperExitReason reason = canUseTrailingStop(position, tp1HitBefore, trailingActiveBefore, candle.getCloseTime())
-                    ? PaperExitReason.TRAILING_STOP
-                    : PaperExitReason.STOP_LOSS;
+            PaperExitReason reason = stopReason(position, tp1HitBefore, tp2HitBefore, trailingActiveBefore, stopBefore, candle.getCloseTime());
             closeRemaining(position, defaultBigDecimal(stopBefore, candle.getClose()), reason, candle.getCloseTime(), candleStartContext);
             position.setLastExitCandleCloseTime(candle.getCloseTime());
             log.info("PAPER_POSITION_EVALUATED id={} symbol={} interval={} candleHigh={} candleLow={} status={} remainingPct={}",
@@ -201,7 +200,7 @@ public class ExitEngineService {
         if (tp1Hit(position, candle.getHigh(), candle.getLow(), tp1HitBefore)) {
             IntrabarEventContext tp1Context = new IntrabarEventContext(position, candle, effectiveInterval);
             position.setTp1Hit(true);
-            PartialCloseResult partial = partialClose(position, position.getTp1(), scannerProperties.getPaperRisk().getTp1ClosePct(),
+            PartialCloseResult partial = partialClose(position, position.getTp1(), tpClosePct(exitTpConfig().getTp1CloseRatio()),
                     PaperPositionEventType.PARTIAL_TP1, candle.getCloseTime(), tp1Context);
             position.setTrailingActive(true);
             position.setTrailingActivatedAtBarCloseTime(candle.getCloseTime());
@@ -211,8 +210,9 @@ public class ExitEngineService {
         if (tp2Hit(position, candle.getHigh(), candle.getLow(), tp2HitBefore)) {
             IntrabarEventContext tp2Context = new IntrabarEventContext(position, candle, effectiveInterval);
             position.setTp2Hit(true);
-            PartialCloseResult partial = partialClose(position, position.getTp2(), scannerProperties.getPaperRisk().getTp2ClosePct(),
+            PartialCloseResult partial = partialClose(position, position.getTp2(), tpClosePct(exitTpConfig().getTp2CloseRatio()),
                     PaperPositionEventType.PARTIAL_TP2, candle.getCloseTime(), tp2Context);
+            moveStopToTp1AfterTp2(position, candle.getCloseTime(), tp2Context);
             writeSymbolTradePartialExit(position, partial, PaperExitReason.PARTIAL_TP2, tp2Context);
         }
         updateStatus(position);
@@ -274,14 +274,14 @@ public class ExitEngineService {
         }
 
         if (stopHit(position, candleHigh, candleLow)) {
-            PaperExitReason reason = canUseTrailingStop(position, Boolean.TRUE.equals(position.getTp1Hit()), Boolean.TRUE.equals(position.getTrailingActive()), candleCloseTime) ? PaperExitReason.TRAILING_STOP : PaperExitReason.STOP_LOSS;
+            PaperExitReason reason = stopReason(position, Boolean.TRUE.equals(position.getTp1Hit()), Boolean.TRUE.equals(position.getTp2Hit()), Boolean.TRUE.equals(position.getTrailingActive()), position.getCurrentStop(), candleCloseTime);
             closeRemaining(position, defaultBigDecimal(position.getCurrentStop(), candleClose), reason, candleCloseTime, oneHourContext);
             return position;
         }
         if (tp1Hit(position, candleHigh, candleLow)) {
             IntrabarEventContext tp1Context = oneHourContext;
             position.setTp1Hit(true);
-            PartialCloseResult partial = partialClose(position, position.getTp1(), scannerProperties.getPaperRisk().getTp1ClosePct(), PaperPositionEventType.PARTIAL_TP1, candleCloseTime, tp1Context);
+            PartialCloseResult partial = partialClose(position, position.getTp1(), tpClosePct(exitTpConfig().getTp1CloseRatio()), PaperPositionEventType.PARTIAL_TP1, candleCloseTime, tp1Context);
             position.setTrailingActive(true);
             position.setTrailingActivatedAtBarCloseTime(candleCloseTime);
             updateBreakEvenStop(position, candleCloseTime, oneHourContext);
@@ -290,7 +290,8 @@ public class ExitEngineService {
         if (tp2Hit(position, candleHigh, candleLow)) {
             IntrabarEventContext tp2Context = oneHourContext;
             position.setTp2Hit(true);
-            PartialCloseResult partial = partialClose(position, position.getTp2(), scannerProperties.getPaperRisk().getTp2ClosePct(), PaperPositionEventType.PARTIAL_TP2, candleCloseTime, tp2Context);
+            PartialCloseResult partial = partialClose(position, position.getTp2(), tpClosePct(exitTpConfig().getTp2CloseRatio()), PaperPositionEventType.PARTIAL_TP2, candleCloseTime, tp2Context);
+            moveStopToTp1AfterTp2(position, candleCloseTime, tp2Context);
             writeSymbolTradePartialExit(position, partial, PaperExitReason.PARTIAL_TP2, tp2Context);
         }
         updateStatus(position);
@@ -308,7 +309,7 @@ public class ExitEngineService {
     }
 
     public BigDecimal calculateUnrealizedPnlPct(PaperPositionEntity position, BigDecimal currentPrice) {
-        return rawPnlPct(position.getSide(), position.getEntryPrice(), currentPrice);
+        return rawPnlPct(position.getSide(), pnlEntryPrice(position), currentPrice);
     }
 
     public BigDecimal calculateRealizedPnlUsdt(PaperPositionEntity position, BigDecimal pnlPct) {
@@ -317,11 +318,7 @@ public class ExitEngineService {
     }
 
     public BigDecimal calculateNetPnlPct(PaperPositionEntity position, BigDecimal exitPrice) {
-        ScannerProperties.PaperCost cost = costConfig();
-        BigDecimal raw = rawPnlPct(position.getSide(), position.getEntryPrice(), exitPrice);
-        BigDecimal fees = cost.getTakerFeePct().multiply(BigDecimal.valueOf(200));
-        BigDecimal slippage = cost.getSlippagePct().multiply(BigDecimal.valueOf(200));
-        return raw.subtract(fees).subtract(slippage).setScale(PCT_SCALE, RoundingMode.HALF_UP);
+        return realized(position, exitPrice, ONE_HUNDRED, "TAKER").net();
     }
 
 
@@ -456,7 +453,7 @@ public class ExitEngineService {
         if (!booleanValue(breakEvenConfig().getEnabled(), true)) return;
         BigDecimal oldStop = p.getCurrentStop();
         BigDecimal entry = defaultBigDecimal(p.getEntryPriceAdjusted(), p.getEntryPrice());
-        BigDecimal bufferPct = booleanValue(breakEvenConfig().getIncludeMakerFee(), true)
+        BigDecimal bufferPct = booleanValue(breakEvenConfig().getIncludeFees(), true)
                 ? scannerProperties.getPaperRisk().getFeeBufferPct().multiply(ONE_HUNDRED)
                 : BigDecimal.ZERO;
         bufferPct = bufferPct.add(breakEvenConfig().getExtraSlippagePct());
@@ -467,6 +464,25 @@ public class ExitEngineService {
         p.setCurrentStop(newStop);
         if (oldStop == null || newStop.compareTo(oldStop) != 0) {
             writeEvent(p, PaperPositionEventType.STOP_UPDATED, time, newStop, null, null, null, "STOP_UPDATED", context);
+        }
+    }
+
+
+    private PaperExitReason stopReason(PaperPositionEntity position, boolean tp1HitBefore, boolean tp2HitBefore, boolean trailingActiveBefore, BigDecimal stop, Instant candleCloseTime) {
+        if (tp2HitBefore && booleanValue(afterTp2Config().getMoveSlToTp1(), true) && stop != null && position.getTp1() != null && stop.compareTo(position.getTp1()) == 0) {
+            return PaperExitReason.valueOf(afterTp2Config().getExitReason());
+        }
+        return canUseTrailingStop(position, tp1HitBefore, trailingActiveBefore, candleCloseTime)
+                ? PaperExitReason.TRAILING_STOP
+                : PaperExitReason.STOP_LOSS;
+    }
+
+    private void moveStopToTp1AfterTp2(PaperPositionEntity p, Instant time, IntrabarEventContext context) {
+        if (!booleanValue(afterTp2Config().getMoveSlToTp1(), true) || p.getTp1() == null) return;
+        BigDecimal oldStop = p.getCurrentStop();
+        p.setCurrentStop(p.getTp1());
+        if (oldStop == null || p.getTp1().compareTo(oldStop) != 0) {
+            writeEvent(p, PaperPositionEventType.STOP_UPDATED, time, p.getTp1(), null, null, null, "STOP_MOVED_TO_TP1_AFTER_TP2", context);
         }
     }
 
@@ -481,10 +497,16 @@ public class ExitEngineService {
         if (p.getSide() == PositionSide.SHORT) {
             p.setLowestPriceSinceEntry(min(defaultBigDecimal(p.getLowestPriceSinceEntry(), p.getEntryPrice()), low));
             BigDecimal candidateStop = p.getLowestPriceSinceEntry().add(trailingDistance);
+            if (Boolean.TRUE.equals(p.getTp2Hit()) && p.getTp1() != null) {
+                candidateStop = min(candidateStop, p.getTp1());
+            }
             p.setCurrentStop(oldStop == null ? candidateStop : min(oldStop, candidateStop));
         } else {
             p.setHighestPriceSinceEntry(max(defaultBigDecimal(p.getHighestPriceSinceEntry(), p.getEntryPrice()), high));
             BigDecimal candidateStop = p.getHighestPriceSinceEntry().subtract(trailingDistance);
+            if (Boolean.TRUE.equals(p.getTp2Hit()) && p.getTp1() != null) {
+                candidateStop = max(candidateStop, p.getTp1());
+            }
             p.setCurrentStop(oldStop == null ? candidateStop : max(oldStop, candidateStop));
         }
         if (oldStop == null || p.getCurrentStop().compareTo(oldStop) != 0) {
@@ -577,20 +599,19 @@ public class ExitEngineService {
     private void closeRemaining(PaperPositionEntity p, BigDecimal exitPrice, PaperExitReason reason, Instant time, IntrabarEventContext context) {
         BigDecimal closePct = defaultBigDecimal(p.getRemainingPositionPct(), new BigDecimal("100"));
         Instant closeTime = correctedCloseTime(p, time);
-        Realized realized = realized(p, exitPrice, closePct);
+        Realized realized = realized(p, exitPrice, closePct, feeTypeForReason(reason));
         p.setStatus(PaperPositionStatus.CLOSED);
         p.setClosedAt(closeTime);
         p.setExitPrice(exitPrice);
         p.setExitPriceAdjusted(adjustedExit(p.getSide(), exitPrice));
         mergeRealized(p, realized, exitPrice);
         p.setRealizedPnlPct(p.getNetRealizedPnlPct());
-        p.setRealizedPnlUsdt(calculateRealizedPnlUsdt(p, p.getNetRealizedPnlPct()));
         p.setExitReason(reason.name());
         p.setExitDetail("paper exit reason=" + reason.name());
         p.setRemainingPositionPct(BigDecimal.ZERO);
         writeEvent(p, PaperPositionEventType.valueOf(reason.name()), closeTime, exitPrice, p.getExitPriceAdjusted(), closePct, realized, reason.name(), context);
         writeEvent(p, PaperPositionEventType.CLOSED, closeTime, exitPrice, p.getExitPriceAdjusted(), closePct, realized, reason.name(), context);
-        writeExitTradeLog(p, exitPrice, closePct, reason, context);
+        writeExitTradeLog(p, exitPrice, closePct, reason, context, realized);
         writeSymbolTradeExit(p, exitPrice, closePct, realized, reason, context);
         log.info("PAPER_POSITION_CLOSED closedAt={} id={} symbol={} side={} exitReason={} exitPrice={} pnlPct={}", IstanbulTimeUtil.format(p.getClosedAt()), p.getId(), p.getSymbol(), p.getSide(), reason, exitPrice, p.getRealizedPnlPct());
     }
@@ -602,7 +623,7 @@ public class ExitEngineService {
         backfillSymbolTradeEntryIfMissing(p);
         BigDecimal closedPct = defaultBigDecimal(closePct, context == null ? ONE_HUNDRED : defaultBigDecimal(context.remainingPositionPctBefore(), ONE_HUNDRED));
         BigDecimal realizedNetWeighted = realized == null ? netWeightedForClose(p, exitPrice, closedPct) : realized.netWeighted();
-        BigDecimal realizedPnlUsdt = calculateRealizedPnlUsdt(p, realizedNetWeighted);
+        BigDecimal realizedPnlUsdt = realized == null ? netPnlForClose(p, exitPrice, closedPct) : realized.netPnl();
         PaperExitContext exitContext = PaperExitContext.builder()
                 .exitPrice(exitPrice)
                 .exitPriceAdjusted(p.getExitPriceAdjusted())
@@ -620,6 +641,20 @@ public class ExitEngineService {
                 .rawRealizedPnlPct(realized == null ? rawWeightedForClose(p, exitPrice, closedPct) : realized.rawWeighted())
                 .netRealizedPnlPct(realizedNetWeighted)
                 .leveragedNetRealizedPnlPct(realized == null ? leveragedWeightedForClose(p, exitPrice, closedPct) : realized.leveragedWeighted())
+                .initialBalance(tradingConfig().getInitialBalanceUsdt())
+                .currentBalance(realized == null ? tradingConfig().getInitialBalanceUsdt().add(defaultBigDecimal(p.getRealizedPnlUsdt(), BigDecimal.ZERO)) : realized.currentBalance())
+                .marginUsdt(marginUsdt())
+                .closedQty(realized == null ? null : realized.closedQty())
+                .remainingQty(realized == null ? null : realized.remainingQty())
+                .grossPnl(realized == null ? null : realized.grossPnl())
+                .entryFeePart(realized == null ? null : realized.entryFeePart())
+                .exitFee(realized == null ? null : realized.exitFee())
+                .totalFee(realized == null ? null : realized.totalFee())
+                .feeType(realized == null ? feeTypeForReason(reason) : realized.feeType())
+                .netPnl(realized == null ? null : realized.netPnl())
+                .cumulativeRealizedPnl(realized == null ? p.getRealizedPnlUsdt() : realized.cumulativeRealizedPnl())
+                .netPnlPctOnMargin(realized == null ? null : realized.leveraged())
+                .netPnlPctOnNotional(realized == null ? null : realized.net())
                 .tp1HitBefore(context == null ? p.getTp1Hit() : context.tp1HitBefore())
                 .tp1HitAfter(p.getTp1Hit())
                 .tp2HitBefore(context == null ? p.getTp2Hit() : context.tp2HitBefore())
@@ -659,11 +694,25 @@ public class ExitEngineService {
                 .closedPositionPct(partial.closePct())
                 .remainingPositionPctBefore(partial.remainingBefore())
                 .remainingPositionPctAfter(partial.remainingAfter())
-                .realizedPnlUsdt(calculateRealizedPnlUsdt(p, partial.realized().netWeighted()))
+                .realizedPnlUsdt(partial.realized().netPnl())
                 .realizedPnlPct(partial.realized().netWeighted())
                 .rawRealizedPnlPct(partial.realized().rawWeighted())
                 .netRealizedPnlPct(partial.realized().netWeighted())
                 .leveragedNetRealizedPnlPct(partial.realized().leveragedWeighted())
+                .initialBalance(tradingConfig().getInitialBalanceUsdt())
+                .currentBalance(partial.realized().currentBalance())
+                .marginUsdt(marginUsdt())
+                .closedQty(partial.realized().closedQty())
+                .remainingQty(partial.realized().remainingQty())
+                .grossPnl(partial.realized().grossPnl())
+                .entryFeePart(partial.realized().entryFeePart())
+                .exitFee(partial.realized().exitFee())
+                .totalFee(partial.realized().totalFee())
+                .feeType(partial.realized().feeType())
+                .netPnl(partial.realized().netPnl())
+                .cumulativeRealizedPnl(partial.realized().cumulativeRealizedPnl())
+                .netPnlPctOnMargin(partial.realized().leveraged())
+                .netPnlPctOnNotional(partial.realized().net())
                 .tp1HitBefore(partial.tp1HitBefore())
                 .tp1HitAfter(p.getTp1Hit())
                 .tp2HitBefore(partial.tp2HitBefore())
@@ -703,11 +752,12 @@ public class ExitEngineService {
         return seq;
     }
 
-    private void writeExitTradeLog(PaperPositionEntity p, BigDecimal exitPrice, BigDecimal closePct, PaperExitReason reason, IntrabarEventContext context) {
+    private void writeExitTradeLog(PaperPositionEntity p, BigDecimal exitPrice, BigDecimal closePct, PaperExitReason reason, IntrabarEventContext context, Realized realized) {
         if (jsonlDecisionLogService == null) {
             return;
         }
         Map<String, Object> payload = new LinkedHashMap<>();
+        Realized tradeRealized = realized == null ? realized(p, exitPrice, closePct, feeTypeForReason(reason)) : realized;
         payload.put("type", "EXIT");
         payload.put("positionId", p.getId() == null ? "" : p.getId());
         payload.put("scanRunId", p.getSourceScanRunId());
@@ -717,10 +767,29 @@ public class ExitEngineService {
         payload.put("symbol", p.getSymbol());
         payload.put("time", p.getClosedAt());
         payload.put("side", p.getSide().name());
+        payload.put("initialBalance", tradingConfig().getInitialBalanceUsdt());
+        payload.put("currentBalance", tradeRealized.currentBalance());
+        payload.put("marginUsdt", marginUsdt());
+        payload.put("notionalUsdt", p.getNotionalUsdt());
+        payload.put("leverage", p.getLeverage());
         payload.put("entryPrice", p.getEntryPrice());
+        payload.put("entryPriceAdjusted", p.getEntryPriceAdjusted());
         payload.put("exitPrice", exitPrice);
+        payload.put("exitPriceAdjusted", adjustedExit(p.getSide(), exitPrice));
         payload.put("qty", p.getQuantity());
-        payload.put("realizedPnl", realizedPnlForTradeLog(p, exitPrice, closePct));
+        payload.put("quantity", p.getQuantity());
+        payload.put("closedQty", tradeRealized.closedQty());
+        payload.put("remainingQty", tradeRealized.remainingQty());
+        payload.put("grossPnl", tradeRealized.grossPnl());
+        payload.put("entryFeePart", tradeRealized.entryFeePart());
+        payload.put("exitFee", tradeRealized.exitFee());
+        payload.put("totalFee", tradeRealized.totalFee());
+        payload.put("feeType", tradeRealized.feeType());
+        payload.put("netPnl", tradeRealized.netPnl());
+        payload.put("cumulativeRealizedPnl", tradeRealized.cumulativeRealizedPnl());
+        payload.put("netPnlPctOnMargin", tradeRealized.leveraged());
+        payload.put("netPnlPctOnNotional", tradeRealized.net());
+        payload.put("realizedPnl", tradeRealized.netPnl());
         payload.put("rawPnlPct", p.getRawRealizedPnlPct());
         payload.put("netPnlPct", p.getNetRealizedPnlPct());
         payload.put("leveragedNetPnlPct", p.getLeveragedNetRealizedPnlPct());
@@ -728,6 +797,8 @@ public class ExitEngineService {
         payload.put("tp1", p.getTp1());
         payload.put("tp2", p.getTp2());
         payload.put("slPrice", stopPriceForTradeLog(p, exitPrice, reason));
+        payload.put("stopLoss", p.getInitialStop());
+        payload.put("currentStopLoss", p.getCurrentStop());
         payload.put("firstHit", firstHit(reason));
         payload.put("exitTrigger", exitTrigger(reason, context));
         payload.put("interval", context == null ? "" : context.interval());
@@ -757,7 +828,7 @@ public class ExitEngineService {
     }
 
     private BigDecimal stopPriceForTradeLog(PaperPositionEntity p, BigDecimal exitPrice, PaperExitReason reason) {
-        return reason == PaperExitReason.STOP_LOSS || reason == PaperExitReason.TRAILING_STOP
+        return reason == PaperExitReason.STOP_LOSS || reason == PaperExitReason.TRAILING_STOP || reason == PaperExitReason.TRAILING_STOP_AT_TP1_AFTER_TP2
                 ? exitPrice
                 : p.getCurrentStop();
     }
@@ -766,7 +837,7 @@ public class ExitEngineService {
         return switch (reason) {
             case STOP_LOSS -> "SL_FIRST";
             case TAKE_PROFIT, PARTIAL_TP1, PARTIAL_TP2 -> "TP_FIRST";
-            case TRAILING_STOP -> "TRAILING_FIRST";
+            case TRAILING_STOP, TRAILING_STOP_AT_TP1_AFTER_TP2 -> "TRAILING_FIRST";
             case TIME_STOP -> "TIME_STOP";
             case SIGNAL_INVALIDATION -> "SIGNAL_INVALIDATION";
             case MARKET_REGIME_EXIT -> "MARKET_REGIME_EXIT";
@@ -780,7 +851,7 @@ public class ExitEngineService {
         return switch (reason) {
             case STOP_LOSS -> "SL_" + suffix;
             case TAKE_PROFIT, PARTIAL_TP1, PARTIAL_TP2 -> "TP_" + suffix;
-            case TRAILING_STOP -> "TRAILING_" + suffix;
+            case TRAILING_STOP, TRAILING_STOP_AT_TP1_AFTER_TP2 -> "TRAILING_" + suffix;
             case TIME_STOP -> "TIME_STOP";
             case SIGNAL_INVALIDATION, MARKET_REGIME_EXIT, OPPOSITE_SIGNAL_EXIT -> "SCAN";
             default -> reason.name();
@@ -798,40 +869,66 @@ public class ExitEngineService {
     private void mergeRealized(PaperPositionEntity p, Realized r, BigDecimal exitPrice) {
         p.setExitPrice(exitPrice);
         p.setRawRealizedPnlPct(defaultBigDecimal(p.getRawRealizedPnlPct(), BigDecimal.ZERO).add(r.rawWeighted()));
-        p.setNetRealizedPnlPct(defaultBigDecimal(p.getNetRealizedPnlPct(), BigDecimal.ZERO).add(r.netWeighted()));
-        p.setLeveragedNetRealizedPnlPct(defaultBigDecimal(p.getLeveragedNetRealizedPnlPct(), BigDecimal.ZERO).add(r.leveragedWeighted()));
+        p.setNetRealizedPnlPct(defaultBigDecimal(p.getNetRealizedPnlPct(), BigDecimal.ZERO).add(r.net()));
+        p.setLeveragedNetRealizedPnlPct(defaultBigDecimal(p.getLeveragedNetRealizedPnlPct(), BigDecimal.ZERO).add(r.leveraged()));
         p.setRealizedPnlPct(p.getNetRealizedPnlPct());
-        p.setRealizedPnlUsdt(calculateRealizedPnlUsdt(p, p.getNetRealizedPnlPct()));
+        p.setRealizedPnlUsdt(defaultBigDecimal(p.getRealizedPnlUsdt(), BigDecimal.ZERO).add(r.netPnl()));
     }
 
     private BigDecimal rawWeightedForClose(PaperPositionEntity p, BigDecimal exitPrice, BigDecimal pctClosed) {
-        return rawPnlPct(p.getSide(), p.getEntryPrice(), exitPrice).multiply(weight(pctClosed));
+        return realized(p, exitPrice, pctClosed, feeTypeForReason(null)).rawWeighted();
     }
 
     private BigDecimal netWeightedForClose(PaperPositionEntity p, BigDecimal exitPrice, BigDecimal pctClosed) {
-        return calculateNetPnlPct(p, exitPrice).multiply(weight(pctClosed));
+        return realized(p, exitPrice, pctClosed, feeTypeForReason(null)).net();
     }
 
     private BigDecimal leveragedWeightedForClose(PaperPositionEntity p, BigDecimal exitPrice, BigDecimal pctClosed) {
-        return calculateNetPnlPct(p, exitPrice)
-                .multiply(BigDecimal.valueOf(intValue(costConfig().getLeverage(), 3)))
-                .setScale(PCT_SCALE, RoundingMode.HALF_UP)
-                .multiply(weight(pctClosed));
+        return realized(p, exitPrice, pctClosed, feeTypeForReason(null)).leveraged();
+    }
+
+    private BigDecimal netPnlForClose(PaperPositionEntity p, BigDecimal exitPrice, BigDecimal pctClosed) {
+        return realized(p, exitPrice, pctClosed, feeTypeForReason(null)).netPnl();
     }
 
     private Realized realized(PaperPositionEntity p, BigDecimal exitPrice, BigDecimal pctClosed) {
-        BigDecimal raw = rawPnlPct(p.getSide(), p.getEntryPrice(), exitPrice);
-        BigDecimal net = calculateNetPnlPct(p, exitPrice);
-        BigDecimal leveraged = net.multiply(BigDecimal.valueOf(intValue(costConfig().getLeverage(), 3))).setScale(PCT_SCALE, RoundingMode.HALF_UP);
-        BigDecimal weight = weight(pctClosed);
-        return new Realized(raw, net, leveraged, raw.multiply(weight), net.multiply(weight), leveraged.multiply(weight));
+        return realized(p, exitPrice, pctClosed, feeTypeForReason(null));
+    }
+
+    private Realized realized(PaperPositionEntity p, BigDecimal exitPrice, BigDecimal pctClosed, String feeType) {
+        BigDecimal closeRatio = weight(pctClosed);
+        BigDecimal totalQty = defaultBigDecimal(p.getQuantity(), BigDecimal.ZERO);
+        BigDecimal closedQty = totalQty.multiply(closeRatio).setScale(QUANTITY_SCALE, RoundingMode.HALF_UP);
+        BigDecimal remainingQty = totalQty.subtract(closedQty).max(BigDecimal.ZERO);
+        BigDecimal entryAdjusted = pnlEntryPrice(p);
+        BigDecimal exitAdjusted = adjustedExit(p.getSide(), exitPrice);
+        BigDecimal grossPnl = p.getSide() == PositionSide.SHORT
+                ? closedQty.multiply(entryAdjusted.subtract(exitAdjusted))
+                : closedQty.multiply(exitAdjusted.subtract(entryAdjusted));
+        BigDecimal entryNotional = defaultBigDecimal(p.getNotionalUsdt(), entryAdjusted.multiply(totalQty));
+        BigDecimal exitNotional = exitAdjusted.multiply(closedQty).abs();
+        BigDecimal entryFeePart = entryNotional.multiply(entryFeeRate()).multiply(closeRatio);
+        BigDecimal exitFee = exitNotional.multiply(feeRate(feeType));
+        BigDecimal totalFee = entryFeePart.add(exitFee);
+        BigDecimal netPnl = grossPnl.subtract(totalFee);
+        BigDecimal closedNotional = entryNotional.multiply(closeRatio);
+        BigDecimal closedMargin = marginUsdt().multiply(closeRatio);
+        BigDecimal priceMovePct = rawPnlPct(p.getSide(), entryAdjusted, exitAdjusted);
+        BigDecimal netPnlPctOnNotional = closedNotional.compareTo(BigDecimal.ZERO) == 0 ? BigDecimal.ZERO : netPnl.divide(closedNotional, PCT_SCALE + 4, RoundingMode.HALF_UP).multiply(ONE_HUNDRED).setScale(PCT_SCALE, RoundingMode.HALF_UP);
+        BigDecimal netPnlPctOnMargin = closedMargin.compareTo(BigDecimal.ZERO) == 0 ? BigDecimal.ZERO : netPnl.divide(closedMargin, PCT_SCALE + 4, RoundingMode.HALF_UP).multiply(ONE_HUNDRED).setScale(PCT_SCALE, RoundingMode.HALF_UP);
+        BigDecimal cumulativeRealizedPnl = defaultBigDecimal(p.getRealizedPnlUsdt(), BigDecimal.ZERO).add(netPnl);
+        BigDecimal currentBalance = tradingConfig().getInitialBalanceUsdt().add(cumulativeRealizedPnl);
+        return new Realized(priceMovePct, netPnlPctOnNotional, netPnlPctOnMargin, priceMovePct.multiply(closeRatio), netPnlPctOnNotional, netPnlPctOnMargin,
+                closedQty, remainingQty, grossPnl, entryFeePart, exitFee, totalFee, netPnl, cumulativeRealizedPnl, currentBalance, feeType);
     }
 
     private BigDecimal weight(BigDecimal pctClosed) {
         return pctClosed.divide(ONE_HUNDRED, PCT_SCALE + 4, RoundingMode.HALF_UP);
     }
 
-    private record Realized(BigDecimal raw, BigDecimal net, BigDecimal leveraged, BigDecimal rawWeighted, BigDecimal netWeighted, BigDecimal leveragedWeighted) {}
+    private record Realized(BigDecimal raw, BigDecimal net, BigDecimal leveraged, BigDecimal rawWeighted, BigDecimal netWeighted, BigDecimal leveragedWeighted,
+                            BigDecimal closedQty, BigDecimal remainingQty, BigDecimal grossPnl, BigDecimal entryFeePart, BigDecimal exitFee, BigDecimal totalFee,
+                            BigDecimal netPnl, BigDecimal cumulativeRealizedPnl, BigDecimal currentBalance, String feeType) {}
     private record PartialCloseResult(BigDecimal price, BigDecimal adjustedPrice, BigDecimal closePct, BigDecimal remainingBefore,
                                       BigDecimal remainingAfter, Realized realized, Instant exitTime,
                                       Boolean tp1HitBefore, Boolean tp2HitBefore, Boolean trailingActiveBefore) {}
@@ -872,9 +969,9 @@ public class ExitEngineService {
                 .rawPnlPct(r == null ? null : r.raw())
                 .netPnlPct(r == null ? null : r.net())
                 .leveragedNetPnlPct(r == null ? null : r.leveraged())
-                .feePct(costConfig().getTakerFeePct().multiply(BigDecimal.valueOf(200)))
+                .feePct(tradingConfig().getTakerFeeRate().multiply(BigDecimal.valueOf(200)))
                 .slippagePct(costConfig().getSlippagePct().multiply(BigDecimal.valueOf(200)))
-                .leverage(costConfig().getLeverage())
+                .leverage(tradingConfig().getLeverage())
                 .reason(reason)
                 .detailsJson(toJson(details))
                 .build();
@@ -912,6 +1009,25 @@ public class ExitEngineService {
         details.put("remainingPositionPctAfter", p.getRemainingPositionPct());
         details.put("trailingActiveAfter", p.getTrailingActive());
         details.put("exitReason", reason);
+        details.put("initialBalance", tradingConfig().getInitialBalanceUsdt());
+        details.put("currentBalance", r == null ? tradingConfig().getInitialBalanceUsdt().add(defaultBigDecimal(p.getRealizedPnlUsdt(), BigDecimal.ZERO)) : r.currentBalance());
+        details.put("marginUsdt", marginUsdt());
+        details.put("notionalUsdt", p.getNotionalUsdt());
+        details.put("entryPrice", p.getEntryPrice());
+        details.put("entryPriceAdjusted", p.getEntryPriceAdjusted());
+        details.put("exitPriceAdjusted", r == null ? null : adjustedExit(p.getSide(), p.getExitPrice()));
+        details.put("quantity", p.getQuantity());
+        details.put("closedQty", r == null ? null : r.closedQty());
+        details.put("remainingQty", r == null ? null : r.remainingQty());
+        details.put("grossPnl", r == null ? null : r.grossPnl());
+        details.put("entryFeePart", r == null ? null : r.entryFeePart());
+        details.put("exitFee", r == null ? null : r.exitFee());
+        details.put("totalFee", r == null ? null : r.totalFee());
+        details.put("feeType", r == null ? null : r.feeType());
+        details.put("netPnl", r == null ? null : r.netPnl());
+        details.put("cumulativeRealizedPnl", r == null ? p.getRealizedPnlUsdt() : r.cumulativeRealizedPnl());
+        details.put("netPnlPctOnMargin", r == null ? p.getLeveragedNetUnrealizedPnlPct() : r.leveraged());
+        details.put("netPnlPctOnNotional", r == null ? p.getNetUnrealizedPnlPct() : r.net());
         details.put("rawPnlPct", r == null ? p.getRawUnrealizedPnlPct() : r.raw());
         details.put("netPnlPct", r == null ? p.getNetUnrealizedPnlPct() : r.net());
         details.put("leveragedNetPnlPct", r == null ? p.getLeveragedNetUnrealizedPnlPct() : r.leveraged());
@@ -983,11 +1099,11 @@ public class ExitEngineService {
     }
 
     private void updateUnrealized(PaperPositionEntity p, BigDecimal close) {
-        BigDecimal raw = rawPnlPct(p.getSide(), p.getEntryPrice(), close);
+        BigDecimal raw = rawPnlPct(p.getSide(), pnlEntryPrice(p), close);
         BigDecimal net = calculateNetPnlPct(p, close);
         p.setRawUnrealizedPnlPct(raw);
         p.setNetUnrealizedPnlPct(net);
-        p.setLeveragedNetUnrealizedPnlPct(net.multiply(BigDecimal.valueOf(intValue(costConfig().getLeverage(), 3))).setScale(PCT_SCALE, RoundingMode.HALF_UP));
+        p.setLeveragedNetUnrealizedPnlPct(net.multiply(BigDecimal.valueOf(intValue(tradingConfig().getLeverage(), 10))).setScale(PCT_SCALE, RoundingMode.HALF_UP));
     }
 
     private BigDecimal rawPnlPct(PositionSide side, BigDecimal entry, BigDecimal exit) {
@@ -1004,8 +1120,26 @@ public class ExitEngineService {
     private List<PaperPositionStatus> activeStatuses() { return List.of(PaperPositionStatus.OPEN, PaperPositionStatus.PARTIALLY_CLOSED); }
     private ScannerProperties.PaperExit paperExitConfig() { return scannerProperties.getPaperExit() == null ? new ScannerProperties.PaperExit() : scannerProperties.getPaperExit(); }
     private ScannerProperties.PaperCost costConfig() { return scannerProperties.getPaperCost() == null ? new ScannerProperties.PaperCost() : scannerProperties.getPaperCost(); }
+    private ScannerProperties.Trading tradingConfig() { return scannerProperties.getTrading() == null ? new ScannerProperties.Trading() : scannerProperties.getTrading(); }
+    private ScannerProperties.Tp exitTpConfig() { return scannerProperties.getExit() == null || scannerProperties.getExit().getTp() == null ? new ScannerProperties.Tp() : scannerProperties.getExit().getTp(); }
+    private ScannerProperties.AfterTp2 afterTp2Config() { return scannerProperties.getExit() == null || scannerProperties.getExit().getAfterTp2() == null ? new ScannerProperties.AfterTp2() : scannerProperties.getExit().getAfterTp2(); }
     private ScannerProperties.BreakEvenAfterTp1 breakEvenConfig() { return scannerProperties.getExit() == null || scannerProperties.getExit().getBreakEvenAfterTp1() == null ? new ScannerProperties.BreakEvenAfterTp1() : scannerProperties.getExit().getBreakEvenAfterTp1(); }
     private ScannerProperties.EarlyExit earlyExitConfig() { return scannerProperties.getExit() == null || scannerProperties.getExit().getEarlyExit() == null ? new ScannerProperties.EarlyExit() : scannerProperties.getExit().getEarlyExit(); }
+    private BigDecimal tpClosePct(BigDecimal ratio) { return defaultBigDecimal(ratio, BigDecimal.ZERO).multiply(ONE_HUNDRED); }
+    private BigDecimal marginUsdt() { return defaultBigDecimal(tradingConfig().getMarginPerTradeUsdt(), new BigDecimal("10")); }
+    private BigDecimal entryFeeRate() { return defaultBigDecimal(tradingConfig().getMakerFeeRate(), new BigDecimal("0.0002")); }
+    private BigDecimal feeRate(String feeType) { return "MAKER".equalsIgnoreCase(defaultString(feeType, "MAKER")) ? defaultBigDecimal(tradingConfig().getMakerFeeRate(), new BigDecimal("0.0002")) : defaultBigDecimal(tradingConfig().getTakerFeeRate(), new BigDecimal("0.0005")); }
+    private String feeTypeForReason(PaperExitReason reason) {
+        if (reason == PaperExitReason.PARTIAL_TP1 || reason == PaperExitReason.PARTIAL_TP2 || reason == null) return "MAKER";
+        if (reason == PaperExitReason.STOP_LOSS || reason == PaperExitReason.TRAILING_STOP || reason == PaperExitReason.TRAILING_STOP_AT_TP1_AFTER_TP2) {
+            return scannerProperties.getExit() == null || scannerProperties.getExit().getStopLoss() == null ? "TAKER" : defaultString(scannerProperties.getExit().getStopLoss().getStopExitFeeType(), "TAKER");
+        }
+        if (reason == PaperExitReason.EARLY_EXIT_TIME_NEGATIVE || reason == PaperExitReason.EARLY_EXIT_ADVERSE_PCT) {
+            return defaultString(earlyExitConfig().getExitFeeType(), "TAKER");
+        }
+        return "TAKER";
+    }
+    private BigDecimal pnlEntryPrice(PaperPositionEntity p) { return booleanValue(tradingConfig().getUseAdjustedPricesForPnl(), true) ? defaultBigDecimal(p.getEntryPriceAdjusted(), p.getEntryPrice()) : p.getEntryPrice(); }
     private BigDecimal pct(BigDecimal numerator, BigDecimal denominator) { return numerator.divide(denominator, PCT_SCALE + 4, RoundingMode.HALF_UP).multiply(ONE_HUNDRED).setScale(PCT_SCALE, RoundingMode.HALF_UP); }
     private BigDecimal defaultBigDecimal(BigDecimal primary, BigDecimal fallback) { return primary == null ? fallback : primary; }
     private String defaultString(String value, String defaultValue) { return value == null || value.isBlank() ? defaultValue : value; }

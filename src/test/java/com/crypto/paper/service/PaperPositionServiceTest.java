@@ -73,7 +73,9 @@ class PaperPositionServiceTest {
         assertThat(captor.getValue().getInversionReason()).isEqualTo("SHORT_SIGNAL_INVERTED_TO_LONG");
         assertThat(captor.getValue().getInitialStop()).isLessThan(captor.getValue().getEntryPrice());
         assertThat(captor.getValue().getTp1()).isGreaterThan(captor.getValue().getEntryPrice());
-        assertThat(captor.getValue().getQuantity()).isEqualByComparingTo(new BigDecimal("19.550342130987"));
+        assertThat(captor.getValue().getQuantity()).isEqualByComparingTo(new BigDecimal("19.540571845064"));
+        assertThat(captor.getValue().getNotionalUsdt()).isEqualByComparingTo("100");
+        assertThat(captor.getValue().getLeverage()).isEqualTo(10);
     }
 
 
@@ -150,6 +152,17 @@ class PaperPositionServiceTest {
         verify(repository, never()).save(any(PaperPositionEntity.class));
         verify(jsonl).logPaper(captor.capture());
         assertThat(captor.getValue()).containsEntry("rejectReason", "LONG_24H_CHANGE_TOO_HIGH");
+    }
+
+    @Test
+    void doesNotRejectShortWhen24hChangeExceedsLongOnlyCap() {
+        EntrySignal signal = signal("BTCUSDT", EntryAction.ENTER_SHORT, PositionSide.SHORT, "10", RiskLevel.LOW);
+        signal.setPriceChange24hPct(new BigDecimal("9.00"));
+
+        PaperPositionEntity opened = service.openPosition(signal);
+
+        assertThat(opened).isNotNull();
+        verify(repository).save(any(PaperPositionEntity.class));
     }
 
     @Test

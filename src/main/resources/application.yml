@@ -38,19 +38,35 @@ scanner:
     four-hour-cron: "30 0 3,7,11,15,19,23 * * *"
     zone: "Europe/Istanbul"
 
+  trading:
+    initial-balance-usdt: 100
+    margin-per-trade-usdt: 10
+    leverage: 10
+    maker-fee-rate: 0.0002
+    taker-fee-rate: 0.0005
+    use-adjusted-prices-for-pnl: true
+
   exit:
     tp:
       max-tp1-pct: 1.40
       max-tp2-pct: 2.00
+      tp1-close-ratio: 0.50
+      tp2-close-ratio: 0.25
+      trailing-close-ratio: 0.25
     stop-loss:
       max-sl-pct: 1.00
+      stop-exit-fee-type: TAKER
     break-even-after-tp1:
       enabled: true
-      include-maker-fee: true
+      include-fees: true
       extra-slippage-pct: 0.02
+    after-tp2:
+      move-sl-to-tp1: true
+      exit-reason: TRAILING_STOP_AT_TP1_AFTER_TP2
     early-exit:
       enabled: true
       only-before-tp1: true
+      exit-fee-type: TAKER
       time-negative:
         enabled: true
         minutes: 15

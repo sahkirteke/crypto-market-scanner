@@ -26,6 +26,7 @@ public class ScannerProperties {
     private PaperExit paperExit = new PaperExit();
     private PaperRisk paperRisk = new PaperRisk();
     private PaperCost paperCost = new PaperCost();
+    private Trading trading = new Trading();
     private Exit exit = new Exit();
     private Entry entry = new Entry();
 
@@ -171,10 +172,22 @@ public class ScannerProperties {
 
     @Getter
     @Setter
+    public static class Trading {
+        private BigDecimal initialBalanceUsdt = new BigDecimal("100");
+        private BigDecimal marginPerTradeUsdt = new BigDecimal("10");
+        private Integer leverage = 10;
+        private BigDecimal makerFeeRate = new BigDecimal("0.0002");
+        private BigDecimal takerFeeRate = new BigDecimal("0.0005");
+        private Boolean useAdjustedPricesForPnl = true;
+    }
+
+    @Getter
+    @Setter
     public static class Exit {
         private Tp tp = new Tp();
         private StopLoss stopLoss = new StopLoss();
         private BreakEvenAfterTp1 breakEvenAfterTp1 = new BreakEvenAfterTp1();
+        private AfterTp2 afterTp2 = new AfterTp2();
         private EarlyExit earlyExit = new EarlyExit();
     }
 
@@ -183,20 +196,31 @@ public class ScannerProperties {
     public static class Tp {
         private BigDecimal maxTp1Pct = new BigDecimal("1.40");
         private BigDecimal maxTp2Pct = new BigDecimal("2.00");
+        private BigDecimal tp1CloseRatio = new BigDecimal("0.50");
+        private BigDecimal tp2CloseRatio = new BigDecimal("0.25");
+        private BigDecimal trailingCloseRatio = new BigDecimal("0.25");
     }
 
     @Getter
     @Setter
     public static class StopLoss {
         private BigDecimal maxSlPct = new BigDecimal("1.00");
+        private String stopExitFeeType = "TAKER";
     }
 
     @Getter
     @Setter
     public static class BreakEvenAfterTp1 {
         private Boolean enabled = true;
-        private Boolean includeMakerFee = true;
+        private Boolean includeFees = true;
         private BigDecimal extraSlippagePct = new BigDecimal("0.02");
+    }
+
+    @Getter
+    @Setter
+    public static class AfterTp2 {
+        private Boolean moveSlToTp1 = true;
+        private String exitReason = "TRAILING_STOP_AT_TP1_AFTER_TP2";
     }
 
     @Getter
@@ -204,6 +228,7 @@ public class ScannerProperties {
     public static class EarlyExit {
         private Boolean enabled = true;
         private Boolean onlyBeforeTp1 = true;
+        private String exitFeeType = "TAKER";
         private TimeNegative timeNegative = new TimeNegative();
         private AdversePct adversePct = new AdversePct();
     }

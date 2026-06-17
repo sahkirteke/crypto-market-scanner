@@ -179,9 +179,70 @@ class ExitEngineServiceTest {
     }
 
 
+
+    @Test
+    void longTp1Tp2AndTrailingCloseExpectedRatiosAndBalance() {
+        ExitEngineService service = service(mock(PaperPositionRepository.class), mock(BinanceFuturesClient.class));
+        PaperPositionEntity position = position(PositionSide.LONG);
+        position.setCurrentStop(new BigDecimal("99"));
+        position.setTp1(new BigDecimal("101"));
+        position.setTp2(new BigDecimal("102"));
+
+        service.evaluatePositionOnCandle(position, Instant.now(), Instant.now(), new BigDecimal("101.1"), new BigDecimal("100"), new BigDecimal("101"), BigDecimal.ONE);
+        assertThat(position.getRemainingPositionPct()).isEqualByComparingTo("50.00");
+        assertThat(position.getRealizedPnlUsdt()).isNotNull();
+        assertThat(position.getCurrentStop()).isGreaterThan(position.getEntryPriceAdjusted());
+
+        service.evaluatePositionOnCandle(position, Instant.now().plusSeconds(60), Instant.now().plusSeconds(60), new BigDecimal("102.1"), new BigDecimal("101"), new BigDecimal("102"), BigDecimal.ONE);
+        assertThat(position.getRemainingPositionPct()).isEqualByComparingTo("25.00");
+        assertThat(position.getCurrentStop()).isEqualByComparingTo(position.getTp1());
+
+        service.evaluatePositionOnCandle(position, Instant.now().plusSeconds(120), Instant.now().plusSeconds(120), new BigDecimal("101.2"), new BigDecimal("101"), new BigDecimal("101"), BigDecimal.ONE);
+        assertThat(position.getStatus()).isEqualTo(PaperPositionStatus.CLOSED);
+        assertThat(position.getExitReason()).isEqualTo("TRAILING_STOP_AT_TP1_AFTER_TP2");
+        assertThat(position.getRemainingPositionPct()).isZero();
+    }
+
+    @Test
+    void shortTp1Tp2AndTrailingCloseExpectedRatios() {
+        ExitEngineService service = service(mock(PaperPositionRepository.class), mock(BinanceFuturesClient.class));
+        PaperPositionEntity position = position(PositionSide.SHORT);
+        position.setCurrentStop(new BigDecimal("101"));
+        position.setTp1(new BigDecimal("99"));
+        position.setTp2(new BigDecimal("98"));
+
+        service.evaluatePositionOnCandle(position, Instant.now(), Instant.now(), new BigDecimal("100"), new BigDecimal("98.9"), new BigDecimal("99"), BigDecimal.ONE);
+        assertThat(position.getRemainingPositionPct()).isEqualByComparingTo("50.00");
+        assertThat(position.getCurrentStop()).isLessThan(position.getEntryPriceAdjusted());
+
+        service.evaluatePositionOnCandle(position, Instant.now().plusSeconds(60), Instant.now().plusSeconds(60), new BigDecimal("99"), new BigDecimal("97.9"), new BigDecimal("98"), BigDecimal.ONE);
+        assertThat(position.getRemainingPositionPct()).isEqualByComparingTo("25.00");
+        assertThat(position.getCurrentStop()).isEqualByComparingTo(position.getTp1());
+
+        service.evaluatePositionOnCandle(position, Instant.now().plusSeconds(120), Instant.now().plusSeconds(120), new BigDecimal("99"), new BigDecimal("98.5"), new BigDecimal("99"), BigDecimal.ONE);
+        assertThat(position.getStatus()).isEqualTo(PaperPositionStatus.CLOSED);
+        assertThat(position.getExitReason()).isEqualTo("TRAILING_STOP_AT_TP1_AFTER_TP2");
+    }
+
+    @Test
+    void tpMakerAndStopTakerFeesAffectBalance() {
+        ExitEngineService service = service(mock(PaperPositionRepository.class), mock(BinanceFuturesClient.class));
+        PaperPositionEntity tp = position(PositionSide.LONG);
+        tp.setTp1(new BigDecimal("101"));
+        tp.setCurrentStop(new BigDecimal("99"));
+        service.evaluatePositionOnCandle(tp, Instant.now(), Instant.now(), new BigDecimal("101"), new BigDecimal("100"), new BigDecimal("101"), BigDecimal.ONE);
+        assertThat(tp.getRealizedPnlUsdt()).isLessThan(new BigDecimal("0.50"));
+
+        PaperPositionEntity sl = position(PositionSide.LONG);
+        sl.setCurrentStop(new BigDecimal("99"));
+        service.evaluatePositionOnCandle(sl, Instant.now(), Instant.now(), new BigDecimal("100"), new BigDecimal("99"), new BigDecimal("99"), BigDecimal.ONE);
+        assertThat(sl.getExitReason()).isEqualTo("STOP_LOSS");
+        assertThat(sl.getRealizedPnlUsdt()).isLessThan(new BigDecimal("-1.00"));
+    }
+
     @Test
     void earlyExitTimeNegativeClosesOnlyBeforeTp1() {
-        ExitEngineService service = service(mock(PaperPositionRepository.class), mock(BinanceFuturesClient.class));
+        ExitEngineService service = serviceWithEarlyExit();
         PaperPositionEntity position = position(PositionSide.LONG);
         position.setOpenedAt(Instant.now().minusSeconds(16L * 60L));
 
@@ -193,7 +254,7 @@ class ExitEngineServiceTest {
 
     @Test
     void earlyExitDoesNotRunAfterTp1Hit() {
-        ExitEngineService service = service(mock(PaperPositionRepository.class), mock(BinanceFuturesClient.class));
+        ExitEngineService service = serviceWithEarlyExit();
         PaperPositionEntity position = position(PositionSide.LONG);
         position.setOpenedAt(Instant.now().minusSeconds(16L * 60L));
         position.setTp1Hit(true);
@@ -313,6 +374,12 @@ class ExitEngineServiceTest {
         return new ExitEngineService(repository, client, properties());
     }
 
+    private ExitEngineService serviceWithEarlyExit() {
+        ScannerProperties properties = properties();
+        properties.getExit().getEarlyExit().setEnabled(true);
+        return new ExitEngineService(mock(PaperPositionRepository.class), mock(BinanceFuturesClient.class), properties);
+    }
+
     private ScannerProperties properties() {
         ScannerProperties properties = new ScannerProperties();
         ScannerProperties.PaperExit paperExit = new ScannerProperties.PaperExit();
@@ -322,6 +389,7 @@ class ExitEngineServiceTest {
         paperExit.setTimeStopCloseOnlyIfNonPositive(true);
         paperExit.setBarMinutes(60);
         properties.setPaperExit(paperExit);
+        properties.getExit().getEarlyExit().setEnabled(false);
         return properties;
     }
 
@@ -369,9 +437,11 @@ class ExitEngineServiceTest {
                 .status(PaperPositionStatus.OPEN)
                 .entryAction(side == PositionSide.LONG ? EntryAction.ENTER_LONG : EntryAction.ENTER_SHORT)
                 .entryPrice(new BigDecimal("100"))
+                .entryPriceAdjusted(new BigDecimal("100"))
                 .quantity(BigDecimal.ONE)
                 .notionalUsdt(new BigDecimal("100"))
-                .leverage(3)
+                .remainingPositionPct(new BigDecimal("100"))
+                .leverage(10)
                 .openedAt(Instant.parse("2026-06-07T13:03:59Z"))
                 .takeProfitPct(new BigDecimal("1.0"))
                 .stopLossPct(new BigDecimal("0.6"))

@@ -166,11 +166,14 @@ public class PaperPositionService {
                 : scannerProperties.getPaperExit();
         ScannerProperties.PaperRisk riskConfig = scannerProperties.getPaperRisk() == null ? new ScannerProperties.PaperRisk() : scannerProperties.getPaperRisk();
         ScannerProperties.PaperCost costConfig = scannerProperties.getPaperCost() == null ? new ScannerProperties.PaperCost() : scannerProperties.getPaperCost();
+        ScannerProperties.Trading tradingConfig = tradingConfig();
         BigDecimal entryPriceAdjusted = adjustedEntry(execution.executionSide(), entryPrice, costConfig);
         BigDecimal atr = signal.getAtr14_1h() == null ? entryPriceAdjusted.multiply(new BigDecimal("0.012")) : signal.getAtr14_1h();
         RiskLevels risk = calculateRiskLevels(execution.executionSide(), entryPriceAdjusted, atr, riskConfig);
-        BigDecimal notionalUsdt = bigDecimalValue(config.getDefaultNotionalUsdt(), "100");
-        BigDecimal quantity = notionalUsdt.divide(entryPrice, QUANTITY_SCALE, RoundingMode.DOWN);
+        BigDecimal marginUsdt = bigDecimalValue(tradingConfig.getMarginPerTradeUsdt(), "10");
+        int leverage = intValue(tradingConfig.getLeverage(), 10);
+        BigDecimal notionalUsdt = marginUsdt.multiply(BigDecimal.valueOf(leverage));
+        BigDecimal quantity = notionalUsdt.divide(entryPriceAdjusted, QUANTITY_SCALE, RoundingMode.DOWN);
         Instant openedAt = Instant.now();
         PaperPositionEntity position = PaperPositionEntity.builder()
                 .sourceScanRunId(signal.getScanRunId())
@@ -196,7 +199,7 @@ public class PaperPositionService {
                 .midPrice(entryPrice)
                 .quantity(quantity)
                 .notionalUsdt(notionalUsdt)
-                .leverage(intValue(costConfig.getLeverage(), intValue(config.getLeverage(), 3)))
+                .leverage(leverage)
                 .entryScore(signal.getScore())
                 .marketRegime(signal.getMarketRegime())
                 .entrySignalScore(signal.getScore())
@@ -462,10 +465,16 @@ public class PaperPositionService {
         payload.put("signalInverted", Boolean.TRUE.equals(position.getSignalInverted()));
         payload.put("inversionReason", position.getInversionReason() == null ? "" : position.getInversionReason());
         payload.put("entryPrice", position.getEntryPrice());
+        payload.put("initialBalance", tradingConfig().getInitialBalanceUsdt());
+        payload.put("currentBalance", tradingConfig().getInitialBalanceUsdt());
+        payload.put("marginUsdt", tradingConfig().getMarginPerTradeUsdt());
         payload.put("qty", position.getQuantity());
+        payload.put("quantity", position.getQuantity());
         payload.put("tp1", position.getTp1());
         payload.put("tp2", position.getTp2());
         payload.put("slPrice", position.getInitialStop());
+        payload.put("stopLoss", position.getInitialStop());
+        payload.put("currentStopLoss", position.getCurrentStop());
         payload.put("initialStop", position.getInitialStop());
         payload.put("currentStop", position.getInitialStop());
         payload.put("tp1Hit", false);
@@ -584,6 +593,10 @@ public class PaperPositionService {
 
     private ScannerProperties.StopLoss exitStopLossConfig() {
         return scannerProperties.getExit() == null || scannerProperties.getExit().getStopLoss() == null ? new ScannerProperties.StopLoss() : scannerProperties.getExit().getStopLoss();
+    }
+
+    private ScannerProperties.Trading tradingConfig() {
+        return scannerProperties.getTrading() == null ? new ScannerProperties.Trading() : scannerProperties.getTrading();
     }
 
     private boolean booleanValue(Boolean value, boolean defaultValue) {

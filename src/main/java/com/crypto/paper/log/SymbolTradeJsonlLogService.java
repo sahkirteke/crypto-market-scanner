@@ -161,6 +161,9 @@ public class SymbolTradeJsonlLogService {
         payload.put("midPrice", p.getMidPrice());
         payload.put("qty", p.getQuantity());
         payload.put("quantity", p.getQuantity());
+        payload.put("initialBalance", contextOrDefaultInitialBalance());
+        payload.put("currentBalance", contextOrDefaultInitialBalance());
+        payload.put("marginUsdt", p.getNotionalUsdt() == null || p.getLeverage() == null ? null : p.getNotionalUsdt().divide(BigDecimal.valueOf(p.getLeverage()), 8, java.math.RoundingMode.HALF_UP));
         payload.put("notionalUsdt", p.getNotionalUsdt());
         payload.put("leverage", p.getLeverage());
     }
@@ -198,12 +201,25 @@ public class SymbolTradeJsonlLogService {
         payload.put("exitPriceAdjusted", context.exitPriceAdjusted() == null ? p.getExitPriceAdjusted() : context.exitPriceAdjusted());
         payload.put("qty", p.getQuantity());
         payload.put("quantity", p.getQuantity());
-        payload.put("closedQty", closedQty);
+        payload.put("closedQty", context.closedQty() == null ? closedQty : context.closedQty());
+        payload.put("remainingQty", context.remainingQty());
         payload.put("closedPositionPct", closedPositionPct);
         payload.put("remainingPositionPctBefore", remainingBefore);
         payload.put("remainingPositionPctAfter", remainingAfter);
+        payload.put("initialBalance", context.initialBalance());
+        payload.put("currentBalance", context.currentBalance());
+        payload.put("marginUsdt", context.marginUsdt());
         payload.put("notionalUsdt", p.getNotionalUsdt());
         payload.put("leverage", p.getLeverage());
+        payload.put("grossPnl", context.grossPnl());
+        payload.put("entryFeePart", context.entryFeePart());
+        payload.put("exitFee", context.exitFee());
+        payload.put("totalFee", context.totalFee());
+        payload.put("feeType", context.feeType());
+        payload.put("netPnl", context.netPnl());
+        payload.put("cumulativeRealizedPnl", context.cumulativeRealizedPnl());
+        payload.put("netPnlPctOnMargin", context.netPnlPctOnMargin());
+        payload.put("netPnlPctOnNotional", context.netPnlPctOnNotional());
         payload.put("realizedPnl", realizedPnl);
         payload.put("realizedPnlUsdt", realizedPnl);
         payload.put("realizedPnlPct", context.realizedPnlPct() == null ? p.getRealizedPnlPct() : context.realizedPnlPct());
@@ -230,6 +246,8 @@ public class SymbolTradeJsonlLogService {
         payload.put("tp1", p.getTp1());
         payload.put("tp2", p.getTp2());
         payload.put("slPrice", p.getCurrentStop());
+        payload.put("stopLoss", p.getInitialStop());
+        payload.put("currentStopLoss", p.getCurrentStop());
         payload.put("currentStop", p.getCurrentStop());
         payload.put("initialStop", p.getInitialStop());
         payload.put("riskPerUnit", p.getRiskPerUnit());
@@ -325,6 +343,8 @@ public class SymbolTradeJsonlLogService {
         payload.put("bbReasons", signal != null && signal.getBbReasons() != null ? signal.getBbReasons() : jsonTextMapper.toStringList(p.getEntryBbReasonsJson()));
     }
 
+    private BigDecimal contextOrDefaultInitialBalance() { return new BigDecimal("100"); }
+
     private PositionSide effectiveExecutionSide(PaperPositionEntity p) {
         return p.getExecutionSide() == null ? p.getSide() : p.getExecutionSide();
     }
@@ -393,6 +413,20 @@ public class SymbolTradeJsonlLogService {
             BigDecimal rawRealizedPnlPct,
             BigDecimal netRealizedPnlPct,
             BigDecimal leveragedNetRealizedPnlPct,
+            BigDecimal initialBalance,
+            BigDecimal currentBalance,
+            BigDecimal marginUsdt,
+            BigDecimal closedQty,
+            BigDecimal remainingQty,
+            BigDecimal grossPnl,
+            BigDecimal entryFeePart,
+            BigDecimal exitFee,
+            BigDecimal totalFee,
+            String feeType,
+            BigDecimal netPnl,
+            BigDecimal cumulativeRealizedPnl,
+            BigDecimal netPnlPctOnMargin,
+            BigDecimal netPnlPctOnNotional,
             Boolean tp1HitBefore,
             Boolean tp1HitAfter,
             Boolean tp2HitBefore,
