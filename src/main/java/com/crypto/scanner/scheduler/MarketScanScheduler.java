@@ -5,6 +5,7 @@ import com.crypto.common.time.IstanbulTimeUtil;
 import com.crypto.domain.model.MarketScanResult;
 import com.crypto.paper.service.PaperPositionService;
 import com.crypto.paper.service.PaperPositionService.PaperOpenSummary;
+import com.crypto.scanner.service.PendingEntryConfirmService;
 import com.crypto.scanner.config.ScannerProperties;
 import com.crypto.scanner.service.MarketScannerOrchestratorService;
 import com.crypto.scanner.service.ScanLockService;
@@ -21,6 +22,7 @@ public class MarketScanScheduler {
     private final ScanLockService scanLockService;
     private final ScannerProperties scannerProperties;
     private final PaperPositionService paperPositionService;
+    private final PendingEntryConfirmService pendingEntryConfirmService;
 
     @Scheduled(cron = "${scanner.scheduler.one-hour-cron}", zone = "${scanner.scheduler.zone}")
     public void runOneHourScheduledScan() {
@@ -55,7 +57,7 @@ public class MarketScanScheduler {
             String startedAt = IstanbulTimeUtil.nowText();
             log.info("SCHEDULED_SCAN_STARTED scanType={} startedAt={}", scanType, startedAt);
             MarketScanResult result = marketScannerOrchestratorService.runAndPersist(scanType);
-            tryOpenPaperPositionsAfterScan(scanType, result.getScanRunId());
+            handlePaperEntriesAfterScan(scanType, result.getScanRunId(), requireSchedulerEnabled);
             log.info("SCHEDULED_SCAN_COMPLETED scanType={} scanRunId={} scanTime={}", scanType, result.getScanRunId(), IstanbulTimeUtil.format(result.getScanTimeUtc()));
         } catch (RuntimeException exception) {
             log.error("SCHEDULED_SCAN_FAILED scanType={} message={}", scanType, exception.getMessage(), exception);
@@ -63,6 +65,14 @@ public class MarketScanScheduler {
             scanLockService.release();
             log.info("SCHEDULED_SCAN_LOCK_RELEASED scanType={}", scanType);
         }
+    }
+
+    private void handlePaperEntriesAfterScan(ScanType scanType, Long scanRunId, boolean scheduled) {
+        if (scheduled) {
+            pendingEntryConfirmService.cacheCandidatesForConfirm(scanType, scanRunId);
+            return;
+        }
+        tryOpenPaperPositionsAfterScan(scanType, scanRunId);
     }
 
     private void tryOpenPaperPositionsAfterScan(ScanType scanType, Long scanRunId) {

@@ -34,8 +34,8 @@ public class ScannerProperties {
     @Setter
     public static class Scheduler {
         private Boolean enabled = true;
-        private String oneHourCron = "30 0 * * * *";
-        private String fourHourCron = "30 0 3,7,11,15,19,23 * * *";
+        private String oneHourCron = "0 55 * * * *";
+        private String fourHourCron = "0 55 2,6,10,14,18,22 * * *";
         private String zone = "Europe/Istanbul";
     }
 

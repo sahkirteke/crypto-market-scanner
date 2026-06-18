@@ -14,6 +14,7 @@ import com.crypto.paper.service.PaperPositionService;
 import com.crypto.paper.service.PaperPositionService.PaperOpenSummary;
 import com.crypto.scanner.config.ScannerProperties;
 import com.crypto.scanner.service.MarketScannerOrchestratorService;
+import com.crypto.scanner.service.PendingEntryConfirmService;
 import com.crypto.scanner.service.ScanLockService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,6 +24,7 @@ class MarketScanSchedulerTest {
     private ScanLockService scanLockService;
     private ScannerProperties scannerProperties;
     private PaperPositionService paperPositionService;
+    private PendingEntryConfirmService pendingEntryConfirmService;
     private MarketScanScheduler marketScanScheduler;
 
     @BeforeEach
@@ -31,6 +33,7 @@ class MarketScanSchedulerTest {
         scanLockService = mock(ScanLockService.class);
         scannerProperties = new ScannerProperties();
         paperPositionService = mock(PaperPositionService.class);
+        pendingEntryConfirmService = mock(PendingEntryConfirmService.class);
         when(paperPositionService.openPositionsFromScanRun(100L)).thenReturn(emptySummary());
         when(paperPositionService.openPositionsFromScanRun(101L)).thenReturn(emptySummary());
         when(paperPositionService.openPositionsFromScanRun(102L)).thenReturn(emptySummary());
@@ -38,7 +41,8 @@ class MarketScanSchedulerTest {
                 marketScannerOrchestratorService,
                 scanLockService,
                 scannerProperties,
-                paperPositionService);
+                paperPositionService,
+                pendingEntryConfirmService);
     }
 
     @Test
@@ -63,7 +67,7 @@ class MarketScanSchedulerTest {
     }
 
     @Test
-    void enabledSchedulerOpensPaperPositionsAfterScan() {
+    void enabledSchedulerCachesPaperPositionsForConfirmAfterScan() {
         scannerProperties.getScheduler().setEnabled(true);
         scannerProperties.getPaperAuto().setEnabled(true);
         scannerProperties.getPaperAuto().setOpenAfterScan(true);
@@ -73,7 +77,8 @@ class MarketScanSchedulerTest {
 
         marketScanScheduler.runOneHourScheduledScan();
 
-        verify(paperPositionService).openPositionsFromScanRun(100L);
+        verify(pendingEntryConfirmService).cacheCandidatesForConfirm(ScanType.ONE_HOUR, 100L);
+        verify(paperPositionService, never()).openPositionsFromScanRun(100L);
         verify(paperPositionService, never()).openPositionsFromLatestSignals();
     }
 
@@ -89,6 +94,7 @@ class MarketScanSchedulerTest {
 
         verify(paperPositionService, never()).openPositionsFromLatestSignals();
         verify(paperPositionService, never()).openPositionsFromScanRun(100L);
+        verify(pendingEntryConfirmService).cacheCandidatesForConfirm(ScanType.ONE_HOUR, 100L);
     }
 
     @Test
