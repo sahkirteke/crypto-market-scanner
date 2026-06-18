@@ -7,6 +7,7 @@ import com.crypto.common.enums.ScanType;
 import com.crypto.common.time.IstanbulTimeUtil;
 import com.crypto.domain.model.EntrySignal;
 import com.crypto.paper.model.PaperPositionStatus;
+import com.crypto.persistence.entity.PaperPositionEntity;
 import com.crypto.paper.service.PaperPositionService;
 import com.crypto.persistence.repository.PaperPositionRepository;
 import com.crypto.scanner.config.ScannerProperties;
@@ -85,14 +86,31 @@ public class PendingEntryConfirmService {
             }
             logConfirm(candidate, confirmPassed, false, signal == null ? "SIGNAL_NOT_FOUND" : signal.getBlockReason(), signal);
         }
-        PaperPositionService.PaperOpenSummary summary = openable.isEmpty()
-                ? new PaperPositionService.PaperOpenSummary(candidateCount, 0, 0, 0, 0, 0, 0, openPositionsAfter(), List.of())
-                : paperPositionService.openPositions(openable);
+        List<PaperPositionEntity> opened = openable.isEmpty() ? List.of() : paperPositionService.openPositions(openable);
         for (EntrySignal signal : openable) {
-            log.info("ENTRY_CONFIRM_OPEN_RESULT confirmMode=CACHED_SYMBOL_CONFIRM symbol={} scanType={} confirmPassed=true entryOpened=true rejectReason= recalculatedEntryScore={} recalculatedLongScore={} recalculatedShortScore={}",
-                    signal.getSymbol(), signal.getSourceScanType(), signal.getScore(), signal.getLongScore(), signal.getShortScore());
+            boolean entryOpened = opened.stream().anyMatch(position -> signal.getSymbol().equals(position.getSymbol()));
+            log.info("ENTRY_CONFIRM_OPEN_RESULT confirmMode=CACHED_SYMBOL_CONFIRM symbol={} scanType={} confirmPassed=true entryOpened={} rejectReason= recalculatedEntryScore={} recalculatedLongScore={} recalculatedShortScore={}",
+                    signal.getSymbol(), signal.getSourceScanType(), entryOpened, signal.getScore(), signal.getLongScore(), signal.getShortScore());
         }
-        return summary;
+        return confirmSummary(candidateCount, openable, opened);
+    }
+
+    private PaperPositionService.PaperOpenSummary confirmSummary(int candidateCount, List<EntrySignal> signals, List<PaperPositionEntity> opened) {
+        List<EntrySignal> safeSignals = signals == null ? List.of() : signals;
+        List<PaperPositionEntity> safeOpened = opened == null ? List.of() : opened;
+        long enterLongCount = safeSignals.stream().filter(signal -> signal.getAction() == EntryAction.ENTER_LONG).count();
+        long enterShortCount = safeSignals.stream().filter(signal -> signal.getAction() == EntryAction.ENTER_SHORT).count();
+        long noEntryCount = safeSignals.stream().filter(signal -> signal.getAction() == EntryAction.NO_ENTRY).count();
+        return new PaperPositionService.PaperOpenSummary(
+                candidateCount,
+                safeSignals.size(),
+                enterLongCount,
+                enterShortCount,
+                noEntryCount,
+                safeOpened.size(),
+                Math.max(0, safeSignals.size() - safeOpened.size()),
+                openPositionsAfter(),
+                safeOpened);
     }
 
     private EntrySignal recalculateSignal(PendingConfirmCandidate candidate) {
