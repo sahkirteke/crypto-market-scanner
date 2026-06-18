@@ -56,6 +56,7 @@ scanner:
     stop-loss:
       max-sl-pct: 1.00
       stop-exit-fee-type: TAKER
+    intrabar-execution-mode: CONSERVATIVE
     break-even-after-tp1:
       enabled: true
       include-fees: true

@@ -265,11 +265,18 @@ public class SymbolTradeJsonlLogService {
     }
 
     private void putCandle(Map<String, Object> payload, PaperExitContext context) {
+        payload.put("candleOpen", context.candleOpen());
         payload.put("candleOpenTime", format(context.candleOpenTime()));
         payload.put("candleCloseTime", format(context.candleCloseTime()));
         payload.put("candleHigh", context.candleHigh());
         payload.put("candleLow", context.candleLow());
         payload.put("candleClose", context.candleClose());
+        payload.put("touchedLevel", context.touchedLevel());
+        payload.put("targetPrice", context.targetPrice());
+        payload.put("fillPrice", context.fillPrice());
+        payload.put("exitExecutionMode", context.exitExecutionMode());
+        payload.put("intrabarAmbiguous", context.intrabarAmbiguous());
+        payload.put("intrabarExecutionMode", context.intrabarExecutionMode());
     }
 
     private void putDevelopment(Map<String, Object> payload, PaperPositionEntity p) {
@@ -435,8 +442,15 @@ public class SymbolTradeJsonlLogService {
             Boolean trailingActiveAfter,
             Instant candleOpenTime,
             Instant candleCloseTime,
+            BigDecimal candleOpen,
             BigDecimal candleHigh,
             BigDecimal candleLow,
-            BigDecimal candleClose) {
+            BigDecimal candleClose,
+            String touchedLevel,
+            BigDecimal targetPrice,
+            BigDecimal fillPrice,
+            String exitExecutionMode,
+            Boolean intrabarAmbiguous,
+            String intrabarExecutionMode) {
     }
 }

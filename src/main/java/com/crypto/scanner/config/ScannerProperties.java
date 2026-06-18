@@ -186,6 +186,7 @@ public class ScannerProperties {
     public static class Exit {
         private Tp tp = new Tp();
         private StopLoss stopLoss = new StopLoss();
+        private String intrabarExecutionMode = "CONSERVATIVE";
         private BreakEvenAfterTp1 breakEvenAfterTp1 = new BreakEvenAfterTp1();
         private AfterTp2 afterTp2 = new AfterTp2();
         private EarlyExit earlyExit = new EarlyExit();

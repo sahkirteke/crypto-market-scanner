@@ -180,6 +180,87 @@ class ExitEngineServiceTest {
 
 
 
+
+    @Test
+    void longTpAndStopUseTargetFillPricesInsteadOfCandleClose() {
+        ExitEngineService service = service(mock(PaperPositionRepository.class), mock(BinanceFuturesClient.class));
+        PaperPositionEntity tp1 = position(PositionSide.LONG);
+        tp1.setCurrentStop(new BigDecimal("99"));
+        tp1.setTp1(new BigDecimal("101"));
+        service.evaluatePositionOnCandle(tp1, Instant.now(), Instant.now(), new BigDecimal("102"), new BigDecimal("100"), new BigDecimal("101.7"), BigDecimal.ONE);
+        assertThat(tp1.getExitPrice()).isEqualByComparingTo("101");
+
+        PaperPositionEntity tp2 = position(PositionSide.LONG);
+        tp2.setTp1Hit(true);
+        tp2.setCurrentStop(new BigDecimal("100.1"));
+        tp2.setTp2(new BigDecimal("102"));
+        service.evaluatePositionOnCandle(tp2, Instant.now(), Instant.now(), new BigDecimal("103"), new BigDecimal("101"), new BigDecimal("102.8"), BigDecimal.ONE);
+        assertThat(tp2.getExitPrice()).isEqualByComparingTo("102");
+
+        PaperPositionEntity sl = position(PositionSide.LONG);
+        sl.setCurrentStop(new BigDecimal("99"));
+        service.evaluatePositionOnCandle(sl, Instant.now(), Instant.now(), new BigDecimal("100"), new BigDecimal("98.6"), new BigDecimal("98.8"), BigDecimal.ONE);
+        assertThat(sl.getExitReason()).isEqualTo("STOP_LOSS");
+        assertThat(sl.getExitPrice()).isEqualByComparingTo("99");
+    }
+
+    @Test
+    void shortTpAndStopUseTargetFillPricesInsteadOfCandleClose() {
+        ExitEngineService service = service(mock(PaperPositionRepository.class), mock(BinanceFuturesClient.class));
+        PaperPositionEntity tp1 = position(PositionSide.SHORT);
+        tp1.setCurrentStop(new BigDecimal("101"));
+        tp1.setTp1(new BigDecimal("99"));
+        service.evaluatePositionOnCandle(tp1, Instant.now(), Instant.now(), new BigDecimal("100"), new BigDecimal("98"), new BigDecimal("98.4"), BigDecimal.ONE);
+        assertThat(tp1.getExitPrice()).isEqualByComparingTo("99");
+
+        PaperPositionEntity tp2 = position(PositionSide.SHORT);
+        tp2.setTp1Hit(true);
+        tp2.setCurrentStop(new BigDecimal("99.9"));
+        tp2.setTp2(new BigDecimal("98"));
+        service.evaluatePositionOnCandle(tp2, Instant.now(), Instant.now(), new BigDecimal("99"), new BigDecimal("97"), new BigDecimal("97.5"), BigDecimal.ONE);
+        assertThat(tp2.getExitPrice()).isEqualByComparingTo("98");
+
+        PaperPositionEntity sl = position(PositionSide.SHORT);
+        sl.setCurrentStop(new BigDecimal("101"));
+        service.evaluatePositionOnCandle(sl, Instant.now(), Instant.now(), new BigDecimal("101.4"), new BigDecimal("100"), new BigDecimal("101.2"), BigDecimal.ONE);
+        assertThat(sl.getExitReason()).isEqualTo("STOP_LOSS");
+        assertThat(sl.getExitPrice()).isEqualByComparingTo("101");
+    }
+
+    @Test
+    void adverseEarlyExitUsesThresholdFillPriceButTimeNegativeUsesCandleClose() {
+        ExitEngineService service = serviceWithEarlyExit();
+        PaperPositionEntity adverseLong = position(PositionSide.LONG);
+        service.evaluatePositionOnCandle(adverseLong, Instant.now(), Instant.now(), new BigDecimal("100"), new BigDecimal("98.5"), new BigDecimal("99.5"), BigDecimal.ONE);
+        assertThat(adverseLong.getExitReason()).isEqualTo("EARLY_EXIT_ADVERSE_PCT");
+        assertThat(adverseLong.getExitPrice()).isEqualByComparingTo("99.200000000000");
+
+        PaperPositionEntity adverseShort = position(PositionSide.SHORT);
+        service.evaluatePositionOnCandle(adverseShort, Instant.now(), Instant.now(), new BigDecimal("101.5"), new BigDecimal("100"), new BigDecimal("100.5"), BigDecimal.ONE);
+        assertThat(adverseShort.getExitReason()).isEqualTo("EARLY_EXIT_ADVERSE_PCT");
+        assertThat(adverseShort.getExitPrice()).isEqualByComparingTo("100.800000000000");
+
+        PaperPositionEntity time = position(PositionSide.LONG);
+        time.setOpenedAt(Instant.now().minusSeconds(16L * 60L));
+        service.evaluatePositionOnCandle(time, Instant.now(), Instant.now(), new BigDecimal("100"), new BigDecimal("99.95"), new BigDecimal("99.90"), BigDecimal.ONE);
+        assertThat(time.getExitReason()).isEqualTo("EARLY_EXIT_TIME_NEGATIVE");
+        assertThat(time.getExitPrice()).isEqualByComparingTo("99.90");
+    }
+
+    @Test
+    void conservativeModeUsesStopBeforeTpWhenBothHitSameCandle() {
+        ExitEngineService service = service(mock(PaperPositionRepository.class), mock(BinanceFuturesClient.class));
+        PaperPositionEntity position = position(PositionSide.LONG);
+        position.setCurrentStop(new BigDecimal("99"));
+        position.setTp1(new BigDecimal("101"));
+
+        service.evaluatePositionOnCandle(position, Instant.now(), Instant.now(), new BigDecimal("102"), new BigDecimal("98"), new BigDecimal("101"), BigDecimal.ONE);
+
+        assertThat(position.getStatus()).isEqualTo(PaperPositionStatus.CLOSED);
+        assertThat(position.getExitReason()).isEqualTo("STOP_LOSS");
+        assertThat(position.getExitPrice()).isEqualByComparingTo("99");
+    }
+
     @Test
     void longTp1Tp2AndTrailingCloseExpectedRatiosAndBalance() {
         ExitEngineService service = service(mock(PaperPositionRepository.class), mock(BinanceFuturesClient.class));
