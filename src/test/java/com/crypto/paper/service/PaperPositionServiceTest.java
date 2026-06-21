@@ -309,6 +309,63 @@ class PaperPositionServiceTest {
         verify(repository, Mockito.times(2)).save(any(PaperPositionEntity.class));
     }
 
+    @Test
+    void capsTpSlAndKeepsInvertedSignalsLong() {
+        EntrySignal signal = signal("ETHUSDT", EntryAction.ENTER_SHORT, PositionSide.SHORT, "100", RiskLevel.LOW);
+        signal.setAtr14_1h(new BigDecimal("2.0"));
+
+        PaperPositionEntity opened = service.openPosition(signal);
+
+        assertThat(opened).isNotNull();
+        assertThat(opened.getSide()).isEqualTo(PositionSide.LONG);
+        assertThat(opened.getSignalInverted()).isTrue();
+        assertThat(opened.getTp1()).isEqualByComparingTo("101.300000000000");
+        assertThat(opened.getTp2()).isEqualByComparingTo("101.800000000000");
+        assertThat(opened.getInitialStop()).isEqualByComparingTo("99.000000000000");
+    }
+
+    @Test
+    void keepsLowerExistingTpSlPercentages() {
+        EntrySignal signal = signal("BTCUSDT", EntryAction.ENTER_LONG, PositionSide.LONG, "100", RiskLevel.LOW);
+        signal.setAtr14_1h(new BigDecimal("0.7"));
+
+        PaperPositionEntity opened = service.openPosition(signal);
+
+        assertThat(opened).isNotNull();
+        assertThat(opened.getTp1()).isEqualByComparingTo("100.840000000000");
+        assertThat(opened.getTp2()).isEqualByComparingTo("101.680000000000");
+        assertThat(opened.getInitialStop()).isEqualByComparingTo("99.160000000000");
+    }
+
+    @Test
+    void rangePosBoundariesUsePreviousClosedOneHourCandle() {
+        assertThat(service.openPosition(signalWithRangePosition("AUSDT", "0.400"))).isNull();
+        assertThat(service.openPosition(signalWithRangePosition("BUSDT", "0.401"))).isNotNull();
+        assertThat(service.openPosition(signalWithRangePosition("CUSDT", "0.800"))).isNotNull();
+        assertThat(service.openPosition(signalWithRangePosition("DUSDT", "0.801"))).isNull();
+    }
+
+    @Test
+    void bbWidthFilterAppliesToEveryEntry() {
+        EntrySignal passing = signal("AUSDT", EntryAction.ENTER_SHORT, PositionSide.SHORT, "10", RiskLevel.LOW);
+        passing.setBbWidth(new BigDecimal("0.149"));
+        EntrySignal equal = signal("BUSDT", EntryAction.ENTER_SHORT, PositionSide.SHORT, "10", RiskLevel.LOW);
+        equal.setBbWidth(new BigDecimal("0.15"));
+        EntrySignal missing = signal("CUSDT", EntryAction.ENTER_SHORT, PositionSide.SHORT, "10", RiskLevel.LOW);
+        missing.setBbWidth(null);
+
+        assertThat(service.openPosition(passing)).isNotNull();
+        assertThat(service.openPosition(equal)).isNull();
+        assertThat(service.openPosition(missing)).isNull();
+    }
+
+    private EntrySignal signalWithRangePosition(String symbol, String rangePos) {
+        EntrySignal signal = signal(symbol, EntryAction.ENTER_LONG, PositionSide.LONG, "10", RiskLevel.LOW);
+        signal.setPrevious1hLow(BigDecimal.ZERO);
+        signal.setPrevious1hHigh(new BigDecimal("10").divide(new BigDecimal(rangePos), 12, java.math.RoundingMode.HALF_UP));
+        return signal;
+    }
+
     private EntrySignal signal(String symbol, EntryAction action, PositionSide side, String entryPrice, RiskLevel riskLevel) {
         return EntrySignal.builder()
                 .scanRunId(77L)
@@ -325,11 +382,14 @@ class PaperPositionServiceTest {
                 .riskLevel(riskLevel)
                 .entryPrice(entryPrice == null ? null : new BigDecimal(entryPrice))
                 .close1h(new BigDecimal("10.50"))
+                .previous1hLow(new BigDecimal("8"))
+                .previous1hHigh(new BigDecimal("12"))
                 .ema20_1h(new BigDecimal("10.00"))
                 .rsi14_1h(new BigDecimal("55"))
                 .macdHist_1h(new BigDecimal("0.10"))
                 .atr14_1h(new BigDecimal("0.20"))
                 .volumeRatio_1h(new BigDecimal("1.20"))
+                .bbWidth(new BigDecimal("0.14"))
                 .fundingRate(new BigDecimal("0.0001"))
                 .openInterest(new BigDecimal("1000000"))
                 .marketBreadthPct(new BigDecimal("55"))

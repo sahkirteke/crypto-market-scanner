@@ -114,7 +114,7 @@ class ExitEngineServiceIntrabarTest {
 
         assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.PARTIALLY_CLOSED);
         assertThat(result.getTp1Hit()).isTrue();
-        assertThat(result.getRemainingPositionPct()).isEqualByComparingTo("50");
+        assertThat(result.getRemainingPositionPct()).isEqualByComparingTo("40");
     }
 
     @Test
@@ -123,7 +123,7 @@ class ExitEngineServiceIntrabarTest {
 
         assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.PARTIALLY_CLOSED);
         assertThat(result.getTp1Hit()).isTrue();
-        assertThat(result.getRemainingPositionPct()).isEqualByComparingTo("50");
+        assertThat(result.getRemainingPositionPct()).isEqualByComparingTo("40");
     }
 
     @Test
@@ -210,16 +210,16 @@ class ExitEngineServiceIntrabarTest {
 
         assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.PARTIALLY_CLOSED);
         assertThat(result.getExitReason()).isNull();
-        assertThat(result.getCurrentStop()).isEqualByComparingTo("101.8");
+        assertThat(result.getCurrentStop()).isEqualByComparingTo("100.1800");
         ArgumentCaptor<PaperPositionEventEntity> captor = ArgumentCaptor.forClass(PaperPositionEventEntity.class);
         verify(events, atLeastOnce()).save(captor.capture());
-        assertThat(result.getRemainingPositionPct()).isEqualByComparingTo("50");
+        assertThat(result.getRemainingPositionPct()).isEqualByComparingTo("40");
         List<PaperPositionEventType> eventTypes = captor.getAllValues().stream()
                 .map(PaperPositionEventEntity::getEventType)
                 .toList();
         assertThat(eventTypes)
-                .contains(PaperPositionEventType.PARTIAL_TP1, PaperPositionEventType.STOP_UPDATED, PaperPositionEventType.TRAILING_UPDATED)
-                .doesNotContain(PaperPositionEventType.PARTIAL_TP2, PaperPositionEventType.TRAILING_STOP, PaperPositionEventType.CLOSED);
+                .contains(PaperPositionEventType.PARTIAL_TP1, PaperPositionEventType.STOP_UPDATED)
+                .doesNotContain(PaperPositionEventType.PARTIAL_TP2, PaperPositionEventType.TRAILING_UPDATED, PaperPositionEventType.TRAILING_STOP, PaperPositionEventType.CLOSED);
 
         PaperPositionEntity next = service.evaluatePositionWithCandle(p,
                 candle(candleOpen.plusSeconds(300), candleClose.plusSeconds(300), "102", "101.7", "101.9"), "5m");
@@ -238,16 +238,16 @@ class ExitEngineServiceIntrabarTest {
 
         assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.PARTIALLY_CLOSED);
         assertThat(result.getExitReason()).isNull();
-        assertThat(result.getCurrentStop()).isEqualByComparingTo("98.2");
+        assertThat(result.getCurrentStop()).isEqualByComparingTo("100.1800");
         ArgumentCaptor<PaperPositionEventEntity> captor = ArgumentCaptor.forClass(PaperPositionEventEntity.class);
         verify(events, atLeastOnce()).save(captor.capture());
-        assertThat(result.getRemainingPositionPct()).isEqualByComparingTo("50");
+        assertThat(result.getRemainingPositionPct()).isEqualByComparingTo("40");
         List<PaperPositionEventType> eventTypes = captor.getAllValues().stream()
                 .map(PaperPositionEventEntity::getEventType)
                 .toList();
         assertThat(eventTypes)
-                .contains(PaperPositionEventType.PARTIAL_TP1, PaperPositionEventType.STOP_UPDATED, PaperPositionEventType.TRAILING_UPDATED)
-                .doesNotContain(PaperPositionEventType.PARTIAL_TP2, PaperPositionEventType.TRAILING_STOP, PaperPositionEventType.CLOSED);
+                .contains(PaperPositionEventType.PARTIAL_TP1, PaperPositionEventType.STOP_UPDATED)
+                .doesNotContain(PaperPositionEventType.PARTIAL_TP2, PaperPositionEventType.TRAILING_UPDATED, PaperPositionEventType.TRAILING_STOP, PaperPositionEventType.CLOSED);
 
         PaperPositionEntity next = service.evaluatePositionWithCandle(p,
                 candle(candleOpen.plusSeconds(300), candleClose.plusSeconds(300), "98.3", "98", "98.1"), "5m");
@@ -415,6 +415,115 @@ class ExitEngineServiceIntrabarTest {
         properties.getPaperRisk().setFeeBufferPct(new BigDecimal("0.0005"));
         properties.getPaperRisk().setTrailingAtrMultiplier(new BigDecimal("1.2"));
         return properties;
+    }
+
+    @Test
+    void earlyExitRuleATriggersAfterFirstThreeFiveMinuteCandles() {
+        ExitEngineService service = service();
+        PaperPositionEntity p = weakMomentumPosition();
+
+        service.evaluatePositionWithCandle(p, candle(candleOpen, candleClose, "100.2", "99.8", "100.0"), "5m");
+        service.evaluatePositionWithCandle(p, candle(candleOpen.plusSeconds(300), candleClose.plusSeconds(300), "100.3", "99.7", "100.0"), "5m");
+        PaperPositionEntity result = service.evaluatePositionWithCandle(p, candle(candleOpen.plusSeconds(600), candleClose.plusSeconds(600), "100.1", "99.6", "99.9"), "5m");
+
+        assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.CLOSED);
+        assertThat(result.getExitReason()).isEqualTo("EARLY_EXIT_15M_WEAK_MOMENTUM");
+        assertThat(result.getEarlyExitRuleA()).isTrue();
+        assertThat(result.getEarlyExitRuleB()).isFalse();
+    }
+
+    @Test
+    void earlyExitRuleBTriggersWhenRuleAFalse() {
+        ExitEngineService service = service();
+        PaperPositionEntity p = weakMomentumPosition();
+        p.setPrev3_5mReturn(new BigDecimal("-0.001"));
+
+        service.evaluatePositionWithCandle(p, candle(candleOpen, candleClose, "100.5", "99.8", "100.0"), "5m");
+        service.evaluatePositionWithCandle(p, candle(candleOpen.plusSeconds(300), candleClose.plusSeconds(300), "100.6", "99.7", "100.0"), "5m");
+        PaperPositionEntity result = service.evaluatePositionWithCandle(p, candle(candleOpen.plusSeconds(600), candleClose.plusSeconds(600), "100.5", "99.6", "99.9"), "5m");
+
+        assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.CLOSED);
+        assertThat(result.getExitReason()).isEqualTo("EARLY_EXIT_15M_WEAK_MOMENTUM");
+        assertThat(result.getEarlyExitRuleA()).isFalse();
+        assertThat(result.getEarlyExitRuleB()).isTrue();
+    }
+
+    @Test
+    void earlyExitRuleAAndRuleBAreOrConditions() {
+        ExitEngineService service = service();
+        PaperPositionEntity ruleATrue = weakMomentumPosition();
+        ruleATrue.setPrev3_5mReturn(new BigDecimal("0.001"));
+        service.evaluatePositionWithCandle(ruleATrue, candle(candleOpen, candleClose, "100.2", "99.8", "100.0"), "5m");
+        service.evaluatePositionWithCandle(ruleATrue, candle(candleOpen.plusSeconds(300), candleClose.plusSeconds(300), "100.3", "99.7", "100.0"), "5m");
+        PaperPositionEntity ruleAResult = service.evaluatePositionWithCandle(ruleATrue, candle(candleOpen.plusSeconds(600), candleClose.plusSeconds(600), "100.1", "99.6", "99.9"), "5m");
+
+        PaperPositionEntity ruleBTrue = weakMomentumPosition();
+        ruleBTrue.setPrev3_5mReturn(new BigDecimal("-0.001"));
+        service.evaluatePositionWithCandle(ruleBTrue, candle(candleOpen, candleClose, "100.5", "99.8", "100.0"), "5m");
+        service.evaluatePositionWithCandle(ruleBTrue, candle(candleOpen.plusSeconds(300), candleClose.plusSeconds(300), "100.6", "99.7", "100.0"), "5m");
+        PaperPositionEntity ruleBResult = service.evaluatePositionWithCandle(ruleBTrue, candle(candleOpen.plusSeconds(600), candleClose.plusSeconds(600), "100.5", "99.6", "99.9"), "5m");
+
+        assertThat(ruleAResult.getExitReason()).isEqualTo("EARLY_EXIT_15M_WEAK_MOMENTUM");
+        assertThat(ruleAResult.getEarlyExitRuleA()).isTrue();
+        assertThat(ruleAResult.getEarlyExitRuleB()).isFalse();
+        assertThat(ruleBResult.getExitReason()).isEqualTo("EARLY_EXIT_15M_WEAK_MOMENTUM");
+        assertThat(ruleBResult.getEarlyExitRuleA()).isFalse();
+        assertThat(ruleBResult.getEarlyExitRuleB()).isTrue();
+    }
+
+    @Test
+    void earlyExitDoesNotRunIfTp1HitInFirstFifteenMinutes() {
+        ExitEngineService service = service();
+        PaperPositionEntity p = weakMomentumPosition();
+        p.setTp1(new BigDecimal("100.2"));
+
+        service.evaluatePositionWithCandle(p, candle(candleOpen, candleClose, "100.3", "99.8", "100.1"), "5m");
+        service.evaluatePositionWithCandle(p, candle(candleOpen.plusSeconds(300), candleClose.plusSeconds(300), "100.1", "99.7", "100.0"), "5m");
+        PaperPositionEntity result = service.evaluatePositionWithCandle(p, candle(candleOpen.plusSeconds(600), candleClose.plusSeconds(600), "100.1", "99.6", "99.9"), "5m");
+
+        assertThat(result.getTp1Hit()).isTrue();
+        assertThat(result.getExitReason()).isNull();
+        assertThat(result.getEarlyExitTriggered()).isNotTrue();
+    }
+
+    @Test
+    void breakEvenStopAfterTp1IsNotTestedInSameCandle() {
+        PaperPositionEntity p = position(PositionSide.LONG);
+        p.setTp1(new BigDecimal("101"));
+        p.setTp2(new BigDecimal("105"));
+
+        PaperPositionEntity result = service().evaluatePositionWithCandle(p, candle("101.5", "100.18", "101"), "5m");
+
+        assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.PARTIALLY_CLOSED);
+        assertThat(result.getTp1Hit()).isTrue();
+        assertThat(result.getCurrentStop()).isEqualByComparingTo("100.1800");
+        assertThat(result.getExitReason()).isNull();
+    }
+
+    @Test
+    void invertedSignalPositionStillUsesEarlyExitRules() {
+        ExitEngineService service = service();
+        PaperPositionEntity p = weakMomentumPosition();
+        p.setSignalInverted(true);
+        p.setPrev3_5mReturn(new BigDecimal("-0.001"));
+        p.setExecutionSide(PositionSide.LONG);
+        p.setSourceSignalSide(PositionSide.SHORT);
+
+        service.evaluatePositionWithCandle(p, candle(candleOpen, candleClose, "100.5", "99.8", "100.0"), "5m");
+        service.evaluatePositionWithCandle(p, candle(candleOpen.plusSeconds(300), candleClose.plusSeconds(300), "100.6", "99.7", "100.0"), "5m");
+        PaperPositionEntity result = service.evaluatePositionWithCandle(p, candle(candleOpen.plusSeconds(600), candleClose.plusSeconds(600), "100.5", "99.6", "99.9"), "5m");
+
+        assertThat(result.getExitReason()).isEqualTo("EARLY_EXIT_15M_WEAK_MOMENTUM");
+        assertThat(result.getEarlyExitRuleB()).isTrue();
+    }
+
+    private PaperPositionEntity weakMomentumPosition() {
+        PaperPositionEntity p = position(PositionSide.LONG);
+        p.setCurrentStop(new BigDecimal("90"));
+        p.setTp1(new BigDecimal("105"));
+        p.setTp2(new BigDecimal("106"));
+        p.setPrev3_5mReturn(null);
+        return p;
     }
 
     private KlineCandle candle(String high, String low, String close) {

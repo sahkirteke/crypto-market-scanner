@@ -45,6 +45,8 @@ import org.springframework.stereotype.Service;
 public class ExitEngineService {
     private static final BigDecimal ONE_HUNDRED = BigDecimal.valueOf(100);
     private static final int PCT_SCALE = 8;
+    private static final BigDecimal SIXTY = new BigDecimal("60");
+    private static final BigDecimal FORTY = new BigDecimal("40");
 
     private final PaperPositionRepository paperPositionRepository;
     private final BinanceFuturesClient binanceFuturesClient;
@@ -192,7 +194,7 @@ public class ExitEngineService {
         if (tp1Hit(position, candle.getHigh(), candle.getLow(), tp1HitBefore)) {
             IntrabarEventContext tp1Context = new IntrabarEventContext(position, candle, effectiveInterval);
             position.setTp1Hit(true);
-            PartialCloseResult partial = partialClose(position, position.getTp1(), scannerProperties.getPaperRisk().getTp1ClosePct(),
+            PartialCloseResult partial = partialClose(position, position.getTp1(), SIXTY,
                     PaperPositionEventType.PARTIAL_TP1, candle.getCloseTime(), tp1Context);
             position.setTrailingActive(true);
             position.setTrailingActivatedAtBarCloseTime(candle.getCloseTime());
@@ -202,13 +204,24 @@ public class ExitEngineService {
         if (tp2Hit(position, candle.getHigh(), candle.getLow(), tp2HitBefore)) {
             IntrabarEventContext tp2Context = new IntrabarEventContext(position, candle, effectiveInterval);
             position.setTp2Hit(true);
-            PartialCloseResult partial = partialClose(position, position.getTp2(), scannerProperties.getPaperRisk().getTp2ClosePct(),
+            PartialCloseResult partial = partialClose(position, position.getTp2(), FORTY,
                     PaperPositionEventType.PARTIAL_TP2, candle.getCloseTime(), tp2Context);
             writeSymbolTradePartialExit(position, partial, PaperExitReason.PARTIAL_TP2, tp2Context);
         }
         updateStatus(position);
         updateTrailing(position, candle.getHigh(), candle.getLow(), fallbackAtr(position), candle.getCloseTime(),
                 new IntrabarEventContext(position, candle, effectiveInterval));
+        EarlyExitEvaluation earlyExit = evaluateEarlyExit(position, candle);
+        if (earlyExit.triggered()) {
+            position.setEarlyExitTriggered(true);
+            position.setEarlyExitRuleA(earlyExit.ruleA());
+            position.setEarlyExitRuleB(earlyExit.ruleB());
+            position.setFirst15HighPct(earlyExit.first15HighPct());
+            position.setClose15Pct(earlyExit.close15Pct());
+            position.setEarlyExitPrice(candle.getClose());
+            position.setEarlyExitTime(candle.getCloseTime());
+            closeRemaining(position, candle.getClose(), PaperExitReason.EARLY_EXIT_15M_WEAK_MOMENTUM, candle.getCloseTime(), new IntrabarEventContext(position, candle, effectiveInterval));
+        }
         position.setLastExitCandleCloseTime(candle.getCloseTime());
         log.info("PAPER_POSITION_EVALUATED id={} symbol={} interval={} candleHigh={} candleLow={} status={} remainingPct={}",
                 position.getId(), position.getSymbol(), effectiveInterval, candle.getHigh(), candle.getLow(), position.getStatus(), position.getRemainingPositionPct());
@@ -265,7 +278,7 @@ public class ExitEngineService {
         if (tp1Hit(position, candleHigh, candleLow)) {
             IntrabarEventContext tp1Context = oneHourContext;
             position.setTp1Hit(true);
-            PartialCloseResult partial = partialClose(position, position.getTp1(), scannerProperties.getPaperRisk().getTp1ClosePct(), PaperPositionEventType.PARTIAL_TP1, candleCloseTime, tp1Context);
+            PartialCloseResult partial = partialClose(position, position.getTp1(), SIXTY, PaperPositionEventType.PARTIAL_TP1, candleCloseTime, tp1Context);
             position.setTrailingActive(true);
             position.setTrailingActivatedAtBarCloseTime(candleCloseTime);
             updateBreakEvenStop(position, candleCloseTime, oneHourContext);
@@ -274,7 +287,7 @@ public class ExitEngineService {
         if (tp2Hit(position, candleHigh, candleLow)) {
             IntrabarEventContext tp2Context = oneHourContext;
             position.setTp2Hit(true);
-            PartialCloseResult partial = partialClose(position, position.getTp2(), scannerProperties.getPaperRisk().getTp2ClosePct(), PaperPositionEventType.PARTIAL_TP2, candleCloseTime, tp2Context);
+            PartialCloseResult partial = partialClose(position, position.getTp2(), FORTY, PaperPositionEventType.PARTIAL_TP2, candleCloseTime, tp2Context);
             writeSymbolTradePartialExit(position, partial, PaperExitReason.PARTIAL_TP2, tp2Context);
         }
         updateStatus(position);
@@ -292,7 +305,7 @@ public class ExitEngineService {
     }
 
     public BigDecimal calculateUnrealizedPnlPct(PaperPositionEntity position, BigDecimal currentPrice) {
-        return rawPnlPct(position.getSide(), position.getEntryPrice(), currentPrice);
+        return rawPnlPct(PositionSide.LONG, position.getEntryPrice(), currentPrice);
     }
 
     public BigDecimal calculateRealizedPnlUsdt(PaperPositionEntity position, BigDecimal pnlPct) {
@@ -302,7 +315,7 @@ public class ExitEngineService {
 
     public BigDecimal calculateNetPnlPct(PaperPositionEntity position, BigDecimal exitPrice) {
         ScannerProperties.PaperCost cost = costConfig();
-        BigDecimal raw = rawPnlPct(position.getSide(), position.getEntryPrice(), exitPrice);
+        BigDecimal raw = rawPnlPct(PositionSide.LONG, position.getEntryPrice(), exitPrice);
         BigDecimal fees = cost.getTakerFeePct().multiply(BigDecimal.valueOf(200));
         BigDecimal slippage = cost.getSlippagePct().multiply(BigDecimal.valueOf(200));
         return raw.subtract(fees).subtract(slippage).setScale(PCT_SCALE, RoundingMode.HALF_UP);
@@ -396,7 +409,7 @@ public class ExitEngineService {
 
     private boolean stopHit(PaperPositionEntity p, BigDecimal high, BigDecimal low, BigDecimal stop) {
         if (stop == null) return false;
-        return p.getSide() == PositionSide.SHORT ? ge(high, stop) : le(low, stop);
+        return le(low, stop);
     }
 
     private boolean tp1Hit(PaperPositionEntity p, BigDecimal high, BigDecimal low) {
@@ -404,7 +417,7 @@ public class ExitEngineService {
     }
 
     private boolean tp1Hit(PaperPositionEntity p, BigDecimal high, BigDecimal low, boolean alreadyHit) {
-        return !alreadyHit && p.getTp1() != null && (p.getSide() == PositionSide.SHORT ? le(low, p.getTp1()) : ge(high, p.getTp1()));
+        return !alreadyHit && p.getTp1() != null && ge(high, p.getTp1());
     }
 
     private boolean tp2Hit(PaperPositionEntity p, BigDecimal high, BigDecimal low) {
@@ -412,7 +425,7 @@ public class ExitEngineService {
     }
 
     private boolean tp2Hit(PaperPositionEntity p, BigDecimal high, BigDecimal low, boolean alreadyHit) {
-        return !alreadyHit && p.getTp2() != null && (p.getSide() == PositionSide.SHORT ? le(low, p.getTp2()) : ge(high, p.getTp2()));
+        return !alreadyHit && p.getTp2() != null && ge(high, p.getTp2());
     }
 
     private PartialCloseResult partialClose(PaperPositionEntity p, BigDecimal price, BigDecimal closePct, PaperPositionEventType type, Instant time) {
@@ -429,7 +442,7 @@ public class ExitEngineService {
         Realized realized = realized(p, price, closePct);
         mergeRealized(p, realized, price);
         Instant eventTime = time == null ? Instant.now() : time;
-        BigDecimal adjusted = adjustedExit(p.getSide(), price);
+        BigDecimal adjusted = adjustedExit(PositionSide.LONG, price);
         writeEvent(p, type, eventTime, price, adjusted, closePct, realized, type.name(), context);
         log.info("{} positionId={} symbol={} closedPct={} remainingPct={} price={}", type, p.getId(), p.getSymbol(), closePct, remaining, price);
         return new PartialCloseResult(price, adjusted, closePct, remainingBefore, remaining, realized, eventTime,
@@ -438,10 +451,8 @@ public class ExitEngineService {
 
     private void updateBreakEvenStop(PaperPositionEntity p, Instant time, IntrabarEventContext context) {
         BigDecimal oldStop = p.getCurrentStop();
-        BigDecimal feeBuffer = p.getEntryPrice().multiply(scannerProperties.getPaperRisk().getFeeBufferPct());
-        BigDecimal newStop = p.getSide() == PositionSide.SHORT
-                ? p.getEntryPrice().subtract(feeBuffer)
-                : p.getEntryPrice().add(feeBuffer);
+        BigDecimal totalCostPct = scannerProperties.getStrategy().getExit().getTotalCostPct();
+        BigDecimal newStop = p.getEntryPrice().multiply(BigDecimal.ONE.add(totalCostPct));
         p.setCurrentStop(newStop);
         if (oldStop == null || newStop.compareTo(oldStop) != 0) {
             writeEvent(p, PaperPositionEventType.STOP_UPDATED, time, newStop, null, null, null, "STOP_UPDATED", context);
@@ -454,19 +465,46 @@ public class ExitEngineService {
 
     private void updateTrailing(PaperPositionEntity p, BigDecimal high, BigDecimal low, BigDecimal atr14, Instant candleCloseTime, IntrabarEventContext context) {
         if (!Boolean.TRUE.equals(p.getTrailingActive()) || p.getTrailingActivatedAtBarCloseTime() == null) return;
+        if (candleCloseTime != null && !candleCloseTime.isAfter(p.getTrailingActivatedAtBarCloseTime())) return;
         BigDecimal trailingDistance = defaultBigDecimal(atr14, fallbackAtr(p)).multiply(scannerProperties.getPaperRisk().getTrailingAtrMultiplier());
         BigDecimal oldStop = p.getCurrentStop();
-        if (p.getSide() == PositionSide.SHORT) {
-            p.setLowestPriceSinceEntry(min(defaultBigDecimal(p.getLowestPriceSinceEntry(), p.getEntryPrice()), low));
-            BigDecimal candidateStop = p.getLowestPriceSinceEntry().add(trailingDistance);
-            p.setCurrentStop(oldStop == null ? candidateStop : min(oldStop, candidateStop));
-        } else {
-            p.setHighestPriceSinceEntry(max(defaultBigDecimal(p.getHighestPriceSinceEntry(), p.getEntryPrice()), high));
-            BigDecimal candidateStop = p.getHighestPriceSinceEntry().subtract(trailingDistance);
-            p.setCurrentStop(oldStop == null ? candidateStop : max(oldStop, candidateStop));
-        }
+        p.setHighestPriceSinceEntry(max(defaultBigDecimal(p.getHighestPriceSinceEntry(), p.getEntryPrice()), high));
+        BigDecimal candidateStop = p.getHighestPriceSinceEntry().subtract(trailingDistance);
+        p.setCurrentStop(oldStop == null ? candidateStop : max(oldStop, candidateStop));
         if (oldStop == null || p.getCurrentStop().compareTo(oldStop) != 0) {
             writeEvent(p, PaperPositionEventType.TRAILING_UPDATED, candleCloseTime, p.getCurrentStop(), null, null, null, "TRAILING_UPDATED", context);
+        }
+    }
+
+    private EarlyExitEvaluation evaluateEarlyExit(PaperPositionEntity p, KlineCandle candle) {
+        ScannerProperties.Strategy.Entry.EarlyExit cfg = scannerProperties.getStrategy().getEntry().getEarlyExit();
+        if (!booleanValue(cfg.getEnabled(), true) || Boolean.TRUE.equals(p.getTp1Hit()) || p.getEntryPrice() == null || candle.getClose() == null) {
+            return EarlyExitEvaluation.notTriggered();
+        }
+        int bars = intValue(p.getBarsInPosition(), 0);
+        if (bars != 3) {
+            return EarlyExitEvaluation.notTriggered();
+        }
+        BigDecimal first15HighPct = defaultBigDecimal(p.getHighestPriceSinceEntry(), candle.getHigh())
+                .divide(p.getEntryPrice(), 12, RoundingMode.HALF_UP).subtract(BigDecimal.ONE);
+        BigDecimal close15Pct = candle.getClose().divide(p.getEntryPrice(), 12, RoundingMode.HALF_UP).subtract(BigDecimal.ONE);
+        boolean closeWeak = close15Pct.compareTo(cfg.getClose15MaxPct()) < 0;
+        boolean ruleA = first15HighPct.compareTo(cfg.getFirst15HighMinPct()) < 0 && closeWeak;
+        BigDecimal prev3Return = p.getPrev3_5mReturn();
+        boolean ruleB = prev3Return != null && prev3Return.compareTo(cfg.getPrev3ReturnMaxPct()) < 0 && closeWeak;
+        return new EarlyExitEvaluation(ruleA || ruleB, ruleA, ruleB, first15HighPct, close15Pct, prev3Return);
+    }
+
+    private record EarlyExitEvaluation(
+            boolean triggered,
+            boolean ruleA,
+            boolean ruleB,
+            BigDecimal first15HighPct,
+            BigDecimal close15Pct,
+            BigDecimal prev3Return
+    ) {
+        private static EarlyExitEvaluation notTriggered() {
+            return new EarlyExitEvaluation(false, false, false, null, null, null);
         }
     }
 
@@ -533,7 +571,7 @@ public class ExitEngineService {
         p.setStatus(PaperPositionStatus.CLOSED);
         p.setClosedAt(closeTime);
         p.setExitPrice(exitPrice);
-        p.setExitPriceAdjusted(adjustedExit(p.getSide(), exitPrice));
+        p.setExitPriceAdjusted(adjustedExit(PositionSide.LONG, exitPrice));
         mergeRealized(p, realized, exitPrice);
         p.setRealizedPnlPct(p.getNetRealizedPnlPct());
         p.setRealizedPnlUsdt(calculateRealizedPnlUsdt(p, p.getNetRealizedPnlPct()));
@@ -704,7 +742,7 @@ public class ExitEngineService {
         if (p.getEntryPrice() == null || exitPrice == null || p.getQuantity() == null) {
             return p.getRealizedPnlUsdt();
         }
-        BigDecimal diff = p.getSide() == PositionSide.SHORT ? p.getEntryPrice().subtract(exitPrice) : exitPrice.subtract(p.getEntryPrice());
+        BigDecimal diff = exitPrice.subtract(p.getEntryPrice());
         return diff.multiply(p.getQuantity()).stripTrailingZeros();
     }
 
@@ -757,7 +795,7 @@ public class ExitEngineService {
     }
 
     private BigDecimal rawWeightedForClose(PaperPositionEntity p, BigDecimal exitPrice, BigDecimal pctClosed) {
-        return rawPnlPct(p.getSide(), p.getEntryPrice(), exitPrice).multiply(weight(pctClosed));
+        return rawPnlPct(PositionSide.LONG, p.getEntryPrice(), exitPrice).multiply(weight(pctClosed));
     }
 
     private BigDecimal netWeightedForClose(PaperPositionEntity p, BigDecimal exitPrice, BigDecimal pctClosed) {
@@ -772,7 +810,7 @@ public class ExitEngineService {
     }
 
     private Realized realized(PaperPositionEntity p, BigDecimal exitPrice, BigDecimal pctClosed) {
-        BigDecimal raw = rawPnlPct(p.getSide(), p.getEntryPrice(), exitPrice);
+        BigDecimal raw = rawPnlPct(PositionSide.LONG, p.getEntryPrice(), exitPrice);
         BigDecimal net = calculateNetPnlPct(p, exitPrice);
         BigDecimal leveraged = net.multiply(BigDecimal.valueOf(intValue(costConfig().getLeverage(), 3))).setScale(PCT_SCALE, RoundingMode.HALF_UP);
         BigDecimal weight = weight(pctClosed);
@@ -935,7 +973,7 @@ public class ExitEngineService {
     }
 
     private void updateUnrealized(PaperPositionEntity p, BigDecimal close) {
-        BigDecimal raw = rawPnlPct(p.getSide(), p.getEntryPrice(), close);
+        BigDecimal raw = rawPnlPct(PositionSide.LONG, p.getEntryPrice(), close);
         BigDecimal net = calculateNetPnlPct(p, close);
         p.setRawUnrealizedPnlPct(raw);
         p.setNetUnrealizedPnlPct(net);
@@ -943,12 +981,12 @@ public class ExitEngineService {
     }
 
     private BigDecimal rawPnlPct(PositionSide side, BigDecimal entry, BigDecimal exit) {
-        BigDecimal numerator = side == PositionSide.SHORT ? entry.subtract(exit) : exit.subtract(entry);
+        BigDecimal numerator = exit.subtract(entry);
         return numerator.divide(entry, PCT_SCALE + 4, RoundingMode.HALF_UP).multiply(ONE_HUNDRED).setScale(PCT_SCALE, RoundingMode.HALF_UP);
     }
     private BigDecimal adjustedExit(PositionSide side, BigDecimal price) {
         BigDecimal slip = costConfig().getSlippagePct();
-        return side == PositionSide.SHORT ? price.multiply(BigDecimal.ONE.add(slip)) : price.multiply(BigDecimal.ONE.subtract(slip));
+        return price.multiply(BigDecimal.ONE.subtract(slip));
     }
     private BigDecimal fallbackAtr(PaperPositionEntity p) {
         return defaultBigDecimal(p.getRiskPerUnit(), p.getEntryPrice().multiply(new BigDecimal("0.012")));

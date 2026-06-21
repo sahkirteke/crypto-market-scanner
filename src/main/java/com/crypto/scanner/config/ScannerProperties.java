@@ -26,6 +26,7 @@ public class ScannerProperties {
     private PaperExit paperExit = new PaperExit();
     private PaperRisk paperRisk = new PaperRisk();
     private PaperCost paperCost = new PaperCost();
+    private Strategy strategy = new Strategy();
 
     @Getter
     @Setter
@@ -135,8 +136,8 @@ public class ScannerProperties {
         private BigDecimal maxStopDistancePct = new BigDecimal("0.018");
         private BigDecimal tp1RMultiple = new BigDecimal("1.0");
         private BigDecimal tp2RMultiple = new BigDecimal("2.0");
-        private BigDecimal tp1ClosePct = new BigDecimal("50");
-        private BigDecimal tp2ClosePct = new BigDecimal("25");
+        private BigDecimal tp1ClosePct = new BigDecimal("60");
+        private BigDecimal tp2ClosePct = new BigDecimal("40");
         private BigDecimal trailingRemainingPct = new BigDecimal("25");
         private BigDecimal feeBufferPct = new BigDecimal("0.0005");
         private BigDecimal trailingAtrMultiplier = new BigDecimal("1.2");
@@ -164,6 +165,40 @@ public class ScannerProperties {
         private String intrabarCron = "10 */5 * * * *";
         private String intrabarZone = "Europe/Istanbul";
         private Integer intrabarKlineLimit = 3;
+    }
+
+    @Getter
+    @Setter
+    public static class Strategy {
+        private Entry entry = new Entry();
+        private Exit exit = new Exit();
+
+        @Getter
+        @Setter
+        public static class Entry {
+            private BigDecimal tp1MaxPct = new BigDecimal("0.013");
+            private BigDecimal tp2MaxPct = new BigDecimal("0.018");
+            private BigDecimal slMaxPct = new BigDecimal("0.010");
+            private BigDecimal rangePos1hMinExclusive = new BigDecimal("0.40");
+            private BigDecimal rangePos1hMaxInclusive = new BigDecimal("0.80");
+            private BigDecimal bbWidthMax = new BigDecimal("0.15");
+            private EarlyExit earlyExit = new EarlyExit();
+
+            @Getter
+            @Setter
+            public static class EarlyExit {
+                private Boolean enabled = true;
+                private BigDecimal first15HighMinPct = new BigDecimal("0.004");
+                private BigDecimal close15MaxPct = new BigDecimal("0.0");
+                private BigDecimal prev3ReturnMaxPct = new BigDecimal("0.0");
+            }
+        }
+
+        @Getter
+        @Setter
+        public static class Exit {
+            private BigDecimal totalCostPct = new BigDecimal("0.0018");
+        }
     }
 
     @Getter

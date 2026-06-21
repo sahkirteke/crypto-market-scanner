@@ -120,6 +120,7 @@ public class SymbolTradeJsonlLogService {
         payload.put("tp1", p.getTp1());
         payload.put("tp2", p.getTp2());
         payload.put("slPrice", p.getInitialStop());
+        putFinalRiskFields(payload, p);
         payload.put("initialStop", p.getInitialStop());
         payload.put("currentStop", p.getInitialStop());
         payload.put("riskPerUnit", p.getRiskPerUnit());
@@ -140,6 +141,17 @@ public class SymbolTradeJsonlLogService {
         payload.put("lowestPriceSinceEntry", p.getEntryPrice());
         payload.put("openedAt", format(p.getOpenedAt()));
         return payload;
+    }
+
+    private void putFinalRiskFields(Map<String, Object> payload, PaperPositionEntity p) {
+        if (p.getEntryPrice() == null) return;
+        BigDecimal entry = p.getEntryPrice();
+        payload.put("tp1PctFinal", p.getTp1() == null ? null : p.getTp1().divide(entry, 12, java.math.RoundingMode.HALF_UP).subtract(BigDecimal.ONE));
+        payload.put("tp2PctFinal", p.getTp2() == null ? null : p.getTp2().divide(entry, 12, java.math.RoundingMode.HALF_UP).subtract(BigDecimal.ONE));
+        payload.put("slPctFinal", p.getInitialStop() == null ? null : BigDecimal.ONE.subtract(p.getInitialStop().divide(entry, 12, java.math.RoundingMode.HALF_UP)));
+        payload.put("tp1PriceFinal", p.getTp1());
+        payload.put("tp2PriceFinal", p.getTp2());
+        payload.put("slPriceFinal", p.getInitialStop());
     }
 
     private void putCoreEntry(Map<String, Object> payload, PaperPositionEntity p) {
@@ -202,9 +214,12 @@ public class SymbolTradeJsonlLogService {
         payload.put("closedPositionPct", closedPositionPct);
         payload.put("remainingPositionPctBefore", remainingBefore);
         payload.put("remainingPositionPctAfter", remainingAfter);
+        payload.put("closedQtyPct", closedPositionPct);
+        payload.put("remainingQtyPct", remainingAfter);
         payload.put("notionalUsdt", p.getNotionalUsdt());
         payload.put("leverage", p.getLeverage());
         payload.put("realizedPnl", realizedPnl);
+        payload.put("netPnl", context.netRealizedPnlPct() == null ? p.getNetRealizedPnlPct() : context.netRealizedPnlPct());
         payload.put("realizedPnlUsdt", realizedPnl);
         payload.put("realizedPnlPct", context.realizedPnlPct() == null ? p.getRealizedPnlPct() : context.realizedPnlPct());
         payload.put("rawRealizedPnlPct", context.rawRealizedPnlPct() == null ? p.getRawRealizedPnlPct() : context.rawRealizedPnlPct());
@@ -244,6 +259,16 @@ public class SymbolTradeJsonlLogService {
         payload.put("trailingActiveAfter", context.trailingActiveAfter() == null ? p.getTrailingActive() : context.trailingActiveAfter());
         payload.put("trailingActivatedAtBarCloseTime", format(p.getTrailingActivatedAtBarCloseTime()));
         payload.put("remainingPositionPct", p.getRemainingPositionPct());
+        payload.put("stopMovedToBreakEven", Boolean.TRUE.equals(p.getTp1Hit()) && p.getCurrentStop() != null && p.getEntryPrice() != null && p.getCurrentStop().compareTo(p.getEntryPrice()) > 0);
+        payload.put("breakEvenStopPrice", p.getCurrentStop());
+        payload.put("earlyExitTriggered", Boolean.TRUE.equals(p.getEarlyExitTriggered()) || "EARLY_EXIT_15M_WEAK_MOMENTUM".equals(context.exitReason()));
+        payload.put("earlyExitRuleA", Boolean.TRUE.equals(p.getEarlyExitRuleA()));
+        payload.put("earlyExitRuleB", Boolean.TRUE.equals(p.getEarlyExitRuleB()));
+        payload.put("first15HighPct", p.getFirst15HighPct());
+        payload.put("close15Pct", p.getClose15Pct());
+        payload.put("prev3_5m_return", p.getPrev3_5mReturn());
+        payload.put("earlyExitPrice", p.getEarlyExitPrice());
+        payload.put("earlyExitTime", format(p.getEarlyExitTime()));
     }
 
     private void putCandle(Map<String, Object> payload, PaperExitContext context) {
@@ -315,6 +340,14 @@ public class SymbolTradeJsonlLogService {
     private void putBollinger(Map<String, Object> payload, PaperPositionEntity p, EntrySignal signal) {
         payload.put("bbPercentB", p.getEntryBbPercentB());
         payload.put("bbWidth", p.getEntryBbWidth());
+        payload.put("bbWidthPassed", p.getEntryBbWidth() != null && p.getEntryBbWidth().compareTo(new BigDecimal("0.15")) < 0);
+        BigDecimal low = signal == null ? null : signal.getPrevious1hLow();
+        BigDecimal high = signal == null ? null : signal.getPrevious1hHigh();
+        BigDecimal rangePos = (low == null || high == null || high.compareTo(low) == 0 || p.getEntryPrice() == null) ? null : p.getEntryPrice().subtract(low).divide(high.subtract(low), 12, java.math.RoundingMode.HALF_UP);
+        payload.put("rangePos1h", rangePos);
+        payload.put("lastClosed1hLow", low);
+        payload.put("lastClosed1hHigh", high);
+        payload.put("rangePos1hPassed", rangePos != null && rangePos.compareTo(new BigDecimal("0.40")) > 0 && rangePos.compareTo(new BigDecimal("0.80")) <= 0);
         payload.put("bbUpper", p.getEntryBbUpper());
         payload.put("bbMiddle", p.getEntryBbMiddle());
         payload.put("bbLower", p.getEntryBbLower());
@@ -343,9 +376,7 @@ public class SymbolTradeJsonlLogService {
         if (p.getEntryPrice() == null || exitPrice == null || p.getQuantity() == null || p.getSide() == null) {
             return null;
         }
-        BigDecimal diff = p.getSide() == PositionSide.SHORT
-                ? p.getEntryPrice().subtract(exitPrice)
-                : exitPrice.subtract(p.getEntryPrice());
+        BigDecimal diff = exitPrice.subtract(p.getEntryPrice());
         return diff.multiply(p.getQuantity()).stripTrailingZeros();
     }
 

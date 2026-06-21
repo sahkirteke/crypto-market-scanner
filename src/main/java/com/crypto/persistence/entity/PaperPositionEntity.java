@@ -312,6 +312,30 @@ public class PaperPositionEntity {
     @Column(name = "last_exit_candle_close_time")
     private Instant lastExitCandleCloseTime;
 
+    @Column(name = "prev3_5m_return", precision = 20, scale = 12)
+    private BigDecimal prev3_5mReturn;
+
+    @Column(name = "early_exit_triggered")
+    private Boolean earlyExitTriggered;
+
+    @Column(name = "early_exit_rule_a")
+    private Boolean earlyExitRuleA;
+
+    @Column(name = "early_exit_rule_b")
+    private Boolean earlyExitRuleB;
+
+    @Column(name = "first15_high_pct", precision = 20, scale = 12)
+    private BigDecimal first15HighPct;
+
+    @Column(name = "close15_pct", precision = 20, scale = 12)
+    private BigDecimal close15Pct;
+
+    @Column(name = "early_exit_price", precision = 30, scale = 12)
+    private BigDecimal earlyExitPrice;
+
+    @Column(name = "early_exit_time")
+    private Instant earlyExitTime;
+
     @Column(name = "take_profit_pct", precision = 20, scale = 8)
     private BigDecimal takeProfitPct;
 

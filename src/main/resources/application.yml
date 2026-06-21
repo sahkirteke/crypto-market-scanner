@@ -118,8 +118,8 @@ scanner:
     max-stop-distance-pct: 0.018
     tp1-r-multiple: 1.0
     tp2-r-multiple: 2.0
-    tp1-close-pct: 50
-    tp2-close-pct: 25
+    tp1-close-pct: 60
+    tp2-close-pct: 40
     trailing-remaining-pct: 25
     fee-buffer-pct: 0.0005
     trailing-atr-multiplier: 1.2
@@ -128,6 +128,22 @@ scanner:
     leverage: 3
     taker-fee-pct: 0.0004
     slippage-pct: 0.0005
+
+  strategy:
+    entry:
+      tp1-max-pct: 0.013
+      tp2-max-pct: 0.018
+      sl-max-pct: 0.010
+      range-pos1h-min-exclusive: 0.40
+      range-pos1h-max-inclusive: 0.80
+      bb-width-max: 0.15
+      early-exit:
+        enabled: true
+        first15-high-min-pct: 0.004
+        close15-max-pct: 0.0
+        prev3-return-max-pct: 0.0
+    exit:
+      total-cost-pct: 0.0018
 
   paper-exit:
     enabled: true

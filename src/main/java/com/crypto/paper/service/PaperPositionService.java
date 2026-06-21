@@ -6,6 +6,7 @@ import com.crypto.common.enums.PositionSide;
 import com.crypto.common.enums.RiskLevel;
 import com.crypto.binance.client.BinanceFuturesClient;
 import com.crypto.domain.model.BookTicker;
+import com.crypto.domain.model.Kline;
 import com.crypto.common.service.JsonlDecisionLogService;
 import com.crypto.common.time.IstanbulTimeUtil;
 import com.crypto.paper.log.SymbolTradeJsonlLogService;
@@ -164,9 +165,14 @@ public class PaperPositionService {
         ScannerProperties.PaperRisk riskConfig = scannerProperties.getPaperRisk() == null ? new ScannerProperties.PaperRisk() : scannerProperties.getPaperRisk();
         ScannerProperties.PaperCost costConfig = scannerProperties.getPaperCost() == null ? new ScannerProperties.PaperCost() : scannerProperties.getPaperCost();
         BigDecimal atr = signal.getAtr14_1h() == null ? entryPrice.multiply(new BigDecimal("0.012")) : signal.getAtr14_1h();
-        RiskLevels risk = calculateRiskLevels(execution.executionSide(), entryPrice, atr, riskConfig);
+        RiskLevels risk = calculateRiskLevels(PositionSide.LONG, entryPrice, atr, riskConfig);
+        EntryFilterResult entryFilters = evaluateEntryFilters(signal, entryPrice);
+        if (!entryFilters.passed()) {
+            return reject(signal, entryFilters.rejectReason());
+        }
         BigDecimal notionalUsdt = bigDecimalValue(config.getDefaultNotionalUsdt(), "100");
         BigDecimal quantity = notionalUsdt.divide(entryPrice, QUANTITY_SCALE, RoundingMode.DOWN);
+        BigDecimal prev3_5mReturn = resolvePrev3_5mReturn(signal);
         Instant openedAt = Instant.now();
         PaperPositionEntity position = PaperPositionEntity.builder()
                 .sourceScanRunId(signal.getScanRunId())
@@ -245,6 +251,10 @@ public class PaperPositionService {
                 .barsHeld(0)
                 .minutesHeld(0)
                 .lastCheckedAt(openedAt)
+                .prev3_5mReturn(prev3_5mReturn)
+                .earlyExitTriggered(false)
+                .earlyExitRuleA(false)
+                .earlyExitRuleB(false)
                 .takeProfitPct(bigDecimalValue(exitConfig.getTakeProfitPct(), "1.0"))
                 .stopLossPct(bigDecimalValue(exitConfig.getStopLossPct(), "0.6"))
                 .timeStopMinutes(intValue(exitConfig.getTimeStopMinutes(), 240))
@@ -295,14 +305,44 @@ public class PaperPositionService {
         BigDecimal min = entryPrice.multiply(config.getMinStopDistancePct());
         BigDecimal max = entryPrice.multiply(config.getMaxStopDistancePct());
         BigDecimal distance = raw.max(min).min(max);
-        BigDecimal initialStop = side == PositionSide.SHORT ? entryPrice.add(distance) : entryPrice.subtract(distance);
-        BigDecimal riskPerUnit = side == PositionSide.SHORT ? initialStop.subtract(entryPrice) : entryPrice.subtract(initialStop);
-        BigDecimal tp1 = side == PositionSide.SHORT ? entryPrice.subtract(riskPerUnit.multiply(config.getTp1RMultiple())) : entryPrice.add(riskPerUnit.multiply(config.getTp1RMultiple()));
-        BigDecimal tp2 = side == PositionSide.SHORT ? entryPrice.subtract(riskPerUnit.multiply(config.getTp2RMultiple())) : entryPrice.add(riskPerUnit.multiply(config.getTp2RMultiple()));
+        ScannerProperties.Strategy.Entry entry = scannerProperties.getStrategy().getEntry();
+        BigDecimal slPctFinal = distance.divide(entryPrice, 12, RoundingMode.HALF_UP).min(entry.getSlMaxPct());
+        BigDecimal tp1PctFinal = slPctFinal.multiply(config.getTp1RMultiple()).min(entry.getTp1MaxPct());
+        BigDecimal tp2PctFinal = slPctFinal.multiply(config.getTp2RMultiple()).min(entry.getTp2MaxPct());
+        BigDecimal initialStop = entryPrice.multiply(BigDecimal.ONE.subtract(slPctFinal));
+        BigDecimal riskPerUnit = entryPrice.subtract(initialStop);
+        BigDecimal tp1 = entryPrice.multiply(BigDecimal.ONE.add(tp1PctFinal));
+        BigDecimal tp2 = entryPrice.multiply(BigDecimal.ONE.add(tp2PctFinal));
         return new RiskLevels(initialStop, riskPerUnit, tp1, tp2);
     }
 
+    private EntryFilterResult evaluateEntryFilters(EntrySignal signal, BigDecimal entryPrice) {
+        ScannerProperties.Strategy.Entry cfg = scannerProperties.getStrategy().getEntry();
+        BigDecimal bbWidth = signal.getBbWidth();
+        if (bbWidth == null || !isFinite(bbWidth) || bbWidth.compareTo(cfg.getBbWidthMax()) >= 0) {
+            return new EntryFilterResult(false, null, false, false, "BB_WIDTH_FILTER_FAILED");
+        }
+        BigDecimal low = signal.getPrevious1hLow();
+        BigDecimal high = signal.getPrevious1hHigh();
+        if (low == null || high == null || high.compareTo(low) == 0) {
+            return new EntryFilterResult(false, null, false, true, "RANGE_POS1H_DATA_NOT_READY");
+        }
+        BigDecimal rangePos = entryPrice.subtract(low).divide(high.subtract(low), 12, RoundingMode.HALF_UP);
+        boolean rangePassed = rangePos.compareTo(cfg.getRangePos1hMinExclusive()) > 0
+                && rangePos.compareTo(cfg.getRangePos1hMaxInclusive()) <= 0;
+        if (!rangePassed) {
+            return new EntryFilterResult(false, rangePos, false, true, "RANGE_POS1H_FILTER_FAILED");
+        }
+        return new EntryFilterResult(true, rangePos, true, true, null);
+    }
+
+    private boolean isFinite(BigDecimal value) {
+        return value != null;
+    }
+
     public record RiskLevels(BigDecimal initialStop, BigDecimal riskPerUnit, BigDecimal tp1, BigDecimal tp2) {}
+
+    private record EntryFilterResult(boolean passed, BigDecimal rangePos1h, boolean rangePos1hPassed, boolean bbWidthPassed, String rejectReason) {}
 
     private record SignalExecution(
             PositionSide signalSide,
@@ -355,6 +395,31 @@ public class PaperPositionService {
     }
 
 
+    private BigDecimal resolvePrev3_5mReturn(EntrySignal signal) {
+        if (binanceFuturesClient == null || signal == null || signal.getSymbol() == null) {
+            return null;
+        }
+        try {
+            List<Kline> rawKlines = binanceFuturesClient.getKlines(signal.getSymbol(), "5m", 4);
+            List<Kline> closed = (rawKlines == null ? List.<Kline>of() : rawKlines).stream()
+                    .filter(kline -> kline != null && Boolean.TRUE.equals(kline.getClosed()))
+                    .toList();
+            if (closed.size() < 3) {
+                return null;
+            }
+            List<Kline> prev3 = closed.subList(closed.size() - 3, closed.size());
+            BigDecimal prev3Open = prev3.get(0).getOpen();
+            BigDecimal prev3Close = prev3.get(2).getClose();
+            if (prev3Open == null || prev3Close == null || prev3Open.compareTo(BigDecimal.ZERO) <= 0) {
+                return null;
+            }
+            return prev3Close.divide(prev3Open, 12, RoundingMode.HALF_UP).subtract(BigDecimal.ONE);
+        } catch (Exception exception) {
+            log.warn("PAPER_ENTRY_PREV3_5M_RETURN_UNAVAILABLE symbol={} reason={}", signal.getSymbol(), exception.getMessage());
+            return null;
+        }
+    }
+
     private BookTicker resolveBookTicker(EntrySignal signal) {
         if (binanceFuturesClient == null || signal == null || signal.getSymbol() == null) {
             return null;
@@ -369,7 +434,7 @@ public class PaperPositionService {
 
     private BigDecimal adjustedEntry(PositionSide side, BigDecimal entryPrice, ScannerProperties.PaperCost cost) {
         BigDecimal slip = cost.getSlippagePct();
-        return side == PositionSide.SHORT ? entryPrice.multiply(BigDecimal.ONE.subtract(slip)) : entryPrice.multiply(BigDecimal.ONE.add(slip));
+        return entryPrice.multiply(BigDecimal.ONE.add(slip));
     }
 
     private void writeOpenedEvent(PaperPositionEntity position) {
@@ -427,6 +492,7 @@ public class PaperPositionService {
                 Map.entry("bbReasons", jsonTextMapper.toStringList(position.getEntryBbReasonsJson())),
                 Map.entry("bbPercentB", nullToEmpty(position.getEntryBbPercentB())),
                 Map.entry("bbWidth", nullToEmpty(position.getEntryBbWidth())),
+                Map.entry("bbWidthPassed", position.getEntryBbWidth() != null && position.getEntryBbWidth().compareTo(scannerProperties.getStrategy().getEntry().getBbWidthMax()) < 0),
                 Map.entry("bbUpper", nullToEmpty(position.getEntryBbUpper())),
                 Map.entry("bbMiddle", nullToEmpty(position.getEntryBbMiddle())),
                 Map.entry("bbLower", nullToEmpty(position.getEntryBbLower())),
@@ -458,6 +524,7 @@ public class PaperPositionService {
         payload.put("tp1", position.getTp1());
         payload.put("tp2", position.getTp2());
         payload.put("slPrice", position.getInitialStop());
+        putFinalRiskFields(payload, position);
         payload.put("initialStop", position.getInitialStop());
         payload.put("currentStop", position.getInitialStop());
         payload.put("tp1Hit", false);
@@ -482,6 +549,19 @@ public class PaperPositionService {
         payload.put("reasons", jsonTextMapper.toStringList(position.getReasonsJson()));
         payload.put("warnings", jsonTextMapper.toStringList(position.getWarningsJson()));
         return payload;
+    }
+
+    private void putFinalRiskFields(Map<String, Object> payload, PaperPositionEntity position) {
+        if (position.getEntryPrice() == null) return;
+        BigDecimal entry = position.getEntryPrice();
+        payload.put("tp1PctFinal", position.getTp1() == null ? null : position.getTp1().divide(entry, 12, RoundingMode.HALF_UP).subtract(BigDecimal.ONE));
+        payload.put("tp2PctFinal", position.getTp2() == null ? null : position.getTp2().divide(entry, 12, RoundingMode.HALF_UP).subtract(BigDecimal.ONE));
+        payload.put("slPctFinal", position.getInitialStop() == null ? null : BigDecimal.ONE.subtract(position.getInitialStop().divide(entry, 12, RoundingMode.HALF_UP)));
+        payload.put("tp1PriceFinal", position.getTp1());
+        payload.put("tp2PriceFinal", position.getTp2());
+        payload.put("slPriceFinal", position.getInitialStop());
+        payload.put("bbWidth", position.getEntryBbWidth());
+        payload.put("bbWidthPassed", position.getEntryBbWidth() != null && position.getEntryBbWidth().compareTo(scannerProperties.getStrategy().getEntry().getBbWidthMax()) < 0);
     }
 
     private boolean hasRequiredEntryIndicators(EntrySignal signal) {
