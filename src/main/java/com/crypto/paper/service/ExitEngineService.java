@@ -491,8 +491,7 @@ public class ExitEngineService {
         boolean closeWeak = close15Pct.compareTo(cfg.getClose15MaxPct()) < 0;
         boolean ruleA = first15HighPct.compareTo(cfg.getFirst15HighMinPct()) < 0 && closeWeak;
         BigDecimal prev3Return = p.getPrev3_5mReturn();
-        boolean ruleB = prev3Return != null && prev3Return.compareTo(cfg.getPrev3ReturnMaxPct()) < 0 && closeWeak;
-        return new EarlyExitEvaluation(ruleA || ruleB, ruleA, ruleB, first15HighPct, close15Pct, prev3Return);
+        return new EarlyExitEvaluation(ruleA, ruleA, false, first15HighPct, close15Pct, prev3Return);
     }
 
     private record EarlyExitEvaluation(

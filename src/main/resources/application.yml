@@ -141,7 +141,6 @@ scanner:
         enabled: true
         first15-high-min-pct: 0.004
         close15-max-pct: 0.0
-        prev3-return-max-pct: 0.0
     exit:
       total-cost-pct: 0.0018
 

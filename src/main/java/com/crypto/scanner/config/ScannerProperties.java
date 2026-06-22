@@ -190,7 +190,6 @@ public class ScannerProperties {
                 private Boolean enabled = true;
                 private BigDecimal first15HighMinPct = new BigDecimal("0.004");
                 private BigDecimal close15MaxPct = new BigDecimal("0.0");
-                private BigDecimal prev3ReturnMaxPct = new BigDecimal("0.0");
             }
         }
 
