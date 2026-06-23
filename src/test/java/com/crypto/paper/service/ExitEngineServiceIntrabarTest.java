@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.crypto.binance.client.BinanceFuturesClient;
+import com.crypto.common.enums.CoinClassification;
 import com.crypto.common.enums.EntryAction;
 import com.crypto.common.enums.PositionSide;
 import com.crypto.common.service.JsonlDecisionLogService;
@@ -418,7 +419,7 @@ class ExitEngineServiceIntrabarTest {
     }
 
     @Test
-    void earlyExitRuleATriggersAfterFirstThreeFiveMinuteCandles() {
+    void earlyExitConditionsDoNotClosePosition() {
         ExitEngineService service = service();
         PaperPositionEntity p = weakMomentumPosition();
 
@@ -426,8 +427,9 @@ class ExitEngineServiceIntrabarTest {
         service.evaluatePositionWithCandle(p, candle(candleOpen.plusSeconds(300), candleClose.plusSeconds(300), "100.3", "99.7", "100.0"), "5m");
         PaperPositionEntity result = service.evaluatePositionWithCandle(p, candle(candleOpen.plusSeconds(600), candleClose.plusSeconds(600), "100.1", "99.6", "99.9"), "5m");
 
-        assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.CLOSED);
-        assertThat(result.getExitReason()).isEqualTo("EARLY_EXIT_15M_WEAK_MOMENTUM");
+        assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.OPEN);
+        assertThat(result.getExitReason()).isNull();
+        assertThat(result.getEarlyExitTriggered()).isFalse();
         assertThat(result.getEarlyExitRuleA()).isTrue();
         assertThat(result.getEarlyExitRuleB()).isFalse();
     }
@@ -479,7 +481,7 @@ class ExitEngineServiceIntrabarTest {
     }
 
     @Test
-    void invertedSignalPositionStillUsesEarlyExitRules() {
+    void invertedSignalPositionDoesNotCloseOnEarlyExitConditions() {
         ExitEngineService service = service();
         PaperPositionEntity p = weakMomentumPosition();
         p.setSignalInverted(true);
@@ -491,9 +493,25 @@ class ExitEngineServiceIntrabarTest {
         service.evaluatePositionWithCandle(p, candle(candleOpen.plusSeconds(300), candleClose.plusSeconds(300), "100.3", "99.7", "100.0"), "5m");
         PaperPositionEntity result = service.evaluatePositionWithCandle(p, candle(candleOpen.plusSeconds(600), candleClose.plusSeconds(600), "100.1", "99.6", "99.9"), "5m");
 
-        assertThat(result.getExitReason()).isEqualTo("EARLY_EXIT_15M_WEAK_MOMENTUM");
+        assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.OPEN);
+        assertThat(result.getExitReason()).isNull();
+        assertThat(result.getEarlyExitTriggered()).isFalse();
         assertThat(result.getEarlyExitRuleA()).isTrue();
         assertThat(result.getEarlyExitRuleB()).isFalse();
+    }
+
+    @Test
+    void oppositeSignalExitConditionDoesNotClosePosition() {
+        ExitEngineService service = service();
+        PaperPositionEntity p = position(PositionSide.LONG);
+
+        assertThat(service.shouldOppositeSignalExit(p, CoinClassification.STRONG_SHORT, 70, 90)).isFalse();
+
+        PaperPositionEntity result = service.evaluatePositionWithCandle(p, candle("101.5", "100", "101"), "5m");
+
+        assertThat(result.getExitReason()).isNull();
+        assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.PARTIALLY_CLOSED);
+        assertThat(result.getTp1Hit()).isTrue();
     }
 
     private PaperPositionEntity weakMomentumPosition() {

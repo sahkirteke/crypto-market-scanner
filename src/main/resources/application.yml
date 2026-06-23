@@ -138,11 +138,13 @@ scanner:
       range-pos1h-max-inclusive: 0.80
       bb-width-max: 0.15
       early-exit:
-        enabled: true
+        enabled: false
         first15-high-min-pct: 0.004
         close15-max-pct: 0.0
     exit:
       total-cost-pct: 0.0018
+      opposite-signal-exit:
+        enabled: false
 
   paper-exit:
     enabled: true

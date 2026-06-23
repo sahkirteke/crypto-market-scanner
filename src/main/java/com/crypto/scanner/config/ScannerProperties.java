@@ -187,7 +187,7 @@ public class ScannerProperties {
             @Getter
             @Setter
             public static class EarlyExit {
-                private Boolean enabled = true;
+                private Boolean enabled = false;
                 private BigDecimal first15HighMinPct = new BigDecimal("0.004");
                 private BigDecimal close15MaxPct = new BigDecimal("0.0");
             }
@@ -197,6 +197,13 @@ public class ScannerProperties {
         @Setter
         public static class Exit {
             private BigDecimal totalCostPct = new BigDecimal("0.0018");
+            private OppositeSignalExit oppositeSignalExit = new OppositeSignalExit();
+
+            @Getter
+            @Setter
+            public static class OppositeSignalExit {
+                private Boolean enabled = false;
+            }
         }
     }
 

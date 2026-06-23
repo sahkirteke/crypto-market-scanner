@@ -211,17 +211,7 @@ public class ExitEngineService {
         updateStatus(position);
         updateTrailing(position, candle.getHigh(), candle.getLow(), fallbackAtr(position), candle.getCloseTime(),
                 new IntrabarEventContext(position, candle, effectiveInterval));
-        EarlyExitEvaluation earlyExit = evaluateEarlyExit(position, candle);
-        if (earlyExit.triggered()) {
-            position.setEarlyExitTriggered(true);
-            position.setEarlyExitRuleA(earlyExit.ruleA());
-            position.setEarlyExitRuleB(earlyExit.ruleB());
-            position.setFirst15HighPct(earlyExit.first15HighPct());
-            position.setClose15Pct(earlyExit.close15Pct());
-            position.setEarlyExitPrice(candle.getClose());
-            position.setEarlyExitTime(candle.getCloseTime());
-            closeRemaining(position, candle.getClose(), PaperExitReason.EARLY_EXIT_15M_WEAK_MOMENTUM, candle.getCloseTime(), new IntrabarEventContext(position, candle, effectiveInterval));
-        }
+        recordEarlyExitMetrics(position, candle);
         position.setLastExitCandleCloseTime(candle.getCloseTime());
         log.info("PAPER_POSITION_EVALUATED id={} symbol={} interval={} candleHigh={} candleLow={} status={} remainingPct={}",
                 position.getId(), position.getSymbol(), effectiveInterval, candle.getHigh(), candle.getLow(), position.getStatus(), position.getRemainingPositionPct());
@@ -347,10 +337,7 @@ public class ExitEngineService {
     }
 
     public boolean shouldOppositeSignalExit(PaperPositionEntity p, CoinClassification classification, Integer longScore, Integer shortScore) {
-        if (p.getSide() == PositionSide.LONG) {
-            return classification == CoinClassification.STRONG_SHORT && intValue(shortScore, 0) >= 85;
-        }
-        return classification == CoinClassification.STRONG_LONG && intValue(longScore, 0) >= 85;
+        return false;
     }
 
     private PaperPositionEntity evaluateWithLastClosedCandle(PaperPositionEntity position) {
@@ -476,22 +463,35 @@ public class ExitEngineService {
         }
     }
 
+    private void recordEarlyExitMetrics(PaperPositionEntity p, KlineCandle candle) {
+        EarlyExitEvaluation earlyExit = evaluateEarlyExit(p, candle);
+        if (earlyExit.first15HighPct() != null) {
+            p.setEarlyExitTriggered(false);
+            p.setEarlyExitRuleA(earlyExit.ruleA());
+            p.setEarlyExitRuleB(false);
+            p.setFirst15HighPct(earlyExit.first15HighPct());
+            p.setClose15Pct(earlyExit.close15Pct());
+        }
+    }
+
     private EarlyExitEvaluation evaluateEarlyExit(PaperPositionEntity p, KlineCandle candle) {
-        ScannerProperties.Strategy.Entry.EarlyExit cfg = scannerProperties.getStrategy().getEntry().getEarlyExit();
-        if (!booleanValue(cfg.getEnabled(), true) || Boolean.TRUE.equals(p.getTp1Hit()) || p.getEntryPrice() == null || candle.getClose() == null) {
+        if (p == null || p.getEntryPrice() == null || candle == null || candle.getClose() == null) {
             return EarlyExitEvaluation.notTriggered();
         }
         int bars = intValue(p.getBarsInPosition(), 0);
-        if (bars != 3) {
+        if (bars != 3 || Boolean.TRUE.equals(p.getTp1Hit())) {
             return EarlyExitEvaluation.notTriggered();
         }
+        ScannerProperties.Strategy.Entry.EarlyExit cfg = scannerProperties.getStrategy().getEntry().getEarlyExit();
         BigDecimal first15HighPct = defaultBigDecimal(p.getHighestPriceSinceEntry(), candle.getHigh())
                 .divide(p.getEntryPrice(), 12, RoundingMode.HALF_UP).subtract(BigDecimal.ONE);
         BigDecimal close15Pct = candle.getClose().divide(p.getEntryPrice(), 12, RoundingMode.HALF_UP).subtract(BigDecimal.ONE);
         boolean closeWeak = close15Pct.compareTo(cfg.getClose15MaxPct()) < 0;
-        boolean ruleA = first15HighPct.compareTo(cfg.getFirst15HighMinPct()) < 0 && closeWeak;
-        BigDecimal prev3Return = p.getPrev3_5mReturn();
-        return new EarlyExitEvaluation(ruleA, ruleA, false, first15HighPct, close15Pct, prev3Return);
+        boolean ruleAConditionDetected = first15HighPct.compareTo(cfg.getFirst15HighMinPct()) < 0 && closeWeak;
+        if (ruleAConditionDetected) {
+            log.info("EARLY_EXIT_SKIPPED positionId={} symbol={} earlyExitConditionDetected=true earlyExitEnabled=false earlyExitSkipped=true", p.getId(), p.getSymbol());
+        }
+        return new EarlyExitEvaluation(false, ruleAConditionDetected, false, first15HighPct, close15Pct, p.getPrev3_5mReturn());
     }
 
     private record EarlyExitEvaluation(
@@ -526,7 +526,10 @@ public class ExitEngineService {
         CoinScanResultEntity result = coinScanResultRepository.findFirstByScanRun_IdAndSymbolOrderByCreatedAtDesc(run.getId(), p.getSymbol()).orElse(null);
         if (shouldMarketRegimeExit(p, run.getMarketRegime(), result == null ? null : result.getShortScore())) return PaperExitReason.MARKET_REGIME_EXIT;
         if (result == null) return null;
-        if (shouldOppositeSignalExit(p, result.getClassification(), result.getLongScore(), result.getShortScore())) return PaperExitReason.OPPOSITE_SIGNAL_EXIT;
+        boolean oppositeSignalDetected = result.getClassification() == CoinClassification.STRONG_SHORT && intValue(result.getShortScore(), 0) >= 85;
+        if (oppositeSignalDetected) {
+            log.info("OPPOSITE_SIGNAL_EXIT_SKIPPED positionId={} symbol={} oppositeSignalDetected=true oppositeSignalExitEnabled=false oppositeSignalExitSkipped=true", p.getId(), p.getSymbol());
+        }
         return null;
     }
 
