@@ -67,6 +67,21 @@ public class PaperPositionEntity {
     @Column(name = "entry_volume_ratio_1h", precision = 20, scale = 8)
     private BigDecimal entryVolumeRatio_1h;
 
+    @Column(name = "range_pos_1h", precision = 20, scale = 12)
+    private BigDecimal rangePos1h;
+
+    @Column(name = "last_closed_1h_low", precision = 30, scale = 12)
+    private BigDecimal lastClosed1hLow;
+
+    @Column(name = "last_closed_1h_high", precision = 30, scale = 12)
+    private BigDecimal lastClosed1hHigh;
+
+    @Column(name = "range_pos_1h_passed")
+    private Boolean rangePos1hPassed;
+
+    @Column(name = "range_pos_1h_status", length = 64)
+    private String rangePos1hStatus;
+
     @Column(name = "symbol", nullable = false, length = 32)
     private String symbol;
 

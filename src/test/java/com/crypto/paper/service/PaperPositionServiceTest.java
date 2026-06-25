@@ -14,8 +14,11 @@ import com.crypto.common.enums.PositionSide;
 import com.crypto.common.enums.ReasonTag;
 import com.crypto.common.enums.RiskLevel;
 import com.crypto.common.enums.ScanType;
+import com.crypto.binance.client.BinanceFuturesClient;
 import com.crypto.common.service.JsonlDecisionLogService;
+import com.crypto.domain.model.BookTicker;
 import com.crypto.domain.model.EntrySignal;
+import com.crypto.domain.model.Kline;
 import com.crypto.paper.model.PaperPositionStatus;
 import com.crypto.persistence.entity.PaperPositionEntity;
 import com.crypto.persistence.mapper.JsonTextMapper;
@@ -24,6 +27,7 @@ import com.crypto.scanner.config.ScannerProperties;
 import com.crypto.scanner.service.EntrySignalService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
@@ -357,6 +361,86 @@ class PaperPositionServiceTest {
         assertThat(service.openPosition(passing)).isNotNull();
         assertThat(service.openPosition(equal)).isNull();
         assertThat(service.openPosition(missing)).isNull();
+    }
+
+    @Test
+    void rangePosUsesLastClosedOneHourCandleBeforeEntryTime() {
+        BinanceFuturesClient client = mock(BinanceFuturesClient.class);
+        ReflectionTestUtils.setField(service, "binanceFuturesClient", client);
+        EntrySignal signal = signal("BTCUSDT", EntryAction.ENTER_LONG, PositionSide.LONG, "105", RiskLevel.LOW);
+        signal.setPrevious1hLow(null);
+        signal.setPrevious1hHigh(null);
+        Instant entryTime = Instant.parse("2026-06-23T15:00:30Z");
+        when(client.getKlines("BTCUSDT", "1h", 4)).thenReturn(List.of(
+                kline("2026-06-23T14:00:00Z", "2026-06-23T15:00:00Z", "110", "100", true),
+                kline("2026-06-23T15:00:00Z", "2026-06-23T16:00:00Z", "1000", "900", false)
+        ));
+
+        PaperPositionService.RangePos1hResult result = service.resolveRangePos1h(signal, new BigDecimal("105"), entryTime);
+
+        assertThat(result.lastClosed1hLow()).isEqualByComparingTo("100");
+        assertThat(result.lastClosed1hHigh()).isEqualByComparingTo("110");
+        assertThat(result.rangePos1h()).isEqualByComparingTo("0.500000000000");
+        assertThat(result.passed()).isTrue();
+        assertThat(result.status()).isEqualTo("OK");
+    }
+
+    @Test
+    void rangePosBoundaryStatusIsCalculated() {
+        assertThat(service.resolveRangePos1h(signalWithRangePosition("AUSDT", "0.400"), new BigDecimal("10"), Instant.now()).passed()).isFalse();
+        assertThat(service.resolveRangePos1h(signalWithRangePosition("BUSDT", "0.800"), new BigDecimal("10"), Instant.now()).passed()).isTrue();
+        assertThat(service.resolveRangePos1h(signalWithRangePosition("CUSDT", "0.810"), new BigDecimal("10"), Instant.now()).passed()).isFalse();
+    }
+
+    @Test
+    void rangePosIsPersistedForInvertedAndFourHourEntries() {
+        BinanceFuturesClient client = mock(BinanceFuturesClient.class);
+        ReflectionTestUtils.setField(service, "binanceFuturesClient", client);
+        when(client.getAllBookTickers()).thenReturn(List.of(bookTicker("ETHUSDT", "105"), bookTicker("SOLUSDT", "105")));
+        when(client.getKlines("ETHUSDT", "1h", 4)).thenReturn(List.of(kline("2026-06-23T14:00:00Z", "2026-06-23T15:00:00Z", "110", "100", true)));
+        when(client.getKlines("SOLUSDT", "1h", 4)).thenReturn(List.of(kline("2026-06-23T14:00:00Z", "2026-06-23T15:00:00Z", "110", "100", true)));
+        EntrySignal inverted = signal("ETHUSDT", EntryAction.ENTER_SHORT, PositionSide.SHORT, "105", RiskLevel.LOW);
+        inverted.setPrevious1hLow(null);
+        inverted.setPrevious1hHigh(null);
+        EntrySignal fourHour = signal("SOLUSDT", EntryAction.ENTER_LONG, PositionSide.LONG, "105", RiskLevel.LOW);
+        fourHour.setSourceScanType(ScanType.FOUR_HOUR);
+        fourHour.setPrevious1hLow(null);
+        fourHour.setPrevious1hHigh(null);
+
+        PaperPositionEntity invertedOpened = service.openPosition(inverted);
+        PaperPositionEntity fourHourOpened = service.openPosition(fourHour);
+
+        assertThat(invertedOpened.getSignalInverted()).isTrue();
+        assertThat(invertedOpened.getRangePos1h()).isEqualByComparingTo("0.500000000000");
+        assertThat(invertedOpened.getRangePos1hPassed()).isTrue();
+        assertThat(invertedOpened.getRangePos1hStatus()).isEqualTo("OK");
+        assertThat(fourHourOpened.getSourceScanType()).isEqualTo(ScanType.FOUR_HOUR);
+        assertThat(fourHourOpened.getRangePos1h()).isEqualByComparingTo("0.500000000000");
+        assertThat(fourHourOpened.getLastClosed1hLow()).isEqualByComparingTo("100");
+        assertThat(fourHourOpened.getLastClosed1hHigh()).isEqualByComparingTo("110");
+    }
+
+    private BookTicker bookTicker(String symbol, String mid) {
+        return BookTicker.builder()
+                .symbol(symbol)
+                .bidPrice(new BigDecimal(mid))
+                .askPrice(new BigDecimal(mid))
+                .midPrice(new BigDecimal(mid))
+                .build();
+    }
+
+    private Kline kline(String openTime, String closeTime, String high, String low, boolean closed) {
+        return Kline.builder()
+                .symbol("BTCUSDT")
+                .interval("1h")
+                .openTime(Instant.parse(openTime))
+                .closeTime(Instant.parse(closeTime))
+                .open(new BigDecimal(low))
+                .high(new BigDecimal(high))
+                .low(new BigDecimal(low))
+                .close(new BigDecimal(high).add(new BigDecimal(low)).divide(new BigDecimal("2")))
+                .closed(closed)
+                .build();
     }
 
     private EntrySignal signalWithRangePosition(String symbol, String rangePos) {

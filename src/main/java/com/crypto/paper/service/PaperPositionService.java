@@ -165,15 +165,16 @@ public class PaperPositionService {
         ScannerProperties.PaperRisk riskConfig = scannerProperties.getPaperRisk() == null ? new ScannerProperties.PaperRisk() : scannerProperties.getPaperRisk();
         ScannerProperties.PaperCost costConfig = scannerProperties.getPaperCost() == null ? new ScannerProperties.PaperCost() : scannerProperties.getPaperCost();
         BigDecimal atr = signal.getAtr14_1h() == null ? entryPrice.multiply(new BigDecimal("0.012")) : signal.getAtr14_1h();
+        Instant openedAt = Instant.now();
         RiskLevels risk = calculateRiskLevels(PositionSide.LONG, entryPrice, atr, riskConfig);
-        EntryFilterResult entryFilters = evaluateEntryFilters(signal, entryPrice);
+        RangePos1hResult rangePos1h = resolveRangePos1h(signal, entryPrice, openedAt);
+        EntryFilterResult entryFilters = evaluateEntryFilters(signal, entryPrice, rangePos1h);
         if (!entryFilters.passed()) {
             return reject(signal, entryFilters.rejectReason());
         }
         BigDecimal notionalUsdt = bigDecimalValue(config.getDefaultNotionalUsdt(), "100");
         BigDecimal quantity = notionalUsdt.divide(entryPrice, QUANTITY_SCALE, RoundingMode.DOWN);
         BigDecimal prev3_5mReturn = resolvePrev3_5mReturn(signal);
-        Instant openedAt = Instant.now();
         PaperPositionEntity position = PaperPositionEntity.builder()
                 .sourceScanRunId(signal.getScanRunId())
                 .sourceScanType(signal.getSourceScanType())
@@ -184,6 +185,11 @@ public class PaperPositionService {
                 .entryMacdHist_1h(signal.getMacdHist_1h())
                 .entryAtr14_1h(signal.getAtr14_1h())
                 .entryVolumeRatio_1h(signal.getVolumeRatio_1h())
+                .rangePos1h(rangePos1h.rangePos1h())
+                .lastClosed1hLow(rangePos1h.lastClosed1hLow())
+                .lastClosed1hHigh(rangePos1h.lastClosed1hHigh())
+                .rangePos1hPassed(rangePos1h.passed())
+                .rangePos1hStatus(rangePos1h.status())
                 .symbol(signal.getSymbol())
                 .side(execution.executionSide())
                 .sourceSignalSide(execution.signalSide())
@@ -316,24 +322,61 @@ public class PaperPositionService {
         return new RiskLevels(initialStop, riskPerUnit, tp1, tp2);
     }
 
-    private EntryFilterResult evaluateEntryFilters(EntrySignal signal, BigDecimal entryPrice) {
+    private EntryFilterResult evaluateEntryFilters(EntrySignal signal, BigDecimal entryPrice, RangePos1hResult rangePos1h) {
         ScannerProperties.Strategy.Entry cfg = scannerProperties.getStrategy().getEntry();
         BigDecimal bbWidth = signal.getBbWidth();
         if (bbWidth == null || !isFinite(bbWidth) || bbWidth.compareTo(cfg.getBbWidthMax()) >= 0) {
-            return new EntryFilterResult(false, null, false, false, "BB_WIDTH_FILTER_FAILED");
+            return new EntryFilterResult(false, rangePos1h.rangePos1h(), rangePos1h.passed(), false, "BB_WIDTH_FILTER_FAILED");
         }
-        BigDecimal low = signal.getPrevious1hLow();
-        BigDecimal high = signal.getPrevious1hHigh();
-        if (low == null || high == null || high.compareTo(low) == 0) {
-            return new EntryFilterResult(false, null, false, true, "RANGE_POS1H_DATA_NOT_READY");
+        if (!"OK".equals(rangePos1h.status())) {
+            return new EntryFilterResult(false, rangePos1h.rangePos1h(), false, true, rangePos1h.status());
         }
+        if (!rangePos1h.passed()) {
+            return new EntryFilterResult(false, rangePos1h.rangePos1h(), false, true, "RANGE_POS1H_FILTER_FAILED");
+        }
+        return new EntryFilterResult(true, rangePos1h.rangePos1h(), true, true, null);
+    }
+
+    RangePos1hResult resolveRangePos1h(EntrySignal signal, BigDecimal entryPrice, Instant entryTime) {
+        BigDecimal low = null;
+        BigDecimal high = null;
+        Kline lastClosed = resolveLastClosed1hKline(signal, entryTime);
+        if (lastClosed != null) {
+            low = lastClosed.getLow();
+            high = lastClosed.getHigh();
+        }
+        if (low == null || high == null) {
+            low = signal.getPrevious1hLow();
+            high = signal.getPrevious1hHigh();
+        }
+        if (low == null || high == null) {
+            return new RangePos1hResult(null, low, high, false, "MISSING_LAST_CLOSED_1H");
+        }
+        if (high.compareTo(low) == 0) {
+            return new RangePos1hResult(null, low, high, false, "FLAT_1H_CANDLE");
+        }
+        ScannerProperties.Strategy.Entry cfg = scannerProperties.getStrategy().getEntry();
         BigDecimal rangePos = entryPrice.subtract(low).divide(high.subtract(low), 12, RoundingMode.HALF_UP);
-        boolean rangePassed = rangePos.compareTo(cfg.getRangePos1hMinExclusive()) > 0
+        boolean passed = rangePos.compareTo(cfg.getRangePos1hMinExclusive()) > 0
                 && rangePos.compareTo(cfg.getRangePos1hMaxInclusive()) <= 0;
-        if (!rangePassed) {
-            return new EntryFilterResult(false, rangePos, false, true, "RANGE_POS1H_FILTER_FAILED");
+        return new RangePos1hResult(rangePos, low, high, passed, "OK");
+    }
+
+    private Kline resolveLastClosed1hKline(EntrySignal signal, Instant entryTime) {
+        if (binanceFuturesClient == null || signal == null || signal.getSymbol() == null) {
+            return null;
         }
-        return new EntryFilterResult(true, rangePos, true, true, null);
+        try {
+            List<Kline> rawKlines = binanceFuturesClient.getKlines(signal.getSymbol(), "1h", 4);
+            return (rawKlines == null ? List.<Kline>of() : rawKlines).stream()
+                    .filter(kline -> kline != null && Boolean.TRUE.equals(kline.getClosed()))
+                    .filter(kline -> kline.getCloseTime() != null && (entryTime == null || !kline.getCloseTime().isAfter(entryTime)))
+                    .reduce((previous, current) -> current)
+                    .orElse(null);
+        } catch (Exception exception) {
+            log.warn("PAPER_ENTRY_LAST_CLOSED_1H_UNAVAILABLE symbol={} reason={}", signal.getSymbol(), exception.getMessage());
+            return null;
+        }
     }
 
     private boolean isFinite(BigDecimal value) {
@@ -343,6 +386,8 @@ public class PaperPositionService {
     public record RiskLevels(BigDecimal initialStop, BigDecimal riskPerUnit, BigDecimal tp1, BigDecimal tp2) {}
 
     private record EntryFilterResult(boolean passed, BigDecimal rangePos1h, boolean rangePos1hPassed, boolean bbWidthPassed, String rejectReason) {}
+
+    record RangePos1hResult(BigDecimal rangePos1h, BigDecimal lastClosed1hLow, BigDecimal lastClosed1hHigh, boolean passed, String status) {}
 
     private record SignalExecution(
             PositionSide signalSide,
@@ -493,6 +538,11 @@ public class PaperPositionService {
                 Map.entry("bbPercentB", nullToEmpty(position.getEntryBbPercentB())),
                 Map.entry("bbWidth", nullToEmpty(position.getEntryBbWidth())),
                 Map.entry("bbWidthPassed", position.getEntryBbWidth() != null && position.getEntryBbWidth().compareTo(scannerProperties.getStrategy().getEntry().getBbWidthMax()) < 0),
+                Map.entry("rangePos1h", nullToEmpty(position.getRangePos1h())),
+                Map.entry("lastClosed1hLow", nullToEmpty(position.getLastClosed1hLow())),
+                Map.entry("lastClosed1hHigh", nullToEmpty(position.getLastClosed1hHigh())),
+                Map.entry("rangePos1hPassed", nullToEmpty(position.getRangePos1hPassed())),
+                Map.entry("rangePos1hStatus", nullToEmpty(position.getRangePos1hStatus())),
                 Map.entry("bbUpper", nullToEmpty(position.getEntryBbUpper())),
                 Map.entry("bbMiddle", nullToEmpty(position.getEntryBbMiddle())),
                 Map.entry("bbLower", nullToEmpty(position.getEntryBbLower())),
@@ -537,6 +587,11 @@ public class PaperPositionService {
         payload.put("macdHist_1h", position.getEntryMacdHist_1h());
         payload.put("atr14_1h", position.getEntryAtr14_1h());
         payload.put("volumeRatio_1h", position.getEntryVolumeRatio_1h());
+        payload.put("rangePos1h", position.getRangePos1h());
+        payload.put("lastClosed1hLow", position.getLastClosed1hLow());
+        payload.put("lastClosed1hHigh", position.getLastClosed1hHigh());
+        payload.put("rangePos1hPassed", position.getRangePos1hPassed());
+        payload.put("rangePos1hStatus", position.getRangePos1hStatus());
         payload.put("matchedSetup", nullToEmpty(position.getEntryReason()));
         payload.put("entryReason", nullToEmpty(position.getEntryReason()));
         payload.put("marketRegime", "");

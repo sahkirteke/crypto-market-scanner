@@ -341,13 +341,17 @@ public class SymbolTradeJsonlLogService {
         payload.put("bbPercentB", p.getEntryBbPercentB());
         payload.put("bbWidth", p.getEntryBbWidth());
         payload.put("bbWidthPassed", p.getEntryBbWidth() != null && p.getEntryBbWidth().compareTo(new BigDecimal("0.15")) < 0);
-        BigDecimal low = signal == null ? null : signal.getPrevious1hLow();
-        BigDecimal high = signal == null ? null : signal.getPrevious1hHigh();
-        BigDecimal rangePos = (low == null || high == null || high.compareTo(low) == 0 || p.getEntryPrice() == null) ? null : p.getEntryPrice().subtract(low).divide(high.subtract(low), 12, java.math.RoundingMode.HALF_UP);
+        BigDecimal low = p.getLastClosed1hLow() == null && signal != null ? signal.getPrevious1hLow() : p.getLastClosed1hLow();
+        BigDecimal high = p.getLastClosed1hHigh() == null && signal != null ? signal.getPrevious1hHigh() : p.getLastClosed1hHigh();
+        BigDecimal rangePos = p.getRangePos1h();
+        if (rangePos == null && low != null && high != null && high.compareTo(low) != 0 && p.getEntryPrice() != null) {
+            rangePos = p.getEntryPrice().subtract(low).divide(high.subtract(low), 12, java.math.RoundingMode.HALF_UP);
+        }
         payload.put("rangePos1h", rangePos);
         payload.put("lastClosed1hLow", low);
         payload.put("lastClosed1hHigh", high);
-        payload.put("rangePos1hPassed", rangePos != null && rangePos.compareTo(new BigDecimal("0.40")) > 0 && rangePos.compareTo(new BigDecimal("0.80")) <= 0);
+        payload.put("rangePos1hPassed", p.getRangePos1hPassed() == null ? rangePos != null && rangePos.compareTo(new BigDecimal("0.40")) > 0 && rangePos.compareTo(new BigDecimal("0.80")) <= 0 : p.getRangePos1hPassed());
+        payload.put("rangePos1hStatus", p.getRangePos1hStatus() == null ? (rangePos == null ? "MISSING_LAST_CLOSED_1H" : "OK") : p.getRangePos1hStatus());
         payload.put("bbUpper", p.getEntryBbUpper());
         payload.put("bbMiddle", p.getEntryBbMiddle());
         payload.put("bbLower", p.getEntryBbLower());
