@@ -323,10 +323,7 @@ public class ExitEngineService {
 
 
     public boolean shouldSignalInvalidate(PaperPositionEntity p, BigDecimal close1h, BigDecimal ema20, BigDecimal macdHist, MarketRegime marketRegime) {
-        if (p.getSide() == PositionSide.SHORT) {
-            return gt(close1h, ema20) && gt(macdHist, BigDecimal.ZERO) && marketRegime != MarketRegime.RISK_OFF;
-        }
-        return lt(close1h, ema20) && lt(macdHist, BigDecimal.ZERO) && marketRegime != MarketRegime.RISK_ON;
+        return false;
     }
 
     public boolean shouldMarketRegimeExit(PaperPositionEntity p, MarketRegime marketRegime, Integer shortScore) {
@@ -361,7 +358,7 @@ public class ExitEngineService {
             if (evaluated.getStatus() != PaperPositionStatus.CLOSED && snapshot != null && marketScanRunRepository != null) {
                 MarketScanRunEntity run = marketScanRunRepository.findTopByStatusOrderByScanTimeUtcDesc("COMPLETED").orElse(null);
                 if (run != null && shouldSignalInvalidate(evaluated, snapshot.getClose(), snapshot.getEma20(), snapshot.getMacdHist(), run.getMarketRegime())) {
-                    closeRemaining(evaluated, last.getClose(), PaperExitReason.SIGNAL_INVALIDATION, last.getCloseTime(), new IntrabarEventContext(evaluated, KlineCandle.builder().openTime(last.getOpenTime()).closeTime(last.getCloseTime()).high(last.getHigh()).low(last.getLow()).close(last.getClose()).interval("1h").build(), "1h"));
+                    log.info("SIGNAL_INVALIDATION_EXIT_SKIPPED positionId={} symbol={} signalInvalidationExitEnabled=false signalInvalidationExitSkipped=true", evaluated.getId(), evaluated.getSymbol());
                 }
             }
             return evaluated;

@@ -50,6 +50,25 @@ class ExitEngineServiceTest {
     }
 
     @Test
+    void signalInvalidationConditionDoesNotClosePosition() {
+        ExitEngineService service = service(mock(PaperPositionRepository.class), mock(BinanceFuturesClient.class));
+        PaperPositionEntity position = position(PositionSide.LONG);
+
+        assertThat(service.shouldSignalInvalidate(
+                position,
+                new BigDecimal("99"),
+                new BigDecimal("100"),
+                new BigDecimal("-0.1"),
+                MarketRegime.RISK_OFF
+        )).isFalse();
+
+        PaperPositionEntity result = service.evaluatePosition(position, new BigDecimal("100.1"));
+
+        assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.OPEN);
+        assertThat(result.getExitReason()).isNull();
+    }
+
+    @Test
     void triggersLongStopLoss() {
         ExitEngineService service = service(mock(PaperPositionRepository.class), mock(BinanceFuturesClient.class));
 
