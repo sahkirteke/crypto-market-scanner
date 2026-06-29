@@ -2,7 +2,10 @@ package com.crypto.persistence.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -25,6 +28,7 @@ import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.mockito.ArgumentCaptor;
 
 class MarketScanPersistenceServiceTest {
@@ -64,6 +68,42 @@ class MarketScanPersistenceServiceTest {
         assertThat(captor.getValue()).hasSize(5);
         assertThat(captor.getValue()).extracting(CoinScanResultEntity::getSymbol)
                 .containsExactly("BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT");
+    }
+
+    @Test
+    void saveCompletedScanPersistsCoinResultsInChunks() {
+        when(marketScanRunRepository.save(any(MarketScanRunEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        MarketScanResult result = MarketScanResult.builder()
+                .scanType(ScanType.ONE_HOUR)
+                .scanTimeUtc(Instant.parse("2026-06-07T10:00:00Z"))
+                .eliminated(java.util.stream.IntStream.range(0, 205)
+                        .mapToObj(index -> coin("SYM" + index, CoinClassification.ELIMINATED))
+                        .toList())
+                .build();
+
+        service.saveCompletedScan(result);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<CoinScanResultEntity>> captor = ArgumentCaptor.forClass(List.class);
+        verify(coinScanResultRepository, times(3)).saveAll(captor.capture());
+        assertThat(captor.getAllValues()).extracting(List::size).containsExactly(100, 100, 5);
+    }
+
+    @Test
+    void saveCompletedScanRetriesTransientCoinChunkFailure() {
+        when(marketScanRunRepository.save(any(MarketScanRunEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        doThrow(new DataAccessResourceFailureException("connection reset"))
+                .doAnswer(invocation -> invocation.getArgument(0))
+                .when(coinScanResultRepository).saveAll(anyList());
+        MarketScanResult result = MarketScanResult.builder()
+                .scanType(ScanType.ONE_HOUR)
+                .scanTimeUtc(Instant.parse("2026-06-07T10:00:00Z"))
+                .strongLong(List.of(coin("BTCUSDT", CoinClassification.STRONG_LONG)))
+                .build();
+
+        service.saveCompletedScan(result);
+
+        verify(coinScanResultRepository, times(2)).saveAll(anyList());
     }
 
     @Test

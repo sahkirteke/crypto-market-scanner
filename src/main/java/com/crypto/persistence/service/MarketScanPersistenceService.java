@@ -17,6 +17,7 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +27,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class MarketScanPersistenceService {
     public static final String STATUS_COMPLETED = "COMPLETED";
     public static final String STATUS_FAILED = "FAILED";
+    private static final int COIN_RESULT_CHUNK_SIZE = 100;
+    private static final int COIN_RESULT_MAX_ATTEMPTS = 3;
 
     private final MarketScanRunRepository marketScanRunRepository;
     private final CoinScanResultRepository coinScanResultRepository;
@@ -34,7 +37,6 @@ public class MarketScanPersistenceService {
     @Autowired(required = false)
     private JsonlDecisionLogService jsonlDecisionLogService;
 
-    @Transactional
     public MarketScanRunEntity saveCompletedScan(MarketScanResult result) {
         MarketScanRunEntity runEntity = marketScanPersistenceMapper.toRunEntity(result, STATUS_COMPLETED);
         MarketScanRunEntity savedRunEntity = marketScanRunRepository.save(runEntity);
@@ -42,11 +44,41 @@ public class MarketScanPersistenceService {
         List<CoinScanResultEntity> coinEntities = allCoinResults(result).stream()
                 .map(coinResult -> marketScanPersistenceMapper.toCoinEntity(coinResult, savedRunEntity))
                 .toList();
-        coinScanResultRepository.saveAll(coinEntities);
+        saveCoinResultsInChunks(coinEntities);
         if (jsonlDecisionLogService != null) {
             jsonlDecisionLogService.logScanner(Map.of("event", "SCAN_COMPLETED", "scanRunId", savedRunEntity.getId(), "marketRegime", savedRunEntity.getMarketRegime() == null ? "" : savedRunEntity.getMarketRegime().name()));
         }
         return savedRunEntity;
+    }
+
+    private void saveCoinResultsInChunks(List<CoinScanResultEntity> coinEntities) {
+        if (coinEntities == null || coinEntities.isEmpty()) {
+            return;
+        }
+        int total = coinEntities.size();
+        for (int start = 0; start < total; start += COIN_RESULT_CHUNK_SIZE) {
+            int end = Math.min(start + COIN_RESULT_CHUNK_SIZE, total);
+            saveCoinResultChunkWithRetry(coinEntities.subList(start, end), start / COIN_RESULT_CHUNK_SIZE + 1);
+        }
+    }
+
+    private void saveCoinResultChunkWithRetry(List<CoinScanResultEntity> chunk, int chunkIndex) {
+        int attempt = 1;
+        while (true) {
+            try {
+                coinScanResultRepository.saveAll(chunk);
+                return;
+            } catch (DataAccessException exception) {
+                if (attempt >= COIN_RESULT_MAX_ATTEMPTS) {
+                    log.error("SCAN_COIN_RESULTS_CHUNK_SAVE_FAILED chunkIndex={} size={} attempts={} message={}",
+                            chunkIndex, chunk.size(), attempt, exception.getMessage());
+                    throw exception;
+                }
+                log.warn("SCAN_COIN_RESULTS_CHUNK_SAVE_RETRY chunkIndex={} size={} attempt={} maxAttempts={} message={}",
+                        chunkIndex, chunk.size(), attempt, COIN_RESULT_MAX_ATTEMPTS, exception.getMessage());
+                attempt++;
+            }
+        }
     }
 
     @Transactional
