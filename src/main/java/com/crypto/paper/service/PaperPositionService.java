@@ -16,6 +16,7 @@ import com.crypto.persistence.repository.PaperPositionEventRepository;
 import com.crypto.persistence.repository.EntryCandidateRepository;
 import com.crypto.scanner.model.EntryCandidateStatus;
 import com.crypto.domain.model.EntrySignal;
+import com.crypto.domain.model.MarketScanResult;
 import com.crypto.paper.model.PaperPositionStatus;
 import com.crypto.persistence.entity.PaperPositionEntity;
 import com.crypto.persistence.mapper.JsonTextMapper;
@@ -64,6 +65,10 @@ public class PaperPositionService {
 
     public PaperOpenSummary openPositionsFromScanRun(Long scanRunId) {
         return openPositionsFromSignals(entrySignalService.generateSignalsFromScanRun(scanRunId));
+    }
+
+    public PaperOpenSummary openPositionsFromScanResult(MarketScanResult scanResult) {
+        return openPositionsFromSignals(entrySignalService.generateSignalsFromScanResult(scanResult));
     }
 
     private PaperOpenSummary openPositionsFromSignals(List<EntrySignal> generatedSignals) {
@@ -483,18 +488,12 @@ public class PaperPositionService {
     }
 
     private void writeOpenedEvent(PaperPositionEntity position) {
-        if (eventRepository != null) {
-            eventRepository.save(PaperPositionEventEntity.builder()
-                    .position(position)
-                    .eventTimeUtc(position.getOpenedAt())
-                    .eventType(PaperPositionEventType.OPENED)
-                    .price(position.getEntryPrice())
-                    .adjustedPrice(position.getEntryPriceAdjusted())
-                    .leverage(position.getLeverage())
-                    .reason("PAPER_POSITION_OPENED")
-                    .detailsJson(openedDetailsJson(position))
-                    .build());
-        }
+        log.debug(
+                "PAPER_POSITION_EVENT_DB_PERSIST_SKIPPED positionId={} symbol={} eventType={} reason=PAPER_POSITIONS_ONLY",
+                position == null ? null : position.getId(),
+                position == null ? null : position.getSymbol(),
+                PaperPositionEventType.OPENED
+        );
         if (jsonlDecisionLogService != null) {
             jsonlDecisionLogService.logPaper(openedDetails(position));
             jsonlDecisionLogService.logPaperTrade(entryTradeLog(position));
@@ -633,11 +632,10 @@ public class PaperPositionService {
     }
 
     private void markCandidateUsed(String symbol) {
-        if (entryCandidateRepository == null || symbol == null) { return; }
-        entryCandidateRepository.findFirstBySymbolAndStatusOrderByCreatedAtDesc(symbol, EntryCandidateStatus.ACTIVE).ifPresent(candidate -> {
-            candidate.setStatus(EntryCandidateStatus.USED);
-            entryCandidateRepository.save(candidate);
-        });
+        if (symbol == null) {
+            return;
+        }
+        log.debug("ENTRY_CANDIDATE_STATUS_DB_UPDATE_SKIPPED symbol={} reason=PAPER_POSITIONS_ONLY", symbol);
     }
 
     private BigDecimal defaultBigDecimal(BigDecimal value, BigDecimal fallback) {

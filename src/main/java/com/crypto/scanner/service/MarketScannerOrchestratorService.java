@@ -26,7 +26,7 @@ public class MarketScannerOrchestratorService {
             MarketScanResult result = marketScannerService.runScan(scanType);
             MarketScanRunEntity savedRun = marketScanPersistenceService.saveCompletedScan(result);
             result.setScanRunId(savedRun.getId());
-            log.info("SCAN_PERSISTED scanRunId={} scanType={}", savedRun.getId(), scanType);
+            log.info("SCAN_DB_PERSIST_SKIPPED scanRunId={} scanType={} reason=PAPER_POSITIONS_ONLY", savedRun.getId(), scanType);
             return result;
         } catch (RuntimeException exception) {
             log.error("SCAN_PERSIST_FAILED scanType={} message={}", scanType, exception.getMessage(), exception);

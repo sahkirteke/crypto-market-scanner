@@ -14,6 +14,7 @@ import com.crypto.paper.model.PaperPositionStatus;
 import com.crypto.persistence.repository.PaperPositionRepository;
 import com.crypto.domain.model.EntryCandidate;
 import com.crypto.domain.model.EntrySignal;
+import com.crypto.domain.model.MarketScanResult;
 import com.crypto.scanner.config.ScannerProperties;
 import com.crypto.scanner.model.BollingerScoreResult;
 import java.math.BigDecimal;
@@ -71,6 +72,11 @@ public class EntrySignalService {
 
     public List<EntrySignal> generateSignalsFromScanRun(Long scanRunId) {
         List<EntryCandidate> candidates = entryCandidateService.selectCandidatesFromScanRun(scanRunId);
+        return generateSignals(candidates);
+    }
+
+    public List<EntrySignal> generateSignalsFromScanResult(MarketScanResult scanResult) {
+        List<EntryCandidate> candidates = entryCandidateService.selectCandidates(scanResult);
         return generateSignals(candidates);
     }
 

@@ -26,6 +26,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,6 +37,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class EntryCandidateService {
     private static final String COMPLETED_STATUS = "COMPLETED";
+    private static final AtomicLong IN_MEMORY_CANDIDATE_IDS = new AtomicLong(-1L);
 
     private final ScannerProperties scannerProperties;
     private final MarketScanRunRepository marketScanRunRepository;
@@ -58,6 +60,7 @@ public class EntryCandidateService {
         // WATCHLIST is not entry eligible in V1.2.3.
 
         List<EntryCandidate> eligibleCandidates = scanResults.stream()
+                .peek(result -> enrichFromScanResult(result, scanResult))
                 .map(this::toEligibleCandidate)
                 .flatMap(List::stream)
                 .peek(candidate -> candidate.setSourceScanType(scanResult.getScanType()))
@@ -272,38 +275,52 @@ public class EntryCandidateService {
 
 
     private void persistCandidate(EntryCandidate candidate) {
-        if (entryCandidateRepository == null || candidate == null || candidate.getScanRunId() == null) {
+        if (candidate == null) {
             return;
         }
-        MarketScanRunEntity run = marketScanRunRepository.findById(candidate.getScanRunId()).orElse(null);
-        if (run == null) {
-            return;
+        if (candidate.getId() == null) {
+            candidate.setId(nextInMemoryCandidateId());
         }
-        Instant validFrom = run.getScanTimeUtc() == null ? Instant.now() : run.getScanTimeUtc();
-        Instant validUntil = validFrom.plusSeconds(run.getScanType() == com.crypto.common.enums.ScanType.FOUR_HOUR ? 4 * 3600L : 3600L);
-        candidate.setValidFromUtc(validFrom);
-        candidate.setValidUntilUtc(validUntil);
-        EntryCandidateEntity entity = EntryCandidateEntity.builder()
-                .scanRun(run)
-                .symbol(candidate.getSymbol())
-                .side(candidate.getSide())
-                .score(candidate.getScore())
-                .entryPriorityScore(candidate.getEntryPriorityScore())
-                .riskLevel(candidate.getRiskLevel())
-                .marketRegime(candidate.getMarketRegime())
-                .marketBreadthPct(candidate.getMarketBreadthPct())
-                .validFromUtc(validFrom)
-                .validUntilUtc(validUntil)
-                .reasonsJson(jsonTextMapper.toJson(candidate.getReasons()))
-                .warningsJson(jsonTextMapper.toJson(candidate.getWarnings()))
-                .status(EntryCandidateStatus.ACTIVE)
-                .build();
-        EntryCandidateEntity saved = entryCandidateRepository.save(entity);
-        candidate.setId(saved.getId());
         if (jsonlDecisionLogService != null) {
-            jsonlDecisionLogService.logEntry(Map.of("event", "ENTRY_CANDIDATE_CREATED", "symbol", candidate.getSymbol(), "side", candidate.getSide().name(), "scanRunId", candidate.getScanRunId(), "score", candidate.getScore() == null ? 0 : candidate.getScore(), "reason", candidate.getCandidateReason()));
+            jsonlDecisionLogService.logEntry(Map.of(
+                    "event", "ENTRY_CANDIDATE_DB_PERSIST_SKIPPED",
+                    "candidateId", candidate.getId(),
+                    "symbol", candidate.getSymbol(),
+                    "side", candidate.getSide() == null ? "" : candidate.getSide().name(),
+                    "scanRunId", candidate.getScanRunId() == null ? "" : candidate.getScanRunId(),
+                    "score", candidate.getScore() == null ? 0 : candidate.getScore(),
+                    "reason", "PAPER_POSITIONS_ONLY"
+            ));
         }
-        log.info("ENTRY_CANDIDATE_CREATED symbol={} side={} scanRunId={} validUntil={}", candidate.getSymbol(), candidate.getSide(), candidate.getScanRunId(), validUntil);
+        log.info(
+                "ENTRY_CANDIDATE_DB_PERSIST_SKIPPED candidateId={} symbol={} side={} scanRunId={} reason=PAPER_POSITIONS_ONLY",
+                candidate.getId(),
+                candidate.getSymbol(),
+                candidate.getSide(),
+                candidate.getScanRunId()
+        );
+    }
+
+    private void enrichFromScanResult(CoinScanResult coinResult, MarketScanResult scanResult) {
+        if (coinResult == null || scanResult == null) {
+            return;
+        }
+        if (coinResult.getScanRunId() == null) {
+            coinResult.setScanRunId(scanResult.getScanRunId());
+        }
+        if (coinResult.getScanTime() == null) {
+            coinResult.setScanTime(scanResult.getScanTimeUtc());
+        }
+        if (coinResult.getMarketRegime() == null) {
+            coinResult.setMarketRegime(scanResult.getMarketRegime());
+        }
+        if (coinResult.getMarketBreadthPct() == null) {
+            coinResult.setMarketBreadthPct(scanResult.getMarketBreadthPct());
+        }
+    }
+
+    private Long nextInMemoryCandidateId() {
+        return IN_MEMORY_CANDIDATE_IDS.getAndDecrement();
     }
 
     private CoinScanResult toCoinScanResult(

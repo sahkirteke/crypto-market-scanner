@@ -55,7 +55,7 @@ public class MarketScanScheduler {
             String startedAt = IstanbulTimeUtil.nowText();
             log.info("SCHEDULED_SCAN_STARTED scanType={} startedAt={}", scanType, startedAt);
             MarketScanResult result = marketScannerOrchestratorService.runAndPersist(scanType);
-            tryOpenPaperPositionsAfterScan(scanType, result.getScanRunId());
+            tryOpenPaperPositionsAfterScan(scanType, result);
             log.info("SCHEDULED_SCAN_COMPLETED scanType={} scanRunId={} scanTime={}", scanType, result.getScanRunId(), IstanbulTimeUtil.format(result.getScanTimeUtc()));
         } catch (RuntimeException exception) {
             log.error("SCHEDULED_SCAN_FAILED scanType={} message={}", scanType, exception.getMessage(), exception);
@@ -65,7 +65,8 @@ public class MarketScanScheduler {
         }
     }
 
-    private void tryOpenPaperPositionsAfterScan(ScanType scanType, Long scanRunId) {
+    private void tryOpenPaperPositionsAfterScan(ScanType scanType, MarketScanResult result) {
+        Long scanRunId = result == null ? null : result.getScanRunId();
         ScannerProperties.PaperAuto paperAuto = scannerProperties.getPaperAuto();
         if (paperAuto == null
                 || !Boolean.TRUE.equals(paperAuto.getEnabled())
@@ -75,7 +76,7 @@ public class MarketScanScheduler {
 
         try {
             log.info("AUTO_PAPER_OPEN_AFTER_SCAN_STARTED scanType={} scanRunId={}", scanType, scanRunId);
-            PaperOpenSummary summary = paperPositionService.openPositionsFromScanRun(scanRunId);
+            PaperOpenSummary summary = paperPositionService.openPositionsFromScanResult(result);
             log.info(
                     "AUTO_PAPER_OPEN_AFTER_SCAN_SUMMARY scanType={} scanRunId={} time={} candidateCount={} signalCount={} enterLong={} enterShort={} noEntry={} newPaperEntries={} skipped={} openPositionsAfter={}",
                     scanType,

@@ -31,9 +31,6 @@ class MarketScanSchedulerTest {
         scanLockService = mock(ScanLockService.class);
         scannerProperties = new ScannerProperties();
         paperPositionService = mock(PaperPositionService.class);
-        when(paperPositionService.openPositionsFromScanRun(100L)).thenReturn(emptySummary());
-        when(paperPositionService.openPositionsFromScanRun(101L)).thenReturn(emptySummary());
-        when(paperPositionService.openPositionsFromScanRun(102L)).thenReturn(emptySummary());
         marketScanScheduler = new MarketScanScheduler(
                 marketScannerOrchestratorService,
                 scanLockService,
@@ -70,10 +67,11 @@ class MarketScanSchedulerTest {
         when(scanLockService.tryAcquire()).thenReturn(true);
         when(marketScannerOrchestratorService.runAndPersist(ScanType.ONE_HOUR))
                 .thenReturn(MarketScanResult.builder().scanRunId(100L).build());
+        when(paperPositionService.openPositionsFromScanResult(org.mockito.ArgumentMatchers.any(MarketScanResult.class))).thenReturn(emptySummary());
 
         marketScanScheduler.runOneHourScheduledScan();
 
-        verify(paperPositionService).openPositionsFromScanRun(100L);
+        verify(paperPositionService).openPositionsFromScanResult(org.mockito.ArgumentMatchers.any(MarketScanResult.class));
         verify(paperPositionService, never()).openPositionsFromLatestSignals();
     }
 
@@ -88,6 +86,7 @@ class MarketScanSchedulerTest {
         marketScanScheduler.runOneHourScheduledScan();
 
         verify(paperPositionService, never()).openPositionsFromLatestSignals();
+        verify(paperPositionService, never()).openPositionsFromScanResult(org.mockito.ArgumentMatchers.any(MarketScanResult.class));
         verify(paperPositionService, never()).openPositionsFromScanRun(100L);
     }
 

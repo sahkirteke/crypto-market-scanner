@@ -25,15 +25,8 @@ public class ForwardMetricsService {
     private final BinanceFuturesClient binanceFuturesClient;
 
     public List<CoinScanForwardMetricsEntity> calculateMissingMetrics() {
-        Instant now = Instant.now();
-        List<CoinScanResultEntity> candidates = coinScanResultRepository.findAll().stream()
-                .filter(result -> result.getId() != null && !forwardMetricsRepository.existsByCoinScanResult_Id(result.getId()))
-                .filter(result -> result.getCreatedAt() != null && result.getCreatedAt().plus(Duration.ofHours(24)).isBefore(now))
-                .limit(100)
-                .toList();
-        List<CoinScanForwardMetricsEntity> saved = candidates.stream().map(this::calculate).filter(java.util.Objects::nonNull).map(forwardMetricsRepository::save).toList();
-        log.info("FORWARD_METRICS_CALCULATED count={}", saved.size());
-        return saved;
+        log.info("FORWARD_METRICS_DB_PERSIST_SKIPPED reason=PAPER_POSITIONS_ONLY");
+        return List.of();
     }
 
     private CoinScanForwardMetricsEntity calculate(CoinScanResultEntity result) {

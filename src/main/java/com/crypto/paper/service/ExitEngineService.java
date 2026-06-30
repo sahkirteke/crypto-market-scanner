@@ -867,11 +867,14 @@ public class ExitEngineService {
                 .reason(reason)
                 .detailsJson(toJson(details))
                 .build();
-        if (eventRepository == null) {
-            return event;
-        }
-        PaperPositionEventEntity saved = eventRepository.save(event);
-        return saved == null ? event : saved;
+        log.debug(
+                "PAPER_POSITION_EVENT_DB_PERSIST_SKIPPED positionId={} symbol={} eventType={} reason={} persistReason=PAPER_POSITIONS_ONLY",
+                p == null ? null : p.getId(),
+                p == null ? null : p.getSymbol(),
+                type,
+                reason
+        );
+        return event;
     }
 
     private Map<String, Object> eventDetails(PaperPositionEntity p, PaperPositionEventType type, String reason, Realized r, IntrabarEventContext context) {

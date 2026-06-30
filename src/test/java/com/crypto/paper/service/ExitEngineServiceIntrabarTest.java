@@ -137,10 +137,7 @@ class ExitEngineServiceIntrabarTest {
         assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.CLOSED);
         assertThat(result.getExitReason()).isEqualTo("STOP_LOSS");
         assertThat(result.getTp1Hit()).isFalse();
-        ArgumentCaptor<PaperPositionEventEntity> captor = ArgumentCaptor.forClass(PaperPositionEventEntity.class);
-        verify(events, times(2)).save(captor.capture());
-        assertThat(captor.getAllValues()).extracting(PaperPositionEventEntity::getEventType)
-                .doesNotContain(PaperPositionEventType.PARTIAL_TP1);
+        verify(events, never()).save(any(PaperPositionEventEntity.class));
     }
 
     @Test
@@ -153,10 +150,7 @@ class ExitEngineServiceIntrabarTest {
         assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.CLOSED);
         assertThat(result.getExitReason()).isEqualTo("STOP_LOSS");
         assertThat(result.getTp1Hit()).isFalse();
-        ArgumentCaptor<PaperPositionEventEntity> captor = ArgumentCaptor.forClass(PaperPositionEventEntity.class);
-        verify(events, times(2)).save(captor.capture());
-        assertThat(captor.getAllValues()).extracting(PaperPositionEventEntity::getEventType)
-                .doesNotContain(PaperPositionEventType.PARTIAL_TP1);
+        verify(events, never()).save(any(PaperPositionEventEntity.class));
     }
 
     @Test
@@ -212,15 +206,8 @@ class ExitEngineServiceIntrabarTest {
         assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.PARTIALLY_CLOSED);
         assertThat(result.getExitReason()).isNull();
         assertThat(result.getCurrentStop()).isEqualByComparingTo("100.1800");
-        ArgumentCaptor<PaperPositionEventEntity> captor = ArgumentCaptor.forClass(PaperPositionEventEntity.class);
-        verify(events, atLeastOnce()).save(captor.capture());
         assertThat(result.getRemainingPositionPct()).isEqualByComparingTo("40");
-        List<PaperPositionEventType> eventTypes = captor.getAllValues().stream()
-                .map(PaperPositionEventEntity::getEventType)
-                .toList();
-        assertThat(eventTypes)
-                .contains(PaperPositionEventType.PARTIAL_TP1, PaperPositionEventType.STOP_UPDATED)
-                .doesNotContain(PaperPositionEventType.PARTIAL_TP2, PaperPositionEventType.TRAILING_UPDATED, PaperPositionEventType.TRAILING_STOP, PaperPositionEventType.CLOSED);
+        verify(events, never()).save(any(PaperPositionEventEntity.class));
 
         PaperPositionEntity next = service.evaluatePositionWithCandle(p,
                 candle(candleOpen.plusSeconds(300), candleClose.plusSeconds(300), "102", "101.7", "101.9"), "5m");
@@ -240,15 +227,8 @@ class ExitEngineServiceIntrabarTest {
         assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.PARTIALLY_CLOSED);
         assertThat(result.getExitReason()).isNull();
         assertThat(result.getCurrentStop()).isEqualByComparingTo("100.1800");
-        ArgumentCaptor<PaperPositionEventEntity> captor = ArgumentCaptor.forClass(PaperPositionEventEntity.class);
-        verify(events, atLeastOnce()).save(captor.capture());
         assertThat(result.getRemainingPositionPct()).isEqualByComparingTo("40");
-        List<PaperPositionEventType> eventTypes = captor.getAllValues().stream()
-                .map(PaperPositionEventEntity::getEventType)
-                .toList();
-        assertThat(eventTypes)
-                .contains(PaperPositionEventType.PARTIAL_TP1, PaperPositionEventType.STOP_UPDATED)
-                .doesNotContain(PaperPositionEventType.PARTIAL_TP2, PaperPositionEventType.TRAILING_UPDATED, PaperPositionEventType.TRAILING_STOP, PaperPositionEventType.CLOSED);
+        verify(events, never()).save(any(PaperPositionEventEntity.class));
 
         PaperPositionEntity next = service.evaluatePositionWithCandle(p,
                 candle(candleOpen.plusSeconds(300), candleClose.plusSeconds(300), "98.3", "98", "98.1"), "5m");
@@ -258,25 +238,13 @@ class ExitEngineServiceIntrabarTest {
     }
 
     @Test
-    void tp1WritesPartialBeforeStopUpdatedWithPostPartialState() {
+    void tp1DoesNotWritePaperPositionEventRows() {
         PaperPositionEventRepository events = mock(PaperPositionEventRepository.class);
         ExitEngineService service = service(events, null);
 
         service.evaluatePositionWithCandle(position(PositionSide.LONG), candle("102", "100", "101"), "5m");
 
-        ArgumentCaptor<PaperPositionEventEntity> captor = ArgumentCaptor.forClass(PaperPositionEventEntity.class);
-        verify(events, atLeastOnce()).save(captor.capture());
-        assertThat(captor.getAllValues()).extracting(PaperPositionEventEntity::getEventType)
-                .startsWith(PaperPositionEventType.PARTIAL_TP1, PaperPositionEventType.STOP_UPDATED);
-        PaperPositionEventEntity stopUpdated = captor.getAllValues().stream()
-                .filter(event -> event.getEventType() == PaperPositionEventType.STOP_UPDATED)
-                .findFirst()
-                .orElseThrow();
-        assertThat(stopUpdated.getDetailsJson())
-                .contains("\"remainingPositionPctBefore\":50")
-                .contains("\"remainingPositionPctAfter\":50")
-                .contains("\"tp1HitBefore\":true")
-                .contains("\"tp1HitAfter\":true");
+        verify(events, never()).save(any(PaperPositionEventEntity.class));
     }
 
     @Test
@@ -288,15 +256,7 @@ class ExitEngineServiceIntrabarTest {
 
         assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.PARTIALLY_CLOSED);
         assertThat(result.getExitReason()).isNull();
-        ArgumentCaptor<PaperPositionEventEntity> captor = ArgumentCaptor.forClass(PaperPositionEventEntity.class);
-        verify(events, atLeastOnce()).save(captor.capture());
-        assertThat(captor.getAllValues()).extracting(PaperPositionEventEntity::getEventType)
-                .containsExactly(
-                        PaperPositionEventType.PARTIAL_TP1,
-                        PaperPositionEventType.STOP_UPDATED,
-                        PaperPositionEventType.PARTIAL_TP2,
-                        PaperPositionEventType.TRAILING_UPDATED)
-                .doesNotContain(PaperPositionEventType.TRAILING_STOP, PaperPositionEventType.CLOSED);
+        verify(events, never()).save(any(PaperPositionEventEntity.class));
     }
 
     @Test
@@ -312,32 +272,13 @@ class ExitEngineServiceIntrabarTest {
     }
 
     @Test
-    void writesPaperPositionEvent() {
+    void skipsPaperPositionEventDbWrite() {
         PaperPositionEventRepository events = mock(PaperPositionEventRepository.class);
-        when(events.save(any(PaperPositionEventEntity.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
         ExitEngineService service = service(events, null);
-        PaperPositionEntity position = position(PositionSide.LONG);
 
-        service.evaluatePositionWithCandle(position, candle("102", "100", "101"), "5m");
+        service.evaluatePositionWithCandle(position(PositionSide.LONG), candle("102", "100", "101"), "5m");
 
-        ArgumentCaptor<PaperPositionEventEntity> captor = ArgumentCaptor.forClass(PaperPositionEventEntity.class);
-        verify(events, atLeastOnce()).save(captor.capture());
-
-        PaperPositionEventEntity event = captor.getAllValues().get(0);
-        assertThat(event).isNotNull();
-        assertThat(event.getPosition()).isEqualTo(position);
-        assertThat(event.getEventType()).isNotNull();
-        assertThat(captor.getAllValues()).extracting(PaperPositionEventEntity::getEventType)
-                .contains(PaperPositionEventType.PARTIAL_TP1);
-        assertThat(captor.getAllValues())
-                .filteredOn(capturedEvent -> capturedEvent.getEventType() == PaperPositionEventType.PARTIAL_TP1)
-                .first()
-                .extracting(PaperPositionEventEntity::getDetailsJson)
-                .asString()
-                .contains("\"interval\":\"5m\"")
-                .contains("\"candleCloseTime\":\"2026-06-07 13:04:59 TRT\"")
-                .doesNotContain("2026-06-07T10:04:59Z");
+        verify(events, never()).save(any(PaperPositionEventEntity.class));
     }
 
     @Test

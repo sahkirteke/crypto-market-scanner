@@ -2,24 +2,18 @@ package com.crypto.persistence.service;
 
 import com.crypto.common.enums.ScanType;
 import com.crypto.common.service.JsonlDecisionLogService;
-import com.crypto.domain.model.CoinScanResult;
 import com.crypto.domain.model.MarketScanResult;
-import com.crypto.persistence.entity.CoinScanResultEntity;
 import com.crypto.persistence.entity.MarketScanRunEntity;
 import com.crypto.persistence.mapper.MarketScanPersistenceMapper;
 import com.crypto.persistence.repository.CoinScanResultRepository;
 import com.crypto.persistence.repository.MarketScanRunRepository;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -27,10 +21,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class MarketScanPersistenceService {
     public static final String STATUS_COMPLETED = "COMPLETED";
     public static final String STATUS_FAILED = "FAILED";
-    private static final int COIN_RESULT_CHUNK_SIZE = 100;
-    private static final int COIN_RESULT_MAX_ATTEMPTS = 3;
+    private static final AtomicLong IN_MEMORY_SCAN_RUN_IDS = new AtomicLong(-1L);
 
+    @SuppressWarnings("unused")
     private final MarketScanRunRepository marketScanRunRepository;
+    @SuppressWarnings("unused")
     private final CoinScanResultRepository coinScanResultRepository;
     private final MarketScanPersistenceMapper marketScanPersistenceMapper;
 
@@ -39,51 +34,31 @@ public class MarketScanPersistenceService {
 
     public MarketScanRunEntity saveCompletedScan(MarketScanResult result) {
         MarketScanRunEntity runEntity = marketScanPersistenceMapper.toRunEntity(result, STATUS_COMPLETED);
-        MarketScanRunEntity savedRunEntity = marketScanRunRepository.save(runEntity);
-
-        List<CoinScanResultEntity> coinEntities = allCoinResults(result).stream()
-                .map(coinResult -> marketScanPersistenceMapper.toCoinEntity(coinResult, savedRunEntity))
-                .toList();
-        saveCoinResultsInChunks(coinEntities);
+        runEntity.setId(nextInMemoryScanRunId());
+        if (result != null) {
+            result.setScanRunId(runEntity.getId());
+        }
+        log.info(
+                "SCAN_DB_PERSIST_SKIPPED scanRunId={} scanType={} status={} reason=PAPER_POSITIONS_ONLY",
+                runEntity.getId(),
+                runEntity.getScanType(),
+                runEntity.getStatus()
+        );
         if (jsonlDecisionLogService != null) {
-            jsonlDecisionLogService.logScanner(Map.of("event", "SCAN_COMPLETED", "scanRunId", savedRunEntity.getId(), "marketRegime", savedRunEntity.getMarketRegime() == null ? "" : savedRunEntity.getMarketRegime().name()));
+            jsonlDecisionLogService.logScanner(Map.of(
+                    "event", "SCAN_DB_PERSIST_SKIPPED",
+                    "scanRunId", runEntity.getId(),
+                    "scanType", runEntity.getScanType() == null ? "" : runEntity.getScanType().name(),
+                    "status", runEntity.getStatus(),
+                    "reason", "PAPER_POSITIONS_ONLY"
+            ));
         }
-        return savedRunEntity;
+        return runEntity;
     }
 
-    private void saveCoinResultsInChunks(List<CoinScanResultEntity> coinEntities) {
-        if (coinEntities == null || coinEntities.isEmpty()) {
-            return;
-        }
-        int total = coinEntities.size();
-        for (int start = 0; start < total; start += COIN_RESULT_CHUNK_SIZE) {
-            int end = Math.min(start + COIN_RESULT_CHUNK_SIZE, total);
-            saveCoinResultChunkWithRetry(coinEntities.subList(start, end), start / COIN_RESULT_CHUNK_SIZE + 1);
-        }
-    }
-
-    private void saveCoinResultChunkWithRetry(List<CoinScanResultEntity> chunk, int chunkIndex) {
-        int attempt = 1;
-        while (true) {
-            try {
-                coinScanResultRepository.saveAll(chunk);
-                return;
-            } catch (DataAccessException exception) {
-                if (attempt >= COIN_RESULT_MAX_ATTEMPTS) {
-                    log.error("SCAN_COIN_RESULTS_CHUNK_SAVE_FAILED chunkIndex={} size={} attempts={} message={}",
-                            chunkIndex, chunk.size(), attempt, exception.getMessage());
-                    throw exception;
-                }
-                log.warn("SCAN_COIN_RESULTS_CHUNK_SAVE_RETRY chunkIndex={} size={} attempt={} maxAttempts={} message={}",
-                        chunkIndex, chunk.size(), attempt, COIN_RESULT_MAX_ATTEMPTS, exception.getMessage());
-                attempt++;
-            }
-        }
-    }
-
-    @Transactional
     public MarketScanRunEntity saveFailedScan(ScanType scanType, Instant scanTimeUtc, String errorMessage) {
         MarketScanRunEntity runEntity = new MarketScanRunEntity();
+        runEntity.setId(nextInMemoryScanRunId());
         runEntity.setScanType(scanType);
         runEntity.setScanTimeUtc(scanTimeUtc);
         runEntity.setStatus(STATUS_FAILED);
@@ -96,19 +71,16 @@ public class MarketScanPersistenceService {
         runEntity.setEliminatedCount(0);
         runEntity.setReasonsJson("[]");
         runEntity.setWarningsJson("[]");
-        return marketScanRunRepository.save(runEntity);
+        log.warn(
+                "SCAN_FAILED_DB_PERSIST_SKIPPED scanRunId={} scanType={} reason=PAPER_POSITIONS_ONLY error={}",
+                runEntity.getId(),
+                scanType,
+                errorMessage
+        );
+        return runEntity;
     }
 
-    private List<CoinScanResult> allCoinResults(MarketScanResult result) {
-        List<CoinScanResult> allResults = new ArrayList<>();
-        allResults.addAll(safeList(result.getStrongLong()));
-        allResults.addAll(safeList(result.getStrongShort()));
-        allResults.addAll(safeList(result.getWatchlist()));
-        allResults.addAll(safeList(result.getEliminated()));
-        return allResults;
-    }
-
-    private List<CoinScanResult> safeList(List<CoinScanResult> results) {
-        return results == null ? Collections.emptyList() : results;
+    private Long nextInMemoryScanRunId() {
+        return IN_MEMORY_SCAN_RUN_IDS.getAndDecrement();
     }
 }
