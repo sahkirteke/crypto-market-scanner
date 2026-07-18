@@ -33,15 +33,15 @@ scanner:
   blacklist: []
 
   scheduler:
-    enabled: true
+    enabled: false
     one-hour-cron: "0 2 * * * *"
     four-hour-cron: "0 2 3,7,11,15,19,23 * * *"
     zone: "Europe/Istanbul"
 
   paper-auto:
-    enabled: true
-    open-after-scan: true
-    evaluate-enabled: true
+    enabled: false
+    open-after-scan: false
+    evaluate-enabled: false
     evaluate-cron: "0 */5 * * * *"
     zone: "Europe/Istanbul"
 
@@ -102,7 +102,7 @@ scanner:
     require-volume-confirmed: false
 
   paper:
-    enabled: true
+    enabled: false
     default-notional-usdt: 100
     leverage: 3
     allow-multiple-open-same-symbol: false
@@ -130,17 +130,40 @@ scanner:
     slippage-pct: 0.0005
 
   paper-exit:
-    enabled: true
+    enabled: false
     take-profit-pct: 1.0
     stop-loss-pct: 0.6
     time-stop-minutes: 240
     time-stop-close-only-if-non-positive: true
     bar-minutes: 60
-    intrabar-check-enabled: true
+    intrabar-check-enabled: false
     intrabar-interval: "5m"
     intrabar-cron: "10 */5 * * * *"
     intrabar-zone: "Europe/Istanbul"
     intrabar-kline-limit: 3
+trading:
+  active-strategy: LAPLACE_KERNEL_30M
+  execution-mode: PAPER
+  old-strategy-enabled: false
+  laplace:
+    enabled: true
+    execution-enabled: false
+    paper-execution-enabled: false
+    timeframe: 30m
+    kernel: LAPLACE
+    bandwidth: 14
+    source: CLOSE
+    repaint: false
+    kline-limit: 100
+    startup-closed-candle-count: 20
+    notional-usdt: 10
+    leverage: 1
+    order-type: MARKET
+    taker-fee-rate: 0.0004
+    cron: "5 0,30 * * * *"
+    zone: Europe/Istanbul
+    diagnostic-directory: logs/laplace
+    trade-directory: logs/laplace-trades
 logging:
   pattern:
     dateformat: "yyyy-MM-dd HH:mm:ss.SSS,Europe/Istanbul"

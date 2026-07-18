@@ -9,8 +9,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 @Component
+@ConditionalOnProperty(prefix = "trading", name = "old-strategy-enabled", havingValue = "true")
 @RequiredArgsConstructor
 @Slf4j
 public class PaperExitIntrabarScheduler {

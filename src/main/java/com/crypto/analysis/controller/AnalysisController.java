@@ -5,10 +5,12 @@ import com.crypto.analysis.service.ResultAnalyzerService;
 import com.crypto.analysis.service.ForwardMetricsService;
 import com.crypto.api.exception.BadRequestException;
 import com.crypto.common.time.IstanbulTimeUtil;
+import com.crypto.laplace.api.LaplacePaperApiService;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -22,13 +24,19 @@ import org.springframework.web.bind.annotation.RestController;
 public class AnalysisController {
     private final ResultAnalyzerService resultAnalyzerService;
     private final ForwardMetricsService forwardMetricsService;
+    @Autowired(required = false)
+    private LaplacePaperApiService laplacePaperApiService;
 
     @GetMapping("/summary")
-    public StrategyAnalysisResponse getSummary(
+    public Object getSummary(
             @RequestParam(required = false) Integer limit,
             @RequestParam(required = false) String start,
             @RequestParam(required = false) String end
     ) {
+        if ((start == null && end == null && limit == null) && laplacePaperApiService != null && laplacePaperApiService.isLaplaceActive()) {
+            log.info("ANALYSIS_SUMMARY_REQUEST strategy=LAPLACE_KERNEL_REGRESSION_30M");
+            return laplacePaperApiService.summary();
+        }
         if (start != null || end != null) {
             if (start == null || end == null) {
                 throw new BadRequestException("Both start and end must be provided for range analysis");
