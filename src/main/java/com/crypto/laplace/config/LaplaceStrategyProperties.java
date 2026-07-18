@@ -49,5 +49,6 @@ public class LaplaceStrategyProperties {
         private String orderType = "MARKET";
         private BigDecimal takerFeeRate = new BigDecimal("0.0004");
         private String diagnosticDirectory = "logs/laplace";
+        private String tradeDirectory = "logs/laplace-trades";
     }
 }

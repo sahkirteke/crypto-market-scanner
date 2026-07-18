@@ -163,6 +163,7 @@ trading:
     cron: "5 0,30 * * * *"
     zone: Europe/Istanbul
     diagnostic-directory: logs/laplace
+    trade-directory: logs/laplace-trades
 logging:
   pattern:
     dateformat: "yyyy-MM-dd HH:mm:ss.SSS,Europe/Istanbul"
