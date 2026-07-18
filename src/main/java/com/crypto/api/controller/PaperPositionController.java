@@ -35,7 +35,7 @@ public class PaperPositionController {
     private final PaperPositionEventRepository paperPositionEventRepository;
 
     @GetMapping("/positions/open")
-    public List<PaperPositionResponse> getOpenPositions() {
+    public List<?> getOpenPositions() {
         log.info("PAPER_API_OPEN_POSITIONS_REQUEST");
         return paperPositionQueryService.getOpenPositions();
     }
