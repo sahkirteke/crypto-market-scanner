@@ -1,2 +1,2 @@
 package com.crypto.laplace.model;
-public enum StartupState { WARMING_UP, READY }
+public enum StartupState { INITIALIZING, READY_WAITING_NEXT_CLOSE, ACTIVE, DATA_ERROR }

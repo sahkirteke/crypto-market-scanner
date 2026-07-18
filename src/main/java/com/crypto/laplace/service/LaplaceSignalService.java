@@ -15,7 +15,7 @@ public class LaplaceSignalService {
   RegressionValues r=regression.calculate(candles); int end=candles.size()-1;
   double ca=atr.at(candles,end), pa=atr.at(candles,end-1), cs=r.current()-r.previous(), ps=r.previous()-r.twoBarsAgo();
   double cn=cs/ca,pn=ps/pa; if(!Double.isFinite(cn)||!Double.isFinite(pn)) throw new IllegalArgumentException("Invalid normalized slope");
-  Kline candle=candles.get(end); boolean warmed=newBars>=2; List<RejectionReason> reasons=new ArrayList<>();
+  Kline candle=candles.get(end); boolean warmed=newBars>=1; List<RejectionReason> reasons=new ArrayList<>();
   LaplaceSignal entry=LaplaceSignal.NONE, reversal=LaplaceSignal.NONE;
   if(!warmed) reasons.add(RejectionReason.STARTUP_WARMUP);
   else if(cn>=ENTRY && pn>=ENTRY) { if(candle.getClose().doubleValue()>r.current()) entry=LaplaceSignal.LONG; else reasons.add(RejectionReason.CLOSE_NOT_ABOVE_REGRESSION); }
@@ -23,6 +23,6 @@ public class LaplaceSignalService {
   else { if(cn>-ENTRY&&cn<ENTRY) reasons.add(RejectionReason.SLOPE_IN_DEAD_ZONE); else reasons.add(RejectionReason.SECOND_CONFIRMATION_MISSING); }
   if(warmed && cn>=REVERSAL&&pn>=REVERSAL&&candle.getClose().doubleValue()>r.current()) reversal=LaplaceSignal.LONG;
   if(warmed && cn<=-REVERSAL&&pn<=-REVERSAL&&candle.getClose().doubleValue()<r.current()) reversal=LaplaceSignal.SHORT;
-  return new LaplaceSignalResult("LAPLACE_KERNEL_REGRESSION_30M","1.0",symbol,"30m","LAPLACE",14,"CLOSE",false,candle.getOpenTime(),candle.getCloseTime(),candle.getClose().doubleValue(),r.current(),r.previous(),r.twoBarsAgo(),cs,ps,ca,pa,cn,pn,ENTRY,REVERSAL,2,entry,reversal,warmed?StartupState.READY:StartupState.WARMING_UP,newBars,warmed && entry!=LaplaceSignal.NONE,reasons);
+  return new LaplaceSignalResult("LAPLACE_KERNEL_REGRESSION_30M","1.0",symbol,"30m","LAPLACE",14,"CLOSE",false,candle.getOpenTime(),candle.getCloseTime(),candle.getClose().doubleValue(),r.current(),r.previous(),r.twoBarsAgo(),cs,ps,ca,pa,cn,pn,ENTRY,REVERSAL,2,entry,reversal,warmed?StartupState.ACTIVE:StartupState.READY_WAITING_NEXT_CLOSE,newBars,warmed && entry!=LaplaceSignal.NONE,reasons);
  }
 }

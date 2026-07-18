@@ -1,5 +1,6 @@
 package com.crypto.laplace.config;
 
+import java.math.BigDecimal;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -21,6 +22,14 @@ public class LaplaceStrategyProperties {
                 || laplace.bandwidth != 14 || !"CLOSE".equals(laplace.source) || laplace.repaint) {
             throw new IllegalStateException("Invalid immutable Laplace phase-one configuration");
         }
+        if (laplace.startupClosedCandleCount != 20
+                || laplace.notionalUsdt.compareTo(BigDecimal.TEN) != 0
+                || laplace.leverage != 1
+                || !"MARKET".equals(laplace.orderType)
+                || laplace.takerFeeRate == null
+                || laplace.takerFeeRate.signum() < 0) {
+            throw new IllegalStateException("Invalid immutable Laplace paper execution configuration");
+        }
     }
 
     @Getter @Setter
@@ -34,6 +43,11 @@ public class LaplaceStrategyProperties {
         private String source = "CLOSE";
         private boolean repaint;
         private int klineLimit = 100;
+        private int startupClosedCandleCount = 20;
+        private BigDecimal notionalUsdt = BigDecimal.TEN;
+        private int leverage = 1;
+        private String orderType = "MARKET";
+        private BigDecimal takerFeeRate = new BigDecimal("0.0004");
         private String diagnosticDirectory = "logs/laplace";
     }
 }
