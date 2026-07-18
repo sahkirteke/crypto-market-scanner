@@ -1,13 +1,13 @@
 package com.crypto.laplace.execution;
 
-import com.crypto.common.enums.PositionSide;import com.crypto.laplace.config.LaplaceStrategyProperties;import com.crypto.laplace.model.*;import com.crypto.laplace.persistence.*;import java.util.*;import java.util.concurrent.*;import java.util.concurrent.locks.ReentrantLock;import lombok.RequiredArgsConstructor;import lombok.extern.slf4j.Slf4j;import org.springframework.stereotype.Service;
+import com.crypto.common.enums.PositionSide;import com.crypto.laplace.config.LaplaceStrategyProperties;import com.crypto.laplace.model.*;import com.crypto.laplace.persistence.*;import java.util.*;import java.util.concurrent.*;import java.util.concurrent.atomic.AtomicBoolean;import java.util.concurrent.locks.ReentrantLock;import lombok.RequiredArgsConstructor;import lombok.extern.slf4j.Slf4j;import org.springframework.stereotype.Service;
 @Slf4j @Service @RequiredArgsConstructor
 public class LaplacePaperTradeCoordinator {
- private final LaplaceStrategyProperties config;private final LaplacePaperPositionRepository positions;private final LaplacePaperExecutionService execution;private final LaplaceTradeJsonlWriter writer;private final ConcurrentHashMap<String,ReentrantLock> locks=new ConcurrentHashMap<>();
+ private final LaplaceStrategyProperties config;private final LaplacePaperPositionRepository positions;private final LaplacePaperExecutionService execution;private final LaplaceTradeJsonlWriter writer;private final ConcurrentHashMap<String,ReentrantLock> locks=new ConcurrentHashMap<>();private final AtomicBoolean paperDisabledLogged=new AtomicBoolean(false);
  public Set<String> managementSymbols(){Set<String>x=new HashSet<>();for(var p:positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY,LaplacePositionStatus.OPEN))x.add(p.getSymbol());return Set.copyOf(x);}
  public void onSignal(LaplaceSignalResult signal,boolean inEntryUniverse){
   if(signal==null||signal.startupState()!=StartupState.ACTIVE||signal.postStartupClosedBarCount()<1)return;
-  if(!config.getLaplace().isPaperExecutionEnabled()){if(signal.entrySignal()!=LaplaceSignal.NONE)writer.failure(signal.symbol(),signal.signalCandleCloseTime(),"UNKNOWN","ENTRY","PAPER_EXECUTION_DISABLED",null,false);return;}
+  if(!config.getLaplace().isPaperExecutionEnabled()){if(signal.entrySignal()!=LaplaceSignal.NONE&&paperDisabledLogged.compareAndSet(false,true))log.warn("LAPLACE_PAPER_EXECUTION_DISABLED strategy={} symbol={} signalCandleCloseTime={}",LaplacePaperExecutionService.STRATEGY,signal.symbol(),signal.signalCandleCloseTime());return;}
   ReentrantLock lock=locks.computeIfAbsent(signal.symbol(),s->new ReentrantLock());lock.lock();try{coordinate(signal,inEntryUniverse);}finally{lock.unlock();}
  }
  private void coordinate(LaplaceSignalResult signal,boolean inEntryUniverse){
