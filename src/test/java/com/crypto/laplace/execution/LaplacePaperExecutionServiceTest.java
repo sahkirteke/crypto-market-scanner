@@ -1,6 +1,7 @@
 package com.crypto.laplace.execution;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -65,6 +66,24 @@ class LaplacePaperExecutionServiceTest {
         assertThat(opened.getMargin()).isEqualByComparingTo("1");
         assertThat(opened.getLeverage()).isEqualTo(20);
         assertThat(opened.getQuantity()).isEqualByComparingTo("0.4");
+    }
+
+    @Test
+    void rejectsEntryWhenOpenMarginsAndUnrealizedEntryFeesExhaustAvailableBalance() {
+        when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of());
+        List<LaplacePaperPositionEntity> fiftyOpen = java.util.stream.IntStream.range(0, 50)
+                .mapToObj(i -> LaplacePaperPositionEntity.builder().margin(BigDecimal.ONE)
+                        .entryFee(new BigDecimal("0.008")).build()).toList();
+        when(positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.CLOSED)).thenReturn(List.of());
+        when(positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN)).thenReturn(fiftyOpen);
+        assertThat(service.availableBalance()).isEqualByComparingTo("49.600");
+        List<LaplacePaperPositionEntity> ninetyNineOpen = java.util.stream.IntStream.range(0, 99)
+                .mapToObj(i -> LaplacePaperPositionEntity.builder().margin(BigDecimal.ONE)
+                        .entryFee(new BigDecimal("0.008")).build()).toList();
+        when(positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN)).thenReturn(ninetyNineOpen);
+        when(prices.quote("BTCUSDT", MarketExecutionAction.LONG_OPEN)).thenReturn(price("99", "100", "100", "ASK"));
+        assertThatThrownBy(() -> service.open(signal(), PositionSide.LONG, null, "FLAT"))
+                .isInstanceOf(IllegalStateException.class).hasMessage("INSUFFICIENT_PAPER_BALANCE");
     }
 
     @Test
