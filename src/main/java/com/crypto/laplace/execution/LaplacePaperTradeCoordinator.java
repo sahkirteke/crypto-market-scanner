@@ -15,6 +15,8 @@ public class LaplacePaperTradeCoordinator {
  public PositionSide mapRawSignalToExecutionSide(LaplaceSignal raw){return switch(raw){case LONG->PositionSide.SHORT;case SHORT->PositionSide.LONG;case NONE->null;};}
  /** Startup history establishes a raw baseline only; it deliberately never executes. */
  public void initializeBaseline(String symbol,LaplaceSignal raw){rawStates.put(symbol,raw);log.info("LAPLACE_STARTUP_RAW_BASELINE_INITIALIZED symbol={} startupRawSignalState={}",symbol,raw);}
+ /** Visible to scheduler tests; state is intentionally retained for symbols that stay in the universe. */
+ LaplaceSignal rawState(String symbol){return rawStates.get(symbol);}
  public void onSignal(LaplaceSignalResult signal,boolean inEntryUniverse){
   if(signal==null||signal.startupState()!=StartupState.ACTIVE||signal.postStartupClosedBarCount()<1)return;
   if(!config.getLaplace().isPaperExecutionEnabled()){if(signal.entrySignal()!=LaplaceSignal.NONE&&paperDisabledLogged.compareAndSet(false,true))log.warn("LAPLACE_PAPER_EXECUTION_DISABLED strategy={} symbol={}",LaplacePaperExecutionService.STRATEGY,signal.symbol());return;}

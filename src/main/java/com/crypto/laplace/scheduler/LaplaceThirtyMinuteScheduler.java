@@ -36,6 +36,7 @@ public class LaplaceThirtyMinuteScheduler {
     private final AtomicBoolean running = new AtomicBoolean();
     private final ConcurrentHashMap<String, Instant> lastProcessed = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Integer> postStartupBarCounts = new ConcurrentHashMap<>();
+    private volatile Set<String> activeUniverse = Set.of();
 
     @Scheduled(cron = "${trading.laplace.cron}", zone = "${trading.laplace.zone}")
     public void scan() {
@@ -50,11 +51,13 @@ public class LaplaceThirtyMinuteScheduler {
         }
         try {
             ZonedDateTime now = ZonedDateTime.now(java.time.ZoneId.of("Europe/Istanbul"));
-            if (now.getHour() == 16 && now.getMinute() == 30 && universe.refresh()) {
-                for (String symbol : universe.symbols()) if (!startupHistory.isReady(symbol)) startupHistory.initializeSymbol(symbol);
-                log.info("LAPLACE_UNIVERSE_REFRESH_COMPLETED eligibleSymbols={}", universe.symbols().size());
+            if (activeUniverse.isEmpty()) {
+                activateInitialUniverse();
             }
-            Set<String> symbols = new HashSet<>(startupHistory.readySymbols());
+            if (now.getHour() == 16 && now.getMinute() == 30 && universe.refresh()) {
+                activateRefreshedUniverse();
+            }
+            Set<String> symbols = new HashSet<>(activeUniverse);
             for (String symbol : managed) {
                 if (!startupHistory.isReady(symbol)) {
                     startupHistory.initializeSymbol(symbol);
@@ -67,6 +70,43 @@ public class LaplaceThirtyMinuteScheduler {
         } finally {
             running.set(false);
         }
+    }
+
+    void activateInitialUniverse() {
+        Set<String> initial = universe.symbols();
+        for (String symbol : initial) {
+            if (!startupHistory.isReady(symbol)) startupHistory.initializeSymbol(symbol);
+        }
+        activeUniverse = Set.copyOf(initial);
+    }
+
+    /**
+     * Only symbols newly entering this universe are re-baselined.  Symbols in the
+     * intersection retain their coordinator raw state and candle progression.
+     */
+    void activateRefreshedUniverse() {
+        Set<String> previous = activeUniverse;
+        Set<String> refreshed = Set.copyOf(universe.symbols());
+        Set<String> incoming = new HashSet<>(refreshed);
+        incoming.removeAll(previous);
+        for (String symbol : incoming) {
+            startupHistory.initializeSymbol(symbol);
+            lastProcessed.remove(symbol);
+            postStartupBarCounts.remove(symbol);
+        }
+        activeUniverse = refreshed;
+        log.info("LAPLACE_UNIVERSE_REFRESH_COMPLETED eligibleSymbols={} retainedSymbols={} incomingSymbols={} removedSymbols={}",
+                refreshed.size(), intersectionSize(previous, refreshed), incoming.size(), previous.size() - intersectionSize(previous, refreshed));
+    }
+
+    private int intersectionSize(Set<String> first, Set<String> second) {
+        Set<String> intersection = new HashSet<>(first);
+        intersection.retainAll(second);
+        return intersection.size();
+    }
+
+    Set<String> activeUniverse() {
+        return activeUniverse;
     }
 
     void process(String symbol) {
