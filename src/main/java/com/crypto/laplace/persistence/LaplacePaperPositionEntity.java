@@ -22,7 +22,9 @@ public class LaplacePaperPositionEntity {
  @Column(nullable=false) private Instant entryCandleCloseTime;
  @Column(nullable=false) private Instant entryTime;
  @Column(nullable=false,precision=30,scale=12) private BigDecimal entrySignalClosePrice;
+ @Column(precision=30,scale=12) private BigDecimal entryReferencePrice;
  @Column(nullable=false,precision=30,scale=12) private BigDecimal entryExecutionPrice;
+ @Column(precision=20,scale=10) private BigDecimal entrySlippagePct;
  @Column(nullable=false,precision=30,scale=12) private BigDecimal margin;
  @Column(nullable=false,precision=30,scale=12) private BigDecimal quantity;
  @Column(nullable=false,precision=30,scale=8) private BigDecimal notional;
@@ -30,7 +32,9 @@ public class LaplacePaperPositionEntity {
  @Column(nullable=false,precision=20,scale=10) private BigDecimal entryFeeRate;
  @Column(nullable=false,precision=30,scale=12) private BigDecimal entryFee;
  private Instant exitTime;
+ @Column(precision=30,scale=12) private BigDecimal exitReferencePrice;
  @Column(precision=30,scale=12) private BigDecimal exitExecutionPrice;
+ @Column(precision=20,scale=10) private BigDecimal exitSlippagePct;
  @Column(precision=30,scale=12) private BigDecimal exitFee;
  @Column(precision=30,scale=12) private BigDecimal grossPnl;
  @Column(precision=20,scale=8) private BigDecimal grossPnlPct;

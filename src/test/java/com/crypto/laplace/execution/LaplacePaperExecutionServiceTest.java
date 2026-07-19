@@ -20,6 +20,7 @@ import com.crypto.laplace.service.LaplaceSymbolBlockService;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,7 +37,7 @@ class LaplacePaperExecutionServiceTest {
         prices = mock(LaplaceExecutionPriceProvider.class);
         LaplaceTradeJsonlWriter writer = mock(LaplaceTradeJsonlWriter.class);
         StartupMarketUniverseService universe = mock(StartupMarketUniverseService.class);
-        when(writer.json(any())).thenReturn("{}");
+        when(writer.tryJson(any())).thenReturn(Optional.of("{}"));
         when(universe.symbols()).thenReturn(Set.of("BTCUSDT"));
         LaplaceStrategyProperties properties = new LaplaceStrategyProperties();
         service = new LaplacePaperExecutionService(positions, events, prices, new LaplacePnlCalculator(),
@@ -48,12 +49,14 @@ class LaplacePaperExecutionServiceTest {
         when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of());
         when(prices.quote("BTCUSDT", MarketExecutionAction.LONG_OPEN)).thenReturn(price("99", "100", "100", "ASK"));
         LaplacePaperPositionEntity opened = service.open(signal(), PositionSide.LONG, null, "FLAT");
-        assertThat(opened.getEntryExecutionPrice()).isEqualByComparingTo("100");
+        assertThat(opened.getEntryReferencePrice()).isEqualByComparingTo("100");
+        assertThat(opened.getEntryExecutionPrice()).isEqualByComparingTo("100.05");
+        assertThat(opened.getEntrySlippagePct()).isEqualByComparingTo("0.05");
         assertThat(opened.getEntrySignalClosePrice()).isEqualByComparingTo("77");
         assertThat(opened.getNotional()).isEqualByComparingTo("20");
         assertThat(opened.getMargin()).isEqualByComparingTo("1");
         assertThat(opened.getLeverage()).isEqualTo(20);
-        assertThat(opened.getQuantity()).isEqualByComparingTo("0.2");
+        assertThat(opened.getQuantity()).isEqualByComparingTo("0.199900049975");
         assertThat(opened.getEntryFee()).isEqualByComparingTo("0.008");
     }
 
@@ -62,11 +65,13 @@ class LaplacePaperExecutionServiceTest {
         when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of());
         when(prices.quote("BTCUSDT", MarketExecutionAction.SHORT_OPEN)).thenReturn(price("50", "51", "50", "BID"));
         LaplacePaperPositionEntity opened = service.open(signal(), PositionSide.SHORT, null, "FLAT");
-        assertThat(opened.getEntryExecutionPrice()).isEqualByComparingTo("50");
+        assertThat(opened.getEntryReferencePrice()).isEqualByComparingTo("50");
+        assertThat(opened.getEntryExecutionPrice()).isEqualByComparingTo("49.975");
+        assertThat(opened.getEntrySlippagePct()).isEqualByComparingTo("0.05");
         assertThat(opened.getNotional()).isEqualByComparingTo("20");
         assertThat(opened.getMargin()).isEqualByComparingTo("1");
         assertThat(opened.getLeverage()).isEqualTo(20);
-        assertThat(opened.getQuantity()).isEqualByComparingTo("0.4");
+        assertThat(opened.getQuantity()).isEqualByComparingTo("0.400200100050");
     }
 
     @Test
@@ -93,10 +98,12 @@ class LaplacePaperExecutionServiceTest {
         when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of(open));
         when(prices.quote("BTCUSDT", MarketExecutionAction.LONG_CLOSE)).thenReturn(price("110", "111", "110", "BID"));
         service.reverse(signal(), open, PositionSide.SHORT, false);
-        assertThat(open.getExitExecutionPrice()).isEqualByComparingTo("110");
-        assertThat(open.getExitFee()).isEqualByComparingTo("0.0088");
-        assertThat(open.getGrossPnl()).isEqualByComparingTo("2");
-        assertThat(open.getNetPnl()).isEqualByComparingTo("1.9832");
+        assertThat(open.getExitReferencePrice()).isEqualByComparingTo("110");
+        assertThat(open.getExitExecutionPrice()).isEqualByComparingTo("109.945");
+        assertThat(open.getExitSlippagePct()).isEqualByComparingTo("0.05");
+        assertThat(open.getExitFee()).isEqualByComparingTo("0.0087956");
+        assertThat(open.getGrossPnl()).isEqualByComparingTo("1.989");
+        assertThat(open.getNetPnl()).isEqualByComparingTo("1.9722044");
         verify(prices).quote("BTCUSDT", MarketExecutionAction.LONG_CLOSE);
     }
 
@@ -106,7 +113,34 @@ class LaplacePaperExecutionServiceTest {
         when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of(open));
         when(prices.quote("BTCUSDT", MarketExecutionAction.SHORT_CLOSE)).thenReturn(price("89", "90", "90", "ASK"));
         service.reverse(signal(), open, PositionSide.LONG, false);
-        assertThat(open.getExitExecutionPrice()).isEqualByComparingTo("90");
+        assertThat(open.getExitReferencePrice()).isEqualByComparingTo("90");
+        assertThat(open.getExitExecutionPrice()).isEqualByComparingTo("90.045");
+        assertThat(open.getExitSlippagePct()).isEqualByComparingTo("0.05");
+    }
+
+    @Test
+    void reversalAppliesSlippageIndependentlyToExitAndReplacementEntry() {
+        LaplacePaperPositionEntity open = openPosition(PositionSide.LONG);
+        when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of(open), List.of());
+        when(prices.quote("BTCUSDT", MarketExecutionAction.LONG_CLOSE)).thenReturn(price("110", "111", "110", "BID"));
+        when(prices.quote("BTCUSDT", MarketExecutionAction.SHORT_OPEN)).thenReturn(price("105", "106", "105", "BID"));
+        LaplacePaperExecutionService.ReversalOutcome outcome = service.reverse(signal(), open, PositionSide.SHORT, true);
+        assertThat(outcome.closed().getExitExecutionPrice()).isEqualByComparingTo("109.945");
+        assertThat(outcome.opened().getEntryExecutionPrice()).isEqualByComparingTo("104.9475");
+        assertThat(outcome.opened().getEntryReferencePrice()).isEqualByComparingTo("105");
+        assertThat(outcome.opened().getEntrySlippagePct()).isEqualByComparingTo("0.05");
+    }
+
+    @Test
+    void stopLossExitAppliesBuySlippageToShortClose() {
+        LaplacePaperPositionEntity open = openPosition(PositionSide.SHORT);
+        when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of(open));
+        when(prices.quote("BTCUSDT", MarketExecutionAction.SHORT_CLOSE)).thenReturn(price("89", "90", "90", "ASK"));
+        service.stop(open, Instant.now().minusSeconds(600), Instant.now(), new BigDecimal("90"), new BigDecimal("89"));
+        assertThat(open.getExitReferencePrice()).isEqualByComparingTo("90");
+        assertThat(open.getExitExecutionPrice()).isEqualByComparingTo("90.045");
+        assertThat(open.getExitSlippagePct()).isEqualByComparingTo("0.05");
+        assertThat(open.getExitFee()).isEqualByComparingTo("0.0072036");
     }
 
     private LaplaceExecutionPriceProvider.Price price(String bid, String ask, String value, String type) {

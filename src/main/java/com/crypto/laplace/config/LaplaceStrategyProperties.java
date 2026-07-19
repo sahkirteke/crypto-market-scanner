@@ -30,7 +30,9 @@ public class LaplaceStrategyProperties {
                 || laplace.notionalUsdt.compareTo(laplace.marginPerPositionUsdt.multiply(BigDecimal.valueOf(laplace.leverage))) != 0
                 || !"MARKET".equals(laplace.orderType)
                 || laplace.takerFeeRate == null
-                || laplace.takerFeeRate.signum() < 0) {
+                || laplace.takerFeeRate.signum() < 0
+                || laplace.marketSlippagePct == null
+                || laplace.marketSlippagePct.signum() < 0) {
             throw new IllegalStateException("Invalid immutable Laplace paper execution configuration");
         }
     }
@@ -53,6 +55,8 @@ public class LaplaceStrategyProperties {
         private int leverage = 20;
         private String orderType = "MARKET";
         private BigDecimal takerFeeRate = new BigDecimal("0.0004");
+        /** Adverse market execution slippage, expressed as a percentage. */
+        private BigDecimal marketSlippagePct = new BigDecimal("0.05");
         /** Price based circuit breaker for paper positions, expressed as a percentage. */
         private BigDecimal stopLossPct = new BigDecimal("3.0");
         private String diagnosticDirectory = "logs/laplace";
