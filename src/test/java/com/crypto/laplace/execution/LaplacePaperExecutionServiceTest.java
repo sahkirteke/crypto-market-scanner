@@ -16,6 +16,7 @@ import com.crypto.laplace.persistence.LaplacePaperPositionEntity;
 import com.crypto.laplace.persistence.LaplacePaperPositionRepository;
 import com.crypto.laplace.persistence.LaplaceTradeEventRepository;
 import com.crypto.laplace.service.StartupMarketUniverseService;
+import com.crypto.laplace.service.LaplaceSymbolBlockService;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -39,7 +40,7 @@ class LaplacePaperExecutionServiceTest {
         when(universe.symbols()).thenReturn(Set.of("BTCUSDT"));
         LaplaceStrategyProperties properties = new LaplaceStrategyProperties();
         service = new LaplacePaperExecutionService(positions, events, prices, new LaplacePnlCalculator(),
-                properties, writer, universe);
+                properties, writer, mock(LaplaceSymbolBlockService.class), universe);
     }
 
     @Test

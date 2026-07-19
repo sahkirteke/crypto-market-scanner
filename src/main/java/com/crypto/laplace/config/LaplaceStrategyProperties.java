@@ -53,6 +53,8 @@ public class LaplaceStrategyProperties {
         private int leverage = 20;
         private String orderType = "MARKET";
         private BigDecimal takerFeeRate = new BigDecimal("0.0004");
+        /** Price based circuit breaker for paper positions, expressed as a percentage. */
+        private BigDecimal stopLossPct = new BigDecimal("3.0");
         private String diagnosticDirectory = "logs/laplace";
         private String tradeDirectory = "logs/laplace-trades";
     }

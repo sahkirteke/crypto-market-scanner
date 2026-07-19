@@ -162,6 +162,7 @@ trading:
     leverage: 20
     order-type: MARKET
     taker-fee-rate: 0.0004
+    stop-loss-pct: 3.0
     cron: "5 0,30 * * * *"
     zone: Europe/Istanbul
     diagnostic-directory: logs/laplace

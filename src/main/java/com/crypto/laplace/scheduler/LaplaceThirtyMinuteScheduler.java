@@ -10,6 +10,7 @@ import com.crypto.laplace.service.LaplaceStartupHistoryService;
 import com.crypto.laplace.service.StartupMarketUniverseService;
 import com.crypto.laplace.service.ThirtyMinuteKlineService;
 import java.time.Instant;
+import java.time.ZonedDateTime;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -48,6 +49,11 @@ public class LaplaceThirtyMinuteScheduler {
             return;
         }
         try {
+            ZonedDateTime now = ZonedDateTime.now(java.time.ZoneId.of("Europe/Istanbul"));
+            if (now.getHour() == 16 && now.getMinute() == 30 && universe.refresh()) {
+                for (String symbol : universe.symbols()) if (!startupHistory.isReady(symbol)) startupHistory.initializeSymbol(symbol);
+                log.info("LAPLACE_UNIVERSE_REFRESH_COMPLETED eligibleSymbols={}", universe.symbols().size());
+            }
             Set<String> symbols = new HashSet<>(startupHistory.readySymbols());
             for (String symbol : managed) {
                 if (!startupHistory.isReady(symbol)) {
