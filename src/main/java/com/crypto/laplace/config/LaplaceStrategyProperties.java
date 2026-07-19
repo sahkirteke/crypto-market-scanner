@@ -23,8 +23,11 @@ public class LaplaceStrategyProperties {
             throw new IllegalStateException("Invalid immutable Laplace phase-one configuration");
         }
         if (laplace.startupClosedCandleCount != 20
-                || laplace.notionalUsdt.compareTo(BigDecimal.TEN) != 0
-                || laplace.leverage != 1
+                || laplace.initialCapitalUsdt.compareTo(new BigDecimal("100")) != 0
+                || laplace.marginPerPositionUsdt.compareTo(BigDecimal.ONE) != 0
+                || laplace.notionalUsdt.compareTo(new BigDecimal("20")) != 0
+                || laplace.leverage != 20
+                || laplace.notionalUsdt.compareTo(laplace.marginPerPositionUsdt.multiply(BigDecimal.valueOf(laplace.leverage))) != 0
                 || !"MARKET".equals(laplace.orderType)
                 || laplace.takerFeeRate == null
                 || laplace.takerFeeRate.signum() < 0) {
@@ -44,8 +47,10 @@ public class LaplaceStrategyProperties {
         private boolean repaint;
         private int klineLimit = 100;
         private int startupClosedCandleCount = 20;
-        private BigDecimal notionalUsdt = BigDecimal.TEN;
-        private int leverage = 1;
+        private BigDecimal initialCapitalUsdt = new BigDecimal("100");
+        private BigDecimal marginPerPositionUsdt = BigDecimal.ONE;
+        private BigDecimal notionalUsdt = new BigDecimal("20");
+        private int leverage = 20;
         private String orderType = "MARKET";
         private BigDecimal takerFeeRate = new BigDecimal("0.0004");
         private String diagnosticDirectory = "logs/laplace";

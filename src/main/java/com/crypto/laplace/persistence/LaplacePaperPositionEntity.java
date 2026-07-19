@@ -17,6 +17,8 @@ public class LaplacePaperPositionEntity {
  @Enumerated(EnumType.STRING) @Column(nullable=false,length=8) private PositionSide side;
  @Enumerated(EnumType.STRING) @Column(nullable=false,length=16) private LaplacePositionStatus status;
  @Column(nullable=false,length=160,unique=true) private String entrySignalId;
+ @Column(length=8) private String entryRawSignal;
+ @Column(nullable=false) private Boolean signalInverted;
  @Column(nullable=false) private Instant entryCandleCloseTime;
  @Column(nullable=false) private Instant entryTime;
  @Column(nullable=false,precision=30,scale=12) private BigDecimal entrySignalClosePrice;
