@@ -33,6 +33,7 @@ public class LaplaceThirtyMinuteScheduler {
     private final LaplaceSignalService signals;
     private final LaplaceDiagnosticLogService diagnostics;
     private final LaplacePaperTradeCoordinator coordinator;
+    private final LaplaceStopLossScheduler stopLossScheduler;
     private final AtomicBoolean running = new AtomicBoolean();
     private final ConcurrentHashMap<String, Instant> lastProcessed = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Integer> postStartupBarCounts = new ConcurrentHashMap<>();
@@ -132,6 +133,7 @@ public class LaplaceThirtyMinuteScheduler {
                 log.debug("LAPLACE_DUPLICATE_CANDLE symbol={} candleCloseTime={}", symbol, close);
                 return;
             }
+            stopLossScheduler.checkThirtyMinuteWindow(symbol, data.getLast());
             int count = postStartupBarCounts.merge(symbol, 1, Integer::sum);
             LaplaceSignalResult result = signals.calculate(symbol, data, count);
             diagnostics.signal(result);

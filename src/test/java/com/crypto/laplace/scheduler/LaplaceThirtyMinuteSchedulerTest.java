@@ -24,7 +24,8 @@ class LaplaceThirtyMinuteSchedulerTest {
         when(histories.isReady("BTCUSDT")).thenReturn(true);
         LaplaceThirtyMinuteScheduler scheduler = new LaplaceThirtyMinuteScheduler(universe, histories,
                 mock(ThirtyMinuteKlineService.class), mock(LaplaceSignalService.class),
-                mock(LaplaceDiagnosticLogService.class), mock(LaplacePaperTradeCoordinator.class));
+                mock(LaplaceDiagnosticLogService.class), mock(LaplacePaperTradeCoordinator.class),
+                mock(LaplaceStopLossScheduler.class));
 
         scheduler.activateInitialUniverse();
         scheduler.activateRefreshedUniverse();
