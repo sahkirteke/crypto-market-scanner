@@ -163,6 +163,7 @@ trading:
     order-type: MARKET
     taker-fee-rate: 0.0004
     cron: "5 0,30 * * * *"
+    stop-loss-cron: "10 */5 * * * *"
     zone: Europe/Istanbul
     diagnostic-directory: logs/laplace
     trade-directory: logs/laplace-trades

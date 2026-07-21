@@ -1,6 +1,7 @@
 package com.crypto.laplace.execution;
 
 import com.crypto.common.enums.PositionSide;
+import com.crypto.domain.model.Kline;
 import com.crypto.laplace.config.LaplaceStrategyProperties;
 import com.crypto.laplace.model.*;
 import com.crypto.laplace.persistence.*;
@@ -12,7 +13,7 @@ import lombok.RequiredArgsConstructor;import lombok.extern.slf4j.Slf4j;import or
 public class LaplacePaperTradeCoordinator {
  private final LaplaceStrategyProperties config;private final LaplacePaperPositionRepository positions;private final LaplacePaperExecutionService execution;private final LaplaceTradeJsonlWriter writer;private final ConcurrentHashMap<String,ReentrantLock> locks=new ConcurrentHashMap<>();private final ConcurrentHashMap<String,LaplaceSignal> rawStates=new ConcurrentHashMap<>();private final AtomicBoolean paperDisabledLogged=new AtomicBoolean(false);
  public Set<String> managementSymbols(){Set<String>x=new HashSet<>();for(var p:positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY,LaplacePositionStatus.OPEN))x.add(p.getSymbol());return Set.copyOf(x);}
- public void closeStopLosses(){execution.closeStopLosses();writer.drain();}
+ public void closeStopLosses(Map<String,Kline> candles){execution.closeStopLosses(candles);writer.drain();}
  public PositionSide mapRawSignalToExecutionSide(LaplaceSignal raw){return switch(raw){case LONG->PositionSide.SHORT;case SHORT->PositionSide.LONG;case NONE->null;};}
  /** Startup history establishes a raw baseline only; it deliberately never executes. */
  public void initializeBaseline(String symbol,LaplaceSignal raw){rawStates.put(symbol,raw);log.info("LAPLACE_STARTUP_RAW_BASELINE_INITIALIZED symbol={} startupRawSignalState={}",symbol,raw);}

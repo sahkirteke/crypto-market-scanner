@@ -7,6 +7,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import com.crypto.common.enums.PositionSide;
+import com.crypto.domain.model.Kline;
 import com.crypto.laplace.config.LaplaceStrategyProperties;
 import com.crypto.laplace.model.LaplacePositionStatus;
 import com.crypto.laplace.model.LaplaceSignal;
@@ -113,9 +114,8 @@ class LaplacePaperExecutionServiceTest {
         LaplacePaperPositionEntity open = openPosition(PositionSide.LONG);
         when(positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN)).thenReturn(List.of(open));
         when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of(open));
-        when(prices.quote("BTCUSDT", MarketExecutionAction.LONG_CLOSE)).thenReturn(price("95", "96", "95", "BID"));
 
-        service.closeStopLosses();
+        service.closeStopLosses(java.util.Map.of("BTCUSDT", candle("95", "96")));
 
         assertThat(open.getStatus()).isEqualTo(LaplacePositionStatus.CLOSED);
         assertThat(open.getExitReason()).isEqualTo("STOP_LOSS");
@@ -127,9 +127,8 @@ class LaplacePaperExecutionServiceTest {
         LaplacePaperPositionEntity open = openPosition(PositionSide.SHORT);
         when(positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN)).thenReturn(List.of(open));
         when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of(open));
-        when(prices.quote("BTCUSDT", MarketExecutionAction.SHORT_CLOSE)).thenReturn(price("104", "105", "105", "ASK"));
 
-        service.closeStopLosses();
+        service.closeStopLosses(java.util.Map.of("BTCUSDT", candle("105", "104")));
 
         assertThat(open.getStatus()).isEqualTo(LaplacePositionStatus.CLOSED);
         assertThat(open.getExitReason()).isEqualTo("STOP_LOSS");
@@ -139,6 +138,13 @@ class LaplacePaperExecutionServiceTest {
     private LaplaceExecutionPriceProvider.Price price(String bid, String ask, String value, String type) {
         return new LaplaceExecutionPriceProvider.Price(new BigDecimal(value), new BigDecimal(bid),
                 new BigDecimal(ask), type, "BOOK_TICKER");
+    }
+
+    private Kline candle(String high, String low) {
+        Instant now = Instant.now();
+        return Kline.builder().symbol("BTCUSDT").interval("5m").openTime(now.minusSeconds(300))
+                .closeTime(now).high(new BigDecimal(high)).low(new BigDecimal(low)).close(new BigDecimal(low))
+                .closed(true).build();
     }
 
     private LaplacePaperPositionEntity openPosition(PositionSide side) {
