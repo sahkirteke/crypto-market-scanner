@@ -68,16 +68,16 @@ class PaperPositionServiceTest {
         assertThat(captor.getValue().getStatus()).isEqualTo(PaperPositionStatus.OPEN);
         assertThat(captor.getValue().getSide()).isEqualTo(PositionSide.SHORT);
         assertThat(captor.getValue().getQuantity()).isEqualByComparingTo(new BigDecimal("19.550342130987"));
-        assertThat(captor.getValue().getInitialStop()).isEqualByComparingTo("5.294025");
-        assertThat(captor.getValue().getCurrentStop()).isEqualByComparingTo("5.294025");
+        assertThat(captor.getValue().getInitialStop()).isEqualByComparingTo("5.19684");
+        assertThat(captor.getValue().getCurrentStop()).isEqualByComparingTo("5.19684");
     }
 
     @Test
-    void longPositionUsesFixedThreePointFivePercentStopLoss() {
+    void longPositionUsesFixedOnePointSixPercentStopLoss() {
         PaperPositionEntity opened = service.openPosition(signal("BTCUSDT", EntryAction.ENTER_LONG, PositionSide.LONG, "100", RiskLevel.LOW));
 
-        assertThat(opened.getInitialStop()).isEqualByComparingTo("96.5");
-        assertThat(opened.getCurrentStop()).isEqualByComparingTo("96.5");
+        assertThat(opened.getInitialStop()).isEqualByComparingTo("98.4");
+        assertThat(opened.getCurrentStop()).isEqualByComparingTo("98.4");
     }
 
 

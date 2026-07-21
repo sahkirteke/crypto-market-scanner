@@ -71,7 +71,7 @@ class ExitEngineServiceIntrabarTest {
         position.setOpenedAt(Instant.parse("2026-06-07T10:03:59Z"));
 
         PaperPositionEntity result = service().evaluatePositionWithCandle(position,
-                candle(Instant.parse("2026-06-07T10:05:00Z"), Instant.parse("2026-06-07T10:09:59Z"), "105", "96.5", "102"), "5m");
+                candle(Instant.parse("2026-06-07T10:05:00Z"), Instant.parse("2026-06-07T10:09:59Z"), "105", "98.4", "102"), "5m");
 
         assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.CLOSED);
         assertThat(result.getExitReason()).isEqualTo("STOP_LOSS");
@@ -93,7 +93,7 @@ class ExitEngineServiceIntrabarTest {
 
     @Test
     void longCandleLowAtStopClosesWithStopLoss() {
-        PaperPositionEntity result = service().evaluatePositionWithCandle(position(PositionSide.LONG), candle("105", "96.5", "102"), "5m");
+        PaperPositionEntity result = service().evaluatePositionWithCandle(position(PositionSide.LONG), candle("105", "98.4", "102"), "5m");
 
         assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.CLOSED);
         assertThat(result.getExitReason()).isEqualTo("STOP_LOSS");
@@ -102,7 +102,7 @@ class ExitEngineServiceIntrabarTest {
 
     @Test
     void shortCandleHighAtStopClosesWithStopLoss() {
-        PaperPositionEntity result = service().evaluatePositionWithCandle(position(PositionSide.SHORT), candle("103.5", "95", "98"), "5m");
+        PaperPositionEntity result = service().evaluatePositionWithCandle(position(PositionSide.SHORT), candle("101.6", "95", "98"), "5m");
 
         assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.CLOSED);
         assertThat(result.getExitReason()).isEqualTo("STOP_LOSS");
@@ -131,7 +131,7 @@ class ExitEngineServiceIntrabarTest {
         PaperPositionEventRepository events = mock(PaperPositionEventRepository.class);
         ExitEngineService service = service(events, mock(JsonlDecisionLogService.class));
 
-        PaperPositionEntity result = service.evaluatePositionWithCandle(position(PositionSide.LONG), candle("102", "96.5", "101"), "5m");
+        PaperPositionEntity result = service.evaluatePositionWithCandle(position(PositionSide.LONG), candle("102", "98.4", "101"), "5m");
 
         assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.CLOSED);
         assertThat(result.getExitReason()).isEqualTo("STOP_LOSS");
@@ -147,7 +147,7 @@ class ExitEngineServiceIntrabarTest {
         PaperPositionEventRepository events = mock(PaperPositionEventRepository.class);
         ExitEngineService service = service(events, mock(JsonlDecisionLogService.class));
 
-        PaperPositionEntity result = service.evaluatePositionWithCandle(position(PositionSide.SHORT), candle("103.5", "98", "99"), "5m");
+        PaperPositionEntity result = service.evaluatePositionWithCandle(position(PositionSide.SHORT), candle("101.6", "98", "99"), "5m");
 
         assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.CLOSED);
         assertThat(result.getExitReason()).isEqualTo("STOP_LOSS");
@@ -344,7 +344,7 @@ class ExitEngineServiceIntrabarTest {
         JsonlDecisionLogService jsonl = mock(JsonlDecisionLogService.class);
         ExitEngineService service = service(null, jsonl);
 
-        service.evaluatePositionWithCandle(position(PositionSide.LONG), candle("105", "96.5", "102"), "5m");
+        service.evaluatePositionWithCandle(position(PositionSide.LONG), candle("105", "98.4", "102"), "5m");
 
         verify(jsonl, atLeastOnce()).logPaper(any());
         verify(jsonl).logPaperTrade(any());
@@ -357,15 +357,15 @@ class ExitEngineServiceIntrabarTest {
         PaperPositionEntity position = position(PositionSide.SHORT);
         position.setEntryPrice(new BigDecimal("107.40"));
         position.setQuantity(new BigDecimal("0.4"));
-        position.setCurrentStop(new BigDecimal("111.159"));
+        position.setCurrentStop(new BigDecimal("109.1184"));
 
-        service.evaluatePositionWithCandle(position, candle("111.159", "106", "107.50"), "5m");
+        service.evaluatePositionWithCandle(position, candle("109.1184", "106", "107.50"), "5m");
 
         ArgumentCaptor<Map> captor = ArgumentCaptor.forClass(Map.class);
         verify(jsonl).logPaperTrade(captor.capture());
         assertThat(captor.getValue()).containsEntry("type", "EXIT");
         assertThat(captor.getValue()).containsEntry("positionId", 1L);
-        assertThat((BigDecimal) captor.getValue().get("realizedPnl")).isEqualByComparingTo("-1.5036");
+        assertThat((BigDecimal) captor.getValue().get("realizedPnl")).isEqualByComparingTo("-0.68736");
         assertThat(captor.getValue()).containsEntry("firstHit", "SL_FIRST");
         assertThat(captor.getValue()).containsEntry("exitTrigger", "SL_5M");
     }
@@ -452,7 +452,7 @@ class ExitEngineServiceIntrabarTest {
                 .notionalUsdt(new BigDecimal("100"))
                 .leverage(3)
                 .openedAt(candleOpen.minusSeconds(60))
-                .currentStop(side == PositionSide.LONG ? new BigDecimal("96.5") : new BigDecimal("103.5"))
+                .currentStop(side == PositionSide.LONG ? new BigDecimal("98.4") : new BigDecimal("101.6"))
                 .tp1(side == PositionSide.LONG ? new BigDecimal("101") : new BigDecimal("99"))
                 .tp2(side == PositionSide.LONG ? new BigDecimal("103") : new BigDecimal("97"))
                 .tp1Hit(false)

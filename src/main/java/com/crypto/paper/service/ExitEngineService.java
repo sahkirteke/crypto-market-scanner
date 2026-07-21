@@ -44,7 +44,7 @@ import org.springframework.stereotype.Service;
 @Slf4j
 public class ExitEngineService {
     private static final BigDecimal ONE_HUNDRED = BigDecimal.valueOf(100);
-    private static final BigDecimal FIXED_STOP_LOSS_PCT = new BigDecimal("0.035");
+    private static final BigDecimal FIXED_STOP_LOSS_PCT = new BigDecimal("0.016");
     private static final int PCT_SCALE = 8;
 
     private final PaperPositionRepository paperPositionRepository;
