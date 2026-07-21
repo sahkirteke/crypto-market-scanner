@@ -37,7 +37,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 @Slf4j
 public class PaperPositionService {
-    private static final BigDecimal FIXED_STOP_LOSS_PCT = new BigDecimal("0.016");
+    private static final BigDecimal FIXED_STOP_LOSS_PCT = new BigDecimal("0.044");
     private static final int QUANTITY_SCALE = 12;
 
     private final PaperPositionRepository paperPositionRepository;

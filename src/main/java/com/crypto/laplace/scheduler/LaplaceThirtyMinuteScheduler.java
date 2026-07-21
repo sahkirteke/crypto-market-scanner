@@ -48,6 +48,7 @@ public class LaplaceThirtyMinuteScheduler {
             return;
         }
         try {
+            coordinator.closeStopLosses();
             Set<String> symbols = new HashSet<>(startupHistory.readySymbols());
             for (String symbol : managed) {
                 if (!startupHistory.isReady(symbol)) {

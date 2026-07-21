@@ -108,6 +108,34 @@ class LaplacePaperExecutionServiceTest {
         assertThat(open.getExitExecutionPrice()).isEqualByComparingTo("90");
     }
 
+    @Test
+    void closesExistingLongPositionAtFixedFourPointFourPercentStopLoss() {
+        LaplacePaperPositionEntity open = openPosition(PositionSide.LONG);
+        when(positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN)).thenReturn(List.of(open));
+        when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of(open));
+        when(prices.quote("BTCUSDT", MarketExecutionAction.LONG_CLOSE)).thenReturn(price("95", "96", "95", "BID"));
+
+        service.closeStopLosses();
+
+        assertThat(open.getStatus()).isEqualTo(LaplacePositionStatus.CLOSED);
+        assertThat(open.getExitReason()).isEqualTo("STOP_LOSS");
+        assertThat(open.getExitExecutionPrice()).isEqualByComparingTo("95.6");
+    }
+
+    @Test
+    void closesExistingShortPositionAtFixedFourPointFourPercentStopLoss() {
+        LaplacePaperPositionEntity open = openPosition(PositionSide.SHORT);
+        when(positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN)).thenReturn(List.of(open));
+        when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of(open));
+        when(prices.quote("BTCUSDT", MarketExecutionAction.SHORT_CLOSE)).thenReturn(price("104", "105", "105", "ASK"));
+
+        service.closeStopLosses();
+
+        assertThat(open.getStatus()).isEqualTo(LaplacePositionStatus.CLOSED);
+        assertThat(open.getExitReason()).isEqualTo("STOP_LOSS");
+        assertThat(open.getExitExecutionPrice()).isEqualByComparingTo("104.4");
+    }
+
     private LaplaceExecutionPriceProvider.Price price(String bid, String ask, String value, String type) {
         return new LaplaceExecutionPriceProvider.Price(new BigDecimal(value), new BigDecimal(bid),
                 new BigDecimal(ask), type, "BOOK_TICKER");
