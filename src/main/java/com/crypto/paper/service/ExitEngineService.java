@@ -44,6 +44,7 @@ import org.springframework.stereotype.Service;
 @Slf4j
 public class ExitEngineService {
     private static final BigDecimal ONE_HUNDRED = BigDecimal.valueOf(100);
+    private static final BigDecimal FIXED_STOP_LOSS_PCT = new BigDecimal("0.035");
     private static final int PCT_SCALE = 8;
 
     private final PaperPositionRepository paperPositionRepository;
@@ -141,7 +142,7 @@ public class ExitEngineService {
     }
 
     public PaperPositionEntity evaluatePositionWithCandle(PaperPositionEntity position, KlineCandle candle, String interval) {
-        if (position == null || candle == null || candle.getCloseTime() == null) {
+        if (position == null || !activeStatuses().contains(position.getStatus()) || candle == null || candle.getCloseTime() == null) {
             return position;
         }
         if (!hasRequiredExitCandle(candle.getHigh(), candle.getLow(), candle.getClose())) {
@@ -167,7 +168,7 @@ public class ExitEngineService {
         updateUnrealized(position, candle.getClose());
 
         IntrabarEventContext candleStartContext = new IntrabarEventContext(position, candle, effectiveInterval);
-        BigDecimal stopBefore = position.getCurrentStop();
+        BigDecimal stopBefore = fixedStopLossPrice(position);
         boolean tp1HitBefore = Boolean.TRUE.equals(position.getTp1Hit());
         boolean tp2HitBefore = Boolean.TRUE.equals(position.getTp2Hit());
         boolean trailingActiveBefore = Boolean.TRUE.equals(position.getTrailingActive());
@@ -179,13 +180,17 @@ public class ExitEngineService {
                 log.info("PAPER_EXIT_CONSERVATIVE_STOP_FIRST id={} symbol={} interval={}",
                         position.getId(), position.getSymbol(), effectiveInterval);
             }
-            PaperExitReason reason = canUseTrailingStop(position, tp1HitBefore, trailingActiveBefore, candle.getCloseTime())
-                    ? PaperExitReason.TRAILING_STOP
-                    : PaperExitReason.STOP_LOSS;
-            closeRemaining(position, defaultBigDecimal(stopBefore, candle.getClose()), reason, candle.getCloseTime(), candleStartContext);
+            closeRemaining(position, stopBefore, PaperExitReason.STOP_LOSS, candle.getCloseTime(), candleStartContext);
             position.setLastExitCandleCloseTime(candle.getCloseTime());
             log.info("PAPER_POSITION_EVALUATED id={} symbol={} interval={} candleHigh={} candleLow={} status={} remainingPct={}",
                     position.getId(), position.getSymbol(), effectiveInterval, candle.getHigh(), candle.getLow(), position.getStatus(), position.getRemainingPositionPct());
+            return position;
+        }
+
+        if (canUseTrailingStop(position, tp1HitBefore, trailingActiveBefore, candle.getCloseTime())
+                && stopHit(position, candle.getHigh(), candle.getLow())) {
+            closeRemaining(position, position.getCurrentStop(), PaperExitReason.TRAILING_STOP, candle.getCloseTime(), candleStartContext);
+            position.setLastExitCandleCloseTime(candle.getCloseTime());
             return position;
         }
 
@@ -226,6 +231,9 @@ public class ExitEngineService {
 
     public PaperPositionEntity evaluatePositionOnCandle(PaperPositionEntity position, Instant candleOpenTime, Instant candleCloseTime,
             BigDecimal candleHigh, BigDecimal candleLow, BigDecimal candleClose, BigDecimal atr14) {
+        if (position == null || !activeStatuses().contains(position.getStatus())) {
+            return position;
+        }
         if (!hasRequiredExitCandle(candleHigh, candleLow, candleClose)) {
             log.warn("PAPER_EXIT_CANDLE_DATA_NOT_READY id={} symbol={} interval={} candleCloseTime={}",
                     position == null ? null : position.getId(), position == null ? null : position.getSymbol(), "1h", IstanbulTimeUtil.format(candleCloseTime));
@@ -250,6 +258,10 @@ public class ExitEngineService {
                 .build(), "1h");
 
         if (position.getCurrentStop() == null && position.getTp1() == null && position.getTp2() == null) {
+            if (fixedStopLossHit(position, candleHigh, candleLow)) {
+                closeRemaining(position, fixedStopLossPrice(position), PaperExitReason.STOP_LOSS, candleCloseTime, oneHourContext);
+                return position;
+            }
             PaperExitReason legacy = resolveLegacyExitReason(position, calculateUnrealizedPnlPct(position, candleClose));
             if (legacy != null) {
                 closeRemaining(position, candleClose, legacy, candleCloseTime, oneHourContext);
@@ -257,9 +269,13 @@ public class ExitEngineService {
             return position;
         }
 
-        if (stopHit(position, candleHigh, candleLow)) {
-            PaperExitReason reason = canUseTrailingStop(position, Boolean.TRUE.equals(position.getTp1Hit()), Boolean.TRUE.equals(position.getTrailingActive()), candleCloseTime) ? PaperExitReason.TRAILING_STOP : PaperExitReason.STOP_LOSS;
-            closeRemaining(position, defaultBigDecimal(position.getCurrentStop(), candleClose), reason, candleCloseTime, oneHourContext);
+        if (fixedStopLossHit(position, candleHigh, candleLow)) {
+            closeRemaining(position, fixedStopLossPrice(position), PaperExitReason.STOP_LOSS, candleCloseTime, oneHourContext);
+            return position;
+        }
+        if (canUseTrailingStop(position, Boolean.TRUE.equals(position.getTp1Hit()), Boolean.TRUE.equals(position.getTrailingActive()), candleCloseTime)
+                && stopHit(position, candleHigh, candleLow)) {
+            closeRemaining(position, position.getCurrentStop(), PaperExitReason.TRAILING_STOP, candleCloseTime, oneHourContext);
             return position;
         }
         if (tp1Hit(position, candleHigh, candleLow)) {
@@ -310,9 +326,7 @@ public class ExitEngineService {
 
 
     private PaperExitReason resolveLegacyExitReason(PaperPositionEntity position, BigDecimal pnlPct) {
-        BigDecimal stopLossPct = defaultBigDecimal(position.getStopLossPct(), paperExitConfig().getStopLossPct());
         BigDecimal takeProfitPct = defaultBigDecimal(position.getTakeProfitPct(), paperExitConfig().getTakeProfitPct());
-        if (pnlPct.compareTo(stopLossPct.negate()) <= 0) return PaperExitReason.STOP_LOSS;
         if (pnlPct.compareTo(takeProfitPct) >= 0) return PaperExitReason.TAKE_PROFIT;
         if (timeStop(position) && shouldCloseTimeStop(position, position.getCurrentPrice())) return PaperExitReason.TIME_STOP;
         return null;
@@ -394,6 +408,19 @@ public class ExitEngineService {
     private boolean stopHit(PaperPositionEntity p, BigDecimal high, BigDecimal low, BigDecimal stop) {
         if (stop == null) return false;
         return p.getSide() == PositionSide.SHORT ? ge(high, stop) : le(low, stop);
+    }
+
+    private boolean fixedStopLossHit(PaperPositionEntity p, BigDecimal high, BigDecimal low) {
+        return stopHit(p, high, low, fixedStopLossPrice(p));
+    }
+
+    private BigDecimal fixedStopLossPrice(PaperPositionEntity p) {
+        if (p == null || p.getEntryPrice() == null) {
+            return null;
+        }
+        return p.getSide() == PositionSide.SHORT
+                ? p.getEntryPrice().multiply(BigDecimal.ONE.add(FIXED_STOP_LOSS_PCT))
+                : p.getEntryPrice().multiply(BigDecimal.ONE.subtract(FIXED_STOP_LOSS_PCT));
     }
 
     private boolean tp1Hit(PaperPositionEntity p, BigDecimal high, BigDecimal low) {

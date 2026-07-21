@@ -37,6 +37,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 @Slf4j
 public class PaperPositionService {
+    private static final BigDecimal FIXED_STOP_LOSS_PCT = new BigDecimal("0.035");
     private static final int QUANTITY_SCALE = 12;
 
     private final PaperPositionRepository paperPositionRepository;
@@ -269,11 +270,17 @@ public class PaperPositionService {
         BigDecimal min = entryPrice.multiply(config.getMinStopDistancePct());
         BigDecimal max = entryPrice.multiply(config.getMaxStopDistancePct());
         BigDecimal distance = raw.max(min).min(max);
-        BigDecimal initialStop = side == PositionSide.SHORT ? entryPrice.add(distance) : entryPrice.subtract(distance);
-        BigDecimal riskPerUnit = side == PositionSide.SHORT ? initialStop.subtract(entryPrice) : entryPrice.subtract(initialStop);
+        BigDecimal initialStop = fixedStopLossPrice(side, entryPrice);
+        BigDecimal riskPerUnit = distance;
         BigDecimal tp1 = side == PositionSide.SHORT ? entryPrice.subtract(riskPerUnit.multiply(config.getTp1RMultiple())) : entryPrice.add(riskPerUnit.multiply(config.getTp1RMultiple()));
         BigDecimal tp2 = side == PositionSide.SHORT ? entryPrice.subtract(riskPerUnit.multiply(config.getTp2RMultiple())) : entryPrice.add(riskPerUnit.multiply(config.getTp2RMultiple()));
         return new RiskLevels(initialStop, riskPerUnit, tp1, tp2);
+    }
+
+    private BigDecimal fixedStopLossPrice(PositionSide side, BigDecimal entryPrice) {
+        return side == PositionSide.SHORT
+                ? entryPrice.multiply(BigDecimal.ONE.add(FIXED_STOP_LOSS_PCT))
+                : entryPrice.multiply(BigDecimal.ONE.subtract(FIXED_STOP_LOSS_PCT));
     }
 
     public record RiskLevels(BigDecimal initialStop, BigDecimal riskPerUnit, BigDecimal tp1, BigDecimal tp2) {}

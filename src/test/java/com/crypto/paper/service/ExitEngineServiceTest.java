@@ -46,10 +46,11 @@ class ExitEngineServiceTest {
     void triggersLongStopLoss() {
         ExitEngineService service = service(mock(PaperPositionRepository.class), mock(BinanceFuturesClient.class));
 
-        PaperPositionEntity result = service.evaluatePosition(position(PositionSide.LONG), new BigDecimal("99.3"));
+        PaperPositionEntity result = service.evaluatePosition(position(PositionSide.LONG), new BigDecimal("96.5"));
 
         assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.CLOSED);
         assertThat(result.getExitReason()).isEqualTo("STOP_LOSS");
+        assertThat(result.getExitPrice()).isEqualByComparingTo("96.5");
     }
 
     @Test
@@ -66,10 +67,11 @@ class ExitEngineServiceTest {
     void triggersShortStopLoss() {
         ExitEngineService service = service(mock(PaperPositionRepository.class), mock(BinanceFuturesClient.class));
 
-        PaperPositionEntity result = service.evaluatePosition(position(PositionSide.SHORT), new BigDecimal("100.7"));
+        PaperPositionEntity result = service.evaluatePosition(position(PositionSide.SHORT), new BigDecimal("103.5"));
 
         assertThat(result.getStatus()).isEqualTo(PaperPositionStatus.CLOSED);
         assertThat(result.getExitReason()).isEqualTo("STOP_LOSS");
+        assertThat(result.getExitPrice()).isEqualByComparingTo("103.5");
     }
 
     @Test
