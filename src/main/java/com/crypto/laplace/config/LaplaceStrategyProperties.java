@@ -24,8 +24,8 @@ public class LaplaceStrategyProperties {
         }
         if (laplace.startupClosedCandleCount != 20
                 || laplace.initialCapitalUsdt.compareTo(new BigDecimal("100")) != 0
-                || laplace.marginPerPositionUsdt.compareTo(BigDecimal.ONE) != 0
-                || laplace.notionalUsdt.compareTo(new BigDecimal("20")) != 0
+                || laplace.marginPerPositionUsdt.compareTo(new BigDecimal("5")) != 0
+                || laplace.notionalUsdt.compareTo(new BigDecimal("100")) != 0
                 || laplace.leverage != 20
                 || laplace.notionalUsdt.compareTo(laplace.marginPerPositionUsdt.multiply(BigDecimal.valueOf(laplace.leverage))) != 0
                 || !"MARKET".equals(laplace.orderType)
@@ -48,8 +48,8 @@ public class LaplaceStrategyProperties {
         private int klineLimit = 100;
         private int startupClosedCandleCount = 20;
         private BigDecimal initialCapitalUsdt = new BigDecimal("100");
-        private BigDecimal marginPerPositionUsdt = BigDecimal.ONE;
-        private BigDecimal notionalUsdt = new BigDecimal("20");
+        private BigDecimal marginPerPositionUsdt = new BigDecimal("5");
+        private BigDecimal notionalUsdt = new BigDecimal("100");
         private int leverage = 20;
         private String orderType = "MARKET";
         private BigDecimal takerFeeRate = new BigDecimal("0.0004");

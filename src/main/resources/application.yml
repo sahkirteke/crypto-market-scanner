@@ -157,8 +157,8 @@ trading:
     kline-limit: 100
     startup-closed-candle-count: 20
     initial-capital-usdt: 100
-    margin-per-position-usdt: 1
-    notional-usdt: 20
+    margin-per-position-usdt: 5
+    notional-usdt: 100
     leverage: 20
     order-type: MARKET
     taker-fee-rate: 0.0004

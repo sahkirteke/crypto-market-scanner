@@ -44,43 +44,43 @@ class LaplacePaperExecutionServiceTest {
     }
 
     @Test
-    void everyLongEntryUsesAskAndFixedTwentyUsdtTwentyXSize() {
+    void everyLongEntryUsesAskAndFixedOneHundredUsdtTwentyXSize() {
         when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of());
         when(prices.quote("BTCUSDT", MarketExecutionAction.LONG_OPEN)).thenReturn(price("99", "100", "100", "ASK"));
         LaplacePaperPositionEntity opened = service.open(signal(), PositionSide.LONG, null, "FLAT");
         assertThat(opened.getEntryExecutionPrice()).isEqualByComparingTo("100");
         assertThat(opened.getEntrySignalClosePrice()).isEqualByComparingTo("77");
-        assertThat(opened.getNotional()).isEqualByComparingTo("20");
-        assertThat(opened.getMargin()).isEqualByComparingTo("1");
+        assertThat(opened.getNotional()).isEqualByComparingTo("100");
+        assertThat(opened.getMargin()).isEqualByComparingTo("5");
         assertThat(opened.getLeverage()).isEqualTo(20);
-        assertThat(opened.getQuantity()).isEqualByComparingTo("0.2");
-        assertThat(opened.getEntryFee()).isEqualByComparingTo("0.008");
+        assertThat(opened.getQuantity()).isEqualByComparingTo("1");
+        assertThat(opened.getEntryFee()).isEqualByComparingTo("0.040");
     }
 
     @Test
-    void everyShortEntryUsesBidAndFixedTwentyUsdtTwentyXSize() {
+    void everyShortEntryUsesBidAndFixedOneHundredUsdtTwentyXSize() {
         when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of());
         when(prices.quote("BTCUSDT", MarketExecutionAction.SHORT_OPEN)).thenReturn(price("50", "51", "50", "BID"));
         LaplacePaperPositionEntity opened = service.open(signal(), PositionSide.SHORT, null, "FLAT");
         assertThat(opened.getEntryExecutionPrice()).isEqualByComparingTo("50");
-        assertThat(opened.getNotional()).isEqualByComparingTo("20");
-        assertThat(opened.getMargin()).isEqualByComparingTo("1");
+        assertThat(opened.getNotional()).isEqualByComparingTo("100");
+        assertThat(opened.getMargin()).isEqualByComparingTo("5");
         assertThat(opened.getLeverage()).isEqualTo(20);
-        assertThat(opened.getQuantity()).isEqualByComparingTo("0.4");
+        assertThat(opened.getQuantity()).isEqualByComparingTo("2");
     }
 
     @Test
     void rejectsEntryWhenOpenMarginsAndUnrealizedEntryFeesExhaustAvailableBalance() {
         when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of());
         List<LaplacePaperPositionEntity> fiftyOpen = java.util.stream.IntStream.range(0, 50)
-                .mapToObj(i -> LaplacePaperPositionEntity.builder().margin(BigDecimal.ONE)
-                        .entryFee(new BigDecimal("0.008")).build()).toList();
+                .mapToObj(i -> LaplacePaperPositionEntity.builder().margin(new BigDecimal("5"))
+                        .entryFee(new BigDecimal("0.040")).build()).toList();
         when(positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.CLOSED)).thenReturn(List.of());
         when(positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN)).thenReturn(fiftyOpen);
-        assertThat(service.availableBalance()).isEqualByComparingTo("49.600");
+        assertThat(service.availableBalance()).isEqualByComparingTo("-152.000");
         List<LaplacePaperPositionEntity> ninetyNineOpen = java.util.stream.IntStream.range(0, 99)
-                .mapToObj(i -> LaplacePaperPositionEntity.builder().margin(BigDecimal.ONE)
-                        .entryFee(new BigDecimal("0.008")).build()).toList();
+                .mapToObj(i -> LaplacePaperPositionEntity.builder().margin(new BigDecimal("5"))
+                        .entryFee(new BigDecimal("0.040")).build()).toList();
         when(positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN)).thenReturn(ninetyNineOpen);
         when(prices.quote("BTCUSDT", MarketExecutionAction.LONG_OPEN)).thenReturn(price("99", "100", "100", "ASK"));
         assertThatThrownBy(() -> service.open(signal(), PositionSide.LONG, null, "FLAT"))
@@ -94,9 +94,9 @@ class LaplacePaperExecutionServiceTest {
         when(prices.quote("BTCUSDT", MarketExecutionAction.LONG_CLOSE)).thenReturn(price("110", "111", "110", "BID"));
         service.reverse(signal(), open, PositionSide.SHORT, false);
         assertThat(open.getExitExecutionPrice()).isEqualByComparingTo("110");
-        assertThat(open.getExitFee()).isEqualByComparingTo("0.0088");
-        assertThat(open.getGrossPnl()).isEqualByComparingTo("2");
-        assertThat(open.getNetPnl()).isEqualByComparingTo("1.9832");
+        assertThat(open.getExitFee()).isEqualByComparingTo("0.044");
+        assertThat(open.getGrossPnl()).isEqualByComparingTo("10");
+        assertThat(open.getNetPnl()).isEqualByComparingTo("9.916");
         verify(prices).quote("BTCUSDT", MarketExecutionAction.LONG_CLOSE);
     }
 
@@ -152,9 +152,9 @@ class LaplacePaperExecutionServiceTest {
                 .strategyVersion("1.0").symbol("BTCUSDT").side(side).status(LaplacePositionStatus.OPEN)
                 .entrySignalId("entry").entryCandleCloseTime(Instant.now().minusSeconds(3600))
                 .entryTime(Instant.now().minusSeconds(1800)).entrySignalClosePrice(BigDecimal.valueOf(77))
-                .entryExecutionPrice(BigDecimal.valueOf(100)).margin(BigDecimal.ONE)
-                .quantity(new BigDecimal("0.2")).notional(new BigDecimal("20")).leverage(20)
-                .entryFeeRate(new BigDecimal("0.0004")).entryFee(new BigDecimal("0.008")).build();
+                .entryExecutionPrice(BigDecimal.valueOf(100)).margin(new BigDecimal("5"))
+                .quantity(BigDecimal.ONE).notional(new BigDecimal("100")).leverage(20)
+                .entryFeeRate(new BigDecimal("0.0004")).entryFee(new BigDecimal("0.040")).build();
     }
 
     private LaplaceSignalResult signal() {
