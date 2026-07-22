@@ -23,7 +23,7 @@ class ThirtyMinuteKlineServiceTest {
         List<Kline> result = new ThirtyMinuteKlineService(client, new LaplaceStrategyProperties())
                 .loadStartupClosed("BTCUSDT");
         assertThat(result).hasSize(20);
-        assertThat(result.getFirst().getOpenTime()).isEqualTo(response.get(1).getOpenTime());
+        assertThat(result.get(0).getOpenTime()).isEqualTo(response.get(1).getOpenTime());
         assertThat(result.getLast().getClosed()).isTrue();
     }
 
