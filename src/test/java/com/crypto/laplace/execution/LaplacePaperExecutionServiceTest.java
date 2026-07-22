@@ -135,6 +135,41 @@ class LaplacePaperExecutionServiceTest {
         assertThat(open.getExitExecutionPrice()).isEqualByComparingTo("104.4");
     }
 
+    @Test
+    void longTp1AndTp2OnSameCandleCloseTwentyFiveThenHalfOfRemaining() {
+        LaplacePaperPositionEntity open = openPosition(PositionSide.LONG);
+        open.setInitialQuantity(new BigDecimal("100"));
+        open.setRemainingQuantity(new BigDecimal("100"));
+        open.setQuantity(new BigDecimal("100"));
+        when(positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN)).thenReturn(List.of(open));
+        when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of(open));
+
+        service.executeTakeProfits(java.util.Map.of("BTCUSDT", candle("111", "100")));
+
+        assertThat(open.getTp1Executed()).isTrue();
+        assertThat(open.getTp2Executed()).isTrue();
+        assertThat(open.getTp1ClosedQuantity()).isEqualByComparingTo("25");
+        assertThat(open.getTp2ClosedQuantity()).isEqualByComparingTo("37.5");
+        assertThat(open.getRemainingQuantity()).isEqualByComparingTo("37.5");
+    }
+
+    @Test
+    void shortTp1AndTp2UseCandleLowAndAreIdempotent() {
+        LaplacePaperPositionEntity open = openPosition(PositionSide.SHORT);
+        open.setInitialQuantity(new BigDecimal("100"));
+        open.setRemainingQuantity(new BigDecimal("100"));
+        open.setQuantity(new BigDecimal("100"));
+        when(positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN)).thenReturn(List.of(open));
+        when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of(open));
+
+        service.executeTakeProfits(java.util.Map.of("BTCUSDT", candle("100", "89")));
+        service.executeTakeProfits(java.util.Map.of("BTCUSDT", candle("100", "89")));
+
+        assertThat(open.getTp1ClosedQuantity()).isEqualByComparingTo("25");
+        assertThat(open.getTp2ClosedQuantity()).isEqualByComparingTo("37.5");
+        assertThat(open.getRemainingQuantity()).isEqualByComparingTo("37.5");
+    }
+
     private LaplaceExecutionPriceProvider.Price price(String bid, String ask, String value, String type) {
         return new LaplaceExecutionPriceProvider.Price(new BigDecimal(value), new BigDecimal(bid),
                 new BigDecimal(ask), type, "BOOK_TICKER");

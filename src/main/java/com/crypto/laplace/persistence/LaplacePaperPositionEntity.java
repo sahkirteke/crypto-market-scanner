@@ -25,6 +25,14 @@ public class LaplacePaperPositionEntity {
  @Column(nullable=false,precision=30,scale=12) private BigDecimal entryExecutionPrice;
  @Column(nullable=false,precision=30,scale=12) private BigDecimal margin;
  @Column(nullable=false,precision=30,scale=12) private BigDecimal quantity;
+ @Column(precision=30,scale=12) private BigDecimal initialQuantity;
+ @Column(precision=30,scale=12) private BigDecimal remainingQuantity;
+ private Boolean tp1Executed;
+ private Boolean tp2Executed;
+ @Column(precision=30,scale=12) private BigDecimal tp1ClosedQuantity;
+ @Column(precision=30,scale=12) private BigDecimal tp2ClosedQuantity;
+ @Column(precision=30,scale=12) private BigDecimal tp1RealizedPnl;
+ @Column(precision=30,scale=12) private BigDecimal tp2RealizedPnl;
  @Column(nullable=false,precision=30,scale=8) private BigDecimal notional;
  @Column(nullable=false) private Integer leverage;
  @Column(nullable=false,precision=20,scale=10) private BigDecimal entryFeeRate;

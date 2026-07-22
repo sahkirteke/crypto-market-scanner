@@ -16,6 +16,7 @@ public class LaplacePaperTradeCoordinator {
  @Autowired(required=false) private LaplaceHighRiskLongFilter highRiskLongFilter;
  public Set<String> managementSymbols(){Set<String>x=new HashSet<>();for(var p:positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY,LaplacePositionStatus.OPEN))x.add(p.getSymbol());return Set.copyOf(x);}
  public void closeStopLosses(Map<String,Kline> candles){execution.closeStopLosses(candles);writer.drain();}
+ public void executeTakeProfits(Map<String,Kline> candles){execution.executeTakeProfits(candles);writer.drain();}
  public PositionSide mapRawSignalToExecutionSide(LaplaceSignal raw){return switch(raw){case LONG->PositionSide.SHORT;case SHORT->PositionSide.LONG;case NONE->null;};}
  /** Startup history establishes a raw baseline only; it deliberately never executes. */
  public void initializeBaseline(String symbol,LaplaceSignal raw){rawStates.put(symbol,raw);log.info("LAPLACE_STARTUP_RAW_BASELINE_INITIALIZED symbol={} startupRawSignalState={}",symbol,raw);}
