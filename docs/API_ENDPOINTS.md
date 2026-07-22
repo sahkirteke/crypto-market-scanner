@@ -27,6 +27,8 @@
 - `GET /api/analysis/summary`
 - `GET /api/analysis/last?limit=100`
 - `GET /api/analysis/range?start=...&end=...`
+- `GET /api/analysis/laplace/losses` — Net zarardaki veya `STOP_LOSS` ile kapanan Laplace işlemleri.
+- `GET /api/analysis/laplace/profits` — Net kârdaki Laplace işlemleri.
 
 ## System
 

@@ -2,6 +2,7 @@ package com.crypto.laplace.api;
 
 import com.crypto.api.dto.LaplaceAnalysisSummaryResponse;
 import com.crypto.api.dto.LaplaceOpenPaperPositionResponse;
+import com.crypto.api.dto.LaplaceTradePnlResponse;
 import com.crypto.common.enums.PositionSide;
 import com.crypto.laplace.config.LaplaceStrategyProperties;
 import com.crypto.laplace.execution.LaplacePaperExecutionService;
@@ -65,6 +66,29 @@ public class LaplacePaperApiService implements ApplicationRunner {
             List<LaplacePaperPositionEntity> open = repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN);
             List<LaplacePaperPositionEntity> closed = repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.CLOSED);
             return buildSummary(open, closed);
+        } catch (DataAccessException exception) {
+            throw unavailable(exception);
+        }
+    }
+
+    public List<LaplaceTradePnlResponse> findLossesOrStopLosses() {
+        return findClosedTrades(position -> money(position.getNetPnl()).compareTo(BigDecimal.ZERO) < 0
+                || "STOP_LOSS".equals(position.getExitReason()));
+    }
+
+    public List<LaplaceTradePnlResponse> findProfits() {
+        return findClosedTrades(position -> money(position.getNetPnl()).compareTo(BigDecimal.ZERO) > 0);
+    }
+
+    private List<LaplaceTradePnlResponse> findClosedTrades(java.util.function.Predicate<LaplacePaperPositionEntity> filter) {
+        try {
+            return repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.CLOSED)
+                    .stream()
+                    .filter(filter)
+                    .sorted(Comparator.comparing(LaplacePaperPositionEntity::getEntryTime, Comparator.nullsLast(Comparator.reverseOrder())))
+                    .map(position -> new LaplaceTradePnlResponse(position.getSymbol(), position.getEntryTime(),
+                            position.getEntryExecutionPrice(), position.getSide(), money(position.getNetPnl()), position.getExitReason()))
+                    .toList();
         } catch (DataAccessException exception) {
             throw unavailable(exception);
         }

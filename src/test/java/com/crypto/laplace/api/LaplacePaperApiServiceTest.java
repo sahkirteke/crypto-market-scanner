@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 
 import com.crypto.api.dto.LaplaceAnalysisSummaryResponse;
 import com.crypto.api.dto.LaplaceOpenPaperPositionResponse;
+import com.crypto.api.dto.LaplaceTradePnlResponse;
 import com.crypto.common.enums.PositionSide;
 import com.crypto.laplace.config.LaplaceStrategyProperties;
 import com.crypto.laplace.execution.LaplacePaperExecutionService;
@@ -105,6 +106,41 @@ class LaplacePaperApiServiceTest {
         assertThat(summary.shortTradeCount()).isEqualTo(1);
         assertThat(summary.longTradeCount()).isZero();
         assertThat(summary.openPositionCount()).isEqualTo(1);
+    }
+
+    @Test
+    void lossesEndpointDataIncludesLosingAndStopLossTrades() {
+        LaplacePaperPositionEntity losing = closed("loss", "BTCUSDT", PositionSide.LONG, "-1", "0.04", "0.04", "-1.08", "-1.08");
+        LaplacePaperPositionEntity stopLoss = closed("stop", "ETHUSDT", PositionSide.SHORT, "1", "0.04", "0.04", "0.92", "0.92");
+        stopLoss.setExitReason("STOP_LOSS");
+        LaplacePaperPositionEntity profit = closed("profit", "SOLUSDT", PositionSide.LONG, "1", "0.04", "0.04", "0.92", "0.92");
+        when(repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.CLOSED))
+                .thenReturn(List.of(losing, stopLoss, profit));
+
+        List<LaplaceTradePnlResponse> response = service.findLossesOrStopLosses();
+
+        assertThat(response).extracting(LaplaceTradePnlResponse::symbol).containsExactlyInAnyOrder("BTCUSDT", "ETHUSDT");
+        assertThat(response).allSatisfy(trade -> {
+            assertThat(trade.entryPrice()).isEqualByComparingTo("100");
+            assertThat(trade.entryTime()).isNotNull();
+            assertThat(trade.effectiveExecutionSide()).isNotNull();
+        });
+    }
+
+    @Test
+    void profitsEndpointDataIncludesOnlyPositiveNetPnlTrades() {
+        LaplacePaperPositionEntity profit = closed("profit", "SOLUSDT", PositionSide.LONG, "1", "0.04", "0.04", "0.92", "0.92");
+        LaplacePaperPositionEntity loss = closed("loss", "BTCUSDT", PositionSide.SHORT, "-1", "0.04", "0.04", "-1.08", "-1.08");
+        when(repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.CLOSED))
+                .thenReturn(List.of(profit, loss));
+
+        List<LaplaceTradePnlResponse> response = service.findProfits();
+
+        assertThat(response).singleElement().satisfies(trade -> {
+            assertThat(trade.symbol()).isEqualTo("SOLUSDT");
+            assertThat(trade.pnlAmount()).isEqualByComparingTo("0.92");
+            assertThat(trade.effectiveExecutionSide()).isEqualTo(PositionSide.LONG);
+        });
     }
 
     private LaplacePaperPositionEntity open(String id, String symbol, PositionSide side, String entryTime) {

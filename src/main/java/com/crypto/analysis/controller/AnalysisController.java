@@ -6,6 +6,8 @@ import com.crypto.analysis.service.ForwardMetricsService;
 import com.crypto.api.exception.BadRequestException;
 import com.crypto.common.time.IstanbulTimeUtil;
 import com.crypto.laplace.api.LaplacePaperApiService;
+import com.crypto.api.dto.LaplaceTradePnlResponse;
+import java.util.List;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import lombok.RequiredArgsConstructor;
@@ -63,6 +65,16 @@ public class AnalysisController {
     public StrategyAnalysisResponse getLast(@RequestParam(defaultValue = "100") int limit) {
         log.info("ANALYSIS_LAST_REQUEST limit={}", limit);
         return resultAnalyzerService.analyzeLastClosedTrades(limit);
+    }
+
+    @GetMapping("/laplace/losses")
+    public List<LaplaceTradePnlResponse> getLaplaceLossesOrStopLosses() {
+        return laplacePaperApiService.findLossesOrStopLosses();
+    }
+
+    @GetMapping("/laplace/profits")
+    public List<LaplaceTradePnlResponse> getLaplaceProfits() {
+        return laplacePaperApiService.findProfits();
     }
 
     @GetMapping("/range")
