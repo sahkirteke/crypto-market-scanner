@@ -166,7 +166,7 @@ trading:
     zone: UTC
     pool-cron: "5 0 10 * * *"
     pool-zone: America/New_York
-    stop-cron: "3 0/5 * * * *"
+    stop-cron: "3 5,10,15,20,25,35,40,45,50,55 * * * *"
     stop-zone: UTC
     diagnostic-directory: logs/laplace
     trade-directory: logs/laplace-trades

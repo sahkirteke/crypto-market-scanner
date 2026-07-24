@@ -10,6 +10,7 @@ import com.crypto.laplace.service.LaplaceStartupHistoryService;
 import com.crypto.laplace.service.StartupMarketUniverseService;
 import com.crypto.laplace.pool.LaplaceCoinPoolService;
 import com.crypto.laplace.service.ThirtyMinuteKlineService;
+import com.crypto.laplace.stop.LaplaceFiveMinuteStopService;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
@@ -34,19 +35,21 @@ public class LaplaceThirtyMinuteScheduler {
     private final LaplaceSignalService signals;
     private final LaplaceDiagnosticLogService diagnostics;
     private final LaplacePaperTradeCoordinator coordinator;
+    private final LaplaceFiveMinuteStopService stopService;
     private final AtomicBoolean running = new AtomicBoolean();
     private final ConcurrentHashMap<String, Instant> lastProcessed = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Integer> postStartupBarCounts = new ConcurrentHashMap<>();
 
     @Scheduled(cron = "${trading.laplace.cron}", zone = "${trading.laplace.zone}")
     public void scan() {
-        Set<String> managed = coordinator.managementSymbols();
-        if (coinPool.symbolsToProcess().isEmpty() && managed.isEmpty()) { log.info("LAPLACE_SCAN_SKIPPED coinPoolEmpty=true"); return; }
         if (!running.compareAndSet(false, true)) {
             log.info("LAPLACE_SCAN_SKIPPED concurrentRun=true");
             return;
         }
         try {
+            stopService.checkOpenPositions();
+            Set<String> managed = coordinator.managementSymbols();
+            if (coinPool.symbolsToProcess().isEmpty() && managed.isEmpty()) { log.info("LAPLACE_SCAN_SKIPPED coinPoolEmpty=true"); return; }
             Set<String> symbols = new HashSet<>(coinPool.symbolsToProcess());
             for (String symbol : new HashSet<>(symbols)) { if (!startupHistory.isReady(symbol)) startupHistory.initializeSymbol(symbol); }
             symbols.retainAll(startupHistory.readySymbols());
