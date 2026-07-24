@@ -8,6 +8,7 @@ import com.crypto.laplace.service.LaplaceDiagnosticLogService;
 import com.crypto.laplace.service.LaplaceSignalService;
 import com.crypto.laplace.service.LaplaceStartupHistoryService;
 import com.crypto.laplace.service.StartupMarketUniverseService;
+import com.crypto.laplace.pool.LaplaceCoinPoolService;
 import com.crypto.laplace.service.ThirtyMinuteKlineService;
 import java.time.Instant;
 import java.util.HashSet;
@@ -27,6 +28,7 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(prefix = "trading.laplace", name = "enabled", havingValue = "true")
 public class LaplaceThirtyMinuteScheduler {
     private final StartupMarketUniverseService universe;
+    private final LaplaceCoinPoolService coinPool;
     private final LaplaceStartupHistoryService startupHistory;
     private final ThirtyMinuteKlineService klines;
     private final LaplaceSignalService signals;
@@ -39,16 +41,15 @@ public class LaplaceThirtyMinuteScheduler {
     @Scheduled(cron = "${trading.laplace.cron}", zone = "${trading.laplace.zone}")
     public void scan() {
         Set<String> managed = coordinator.managementSymbols();
-        if (!universe.isReady() && managed.isEmpty()) {
-            log.error("LAPLACE_SCAN_SKIPPED marketUniverseReady=false");
-            return;
-        }
+        if (coinPool.symbolsToProcess().isEmpty() && managed.isEmpty()) { log.info("LAPLACE_SCAN_SKIPPED coinPoolEmpty=true"); return; }
         if (!running.compareAndSet(false, true)) {
             log.info("LAPLACE_SCAN_SKIPPED concurrentRun=true");
             return;
         }
         try {
-            Set<String> symbols = new HashSet<>(startupHistory.readySymbols());
+            Set<String> symbols = new HashSet<>(coinPool.symbolsToProcess());
+            for (String symbol : new HashSet<>(symbols)) { if (!startupHistory.isReady(symbol)) startupHistory.initializeSymbol(symbol); }
+            symbols.retainAll(startupHistory.readySymbols());
             for (String symbol : managed) {
                 if (!startupHistory.isReady(symbol)) {
                     startupHistory.initializeSymbol(symbol);
@@ -89,7 +90,7 @@ public class LaplaceThirtyMinuteScheduler {
             int count = postStartupBarCounts.merge(symbol, 1, Integer::sum);
             LaplaceSignalResult result = signals.calculate(symbol, data, count);
             diagnostics.signal(result);
-            coordinator.onSignal(result, universe.symbols().contains(symbol));
+            coordinator.onSignal(result, coinPool.canOpen(symbol));
             if (count == 1) {
                 log.info("LAPLACE_FIRST_POST_STARTUP_CANDLE_PROCESSED symbol={} candleCloseTime={} previousNormalizedSlope={} currentNormalizedSlope={} entrySignal={} strongReversalSignal={} eligibleForExecution={}",
                         symbol, close, result.previousNormalizedSlope(), result.currentNormalizedSlope(),

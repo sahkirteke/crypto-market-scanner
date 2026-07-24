@@ -1,0 +1,1 @@
+package com.crypto.laplace.pool; import java.time.LocalDate; import org.springframework.data.jpa.repository.JpaRepository; public interface LaplaceCapitalSnapshotRepository extends JpaRepository<LaplaceCapitalSnapshotEntity, LocalDate>{}

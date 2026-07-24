@@ -1,0 +1,2 @@
+package com.crypto.laplace.pool; import jakarta.persistence.*; import java.math.BigDecimal; import java.time.*; import lombok.*;
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder @Entity @Table(name="laplace_strategy_capital_snapshots") public class LaplaceCapitalSnapshotEntity { @Id private LocalDate snapshotDate; private BigDecimal realizedCapital,dailyTradeMargin,positionNotional; private Integer leverage; private Instant calculatedAt; }

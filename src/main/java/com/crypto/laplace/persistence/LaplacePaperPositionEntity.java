@@ -39,5 +39,10 @@ public class LaplacePaperPositionEntity {
  private Long holdingMinutes;
  @Column(length=80) private String exitReason;
  @Column(length=160,unique=true) private String exitSignalId;
+ @Column(precision=20,scale=10) private BigDecimal stopLossPct;
+ @Column(precision=30,scale=12) private BigDecimal stopPrice;
+ private Instant lastChecked5mCandleCloseTime;
+ private Instant stopTriggeredCandleOpenTime, stopTriggeredCandleCloseTime;
+ @Column(precision=30,scale=12) private BigDecimal stopTriggeredCandleHigh, stopTriggeredCandleLow, stopTriggeredCandleClose;
  @Version private Long version;
 }

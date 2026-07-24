@@ -1,0 +1,4 @@
+package com.crypto.laplace.pool;
+import jakarta.persistence.*; import java.math.BigDecimal; import java.time.Instant; import lombok.*;
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder @Entity @Table(name="laplace_coin_pool")
+public class LaplaceCoinPoolEntity { @Id @Column(length=32) private String symbol; @Enumerated(EnumType.STRING) private LaplaceCoinPoolState state; private BigDecimal lastQuoteVolume; private Instant addedAt, removedAt, pendingRemovalAt; @Enumerated(EnumType.STRING) private LaplaceTrend lastObservedTrend; private Boolean waitingForNewTrend; private Instant lastVolumeScanAt; private Instant createdAt, updatedAt; @PrePersist void created(){Instant n=Instant.now(); if(createdAt==null)createdAt=n; updatedAt=n;} @PreUpdate void updated(){updatedAt=Instant.now();} }
