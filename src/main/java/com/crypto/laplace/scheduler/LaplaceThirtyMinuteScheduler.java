@@ -9,6 +9,7 @@ import com.crypto.laplace.service.LaplaceSignalService;
 import com.crypto.laplace.service.LaplaceStartupHistoryService;
 import com.crypto.laplace.service.StartupMarketUniverseService;
 import com.crypto.laplace.service.ThirtyMinuteKlineService;
+import com.crypto.laplace.pool.LaplaceCoinPoolService;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
@@ -32,6 +33,7 @@ public class LaplaceThirtyMinuteScheduler {
     private final LaplaceSignalService signals;
     private final LaplaceDiagnosticLogService diagnostics;
     private final LaplacePaperTradeCoordinator coordinator;
+    private final LaplaceCoinPoolService coinPool;
     private final AtomicBoolean running = new AtomicBoolean();
     private final ConcurrentHashMap<String, Instant> lastProcessed = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Integer> postStartupBarCounts = new ConcurrentHashMap<>();
@@ -48,16 +50,15 @@ public class LaplaceThirtyMinuteScheduler {
             return;
         }
         try {
-            Set<String> symbols = new HashSet<>(startupHistory.readySymbols());
-            for (String symbol : managed) {
+            Set<String> symbols = new HashSet<>(coinPool.managedSymbols());
+            symbols.addAll(managed);
+            for (String symbol : symbols) {
                 if (!startupHistory.isReady(symbol)) {
                     startupHistory.initializeSymbol(symbol);
                 }
-                if (startupHistory.isReady(symbol)) {
-                    symbols.add(symbol);
                 }
             }
-            symbols.forEach(this::process);
+            symbols.stream().filter(startupHistory::isReady).forEach(this::process);
         } finally {
             running.set(false);
         }
@@ -74,6 +75,7 @@ public class LaplaceThirtyMinuteScheduler {
             if (!postStartupBarCounts.containsKey(symbol)) {
                 LaplaceSignalResult baseline = signals.calculate(symbol, history.candles(), 0);
                 coordinator.initializeBaseline(symbol, baseline.entrySignal());
+                coinPool.observeClosedTrend(symbol, baseline.entrySignal());
             }
             close = data.getLast().getCloseTime();
             Instant previous = lastProcessed.putIfAbsent(symbol, history.baselineCloseTime());
@@ -89,7 +91,8 @@ public class LaplaceThirtyMinuteScheduler {
             int count = postStartupBarCounts.merge(symbol, 1, Integer::sum);
             LaplaceSignalResult result = signals.calculate(symbol, data, count);
             diagnostics.signal(result);
-            coordinator.onSignal(result, universe.symbols().contains(symbol));
+            boolean poolAllowsEntry = coinPool.observeClosedTrend(symbol, result.entrySignal());
+            coordinator.onSignal(result, poolAllowsEntry);
             if (count == 1) {
                 log.info("LAPLACE_FIRST_POST_STARTUP_CANDLE_PROCESSED symbol={} candleCloseTime={} previousNormalizedSlope={} currentNormalizedSlope={} entrySignal={} strongReversalSignal={} eligibleForExecution={}",
                         symbol, close, result.previousNormalizedSlope(), result.currentNormalizedSlope(),
