@@ -7,13 +7,15 @@ import com.crypto.laplace.service.StartupMarketUniverseService;
 import com.crypto.laplace.pool.LaplaceCoinPoolService;
 import com.crypto.laplace.config.LaplaceStrategyProperties;
 import java.math.*;import java.time.*;import java.util.*;
-import lombok.RequiredArgsConstructor;import lombok.extern.slf4j.Slf4j;import org.springframework.stereotype.Service;import org.springframework.transaction.annotation.Transactional;
+import lombok.extern.slf4j.Slf4j;import org.springframework.beans.factory.annotation.Autowired;import org.springframework.stereotype.Service;import org.springframework.transaction.annotation.Transactional;
 
-@Slf4j @Service @RequiredArgsConstructor
+@Slf4j @Service
 public class LaplacePaperExecutionService {
  public static final String STRATEGY="LAPLACE_KERNEL_REGRESSION_30M", VERSION="1.0";private static final int SCALE=12;
  private final LaplacePaperPositionRepository positions;private final LaplaceTradeEventRepository events;private final LaplaceExecutionPriceProvider prices;private final LaplacePnlCalculator pnl;private final LaplaceStrategyProperties properties;private final LaplaceTradeJsonlWriter writer;
  private final StartupMarketUniverseService universe; private final LaplaceCoinPoolService coinPool;
+ @Autowired
+ public LaplacePaperExecutionService(LaplacePaperPositionRepository positions,LaplaceTradeEventRepository events,LaplaceExecutionPriceProvider prices,LaplacePnlCalculator pnl,LaplaceStrategyProperties properties,LaplaceTradeJsonlWriter writer,StartupMarketUniverseService universe,LaplaceCoinPoolService coinPool){this.positions=positions;this.events=events;this.prices=prices;this.pnl=pnl;this.properties=properties;this.writer=writer;this.universe=universe;this.coinPool=coinPool;}
  public LaplacePaperExecutionService(LaplacePaperPositionRepository positions,LaplaceTradeEventRepository events,LaplaceExecutionPriceProvider prices,LaplacePnlCalculator pnl,LaplaceStrategyProperties properties,LaplaceTradeJsonlWriter writer,StartupMarketUniverseService universe){this.positions=positions;this.events=events;this.prices=prices;this.pnl=pnl;this.properties=properties;this.writer=writer;this.universe=universe;this.coinPool=null;}
  @Transactional public LaplacePaperPositionEntity open(LaplaceSignalResult signal,PositionSide side,String reversalId,String positionBefore){
   assertNoOpen(signal.symbol());MarketExecutionAction action=side==PositionSide.LONG?MarketExecutionAction.LONG_OPEN:MarketExecutionAction.SHORT_OPEN;var quote=prices.quote(signal.symbol(),action);Instant requested=Instant.now();BigDecimal price=quote.value();BigDecimal margin=coinPool==null?properties.getLaplace().getMarginPerPositionUsdt():coinPool.dailyMargin(); int leverage=10; BigDecimal notional=margin.multiply(BigDecimal.valueOf(leverage));BigDecimal quantity=notional.divide(price,SCALE,RoundingMode.DOWN);BigDecimal feeRate=properties.getLaplace().getTakerFeeRate();

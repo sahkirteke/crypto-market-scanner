@@ -6,12 +6,14 @@ import com.crypto.laplace.model.*;
 import com.crypto.laplace.persistence.*;
 import com.crypto.laplace.pool.*;
 import java.util.*;import java.util.concurrent.*;import java.util.concurrent.atomic.AtomicBoolean;import java.util.concurrent.locks.ReentrantLock;
-import lombok.RequiredArgsConstructor;import lombok.extern.slf4j.Slf4j;import org.springframework.stereotype.Service;
+import lombok.extern.slf4j.Slf4j;import org.springframework.beans.factory.annotation.Autowired;import org.springframework.stereotype.Service;
 
 /** Keeps raw strategy signals untouched and applies the contrarian mapping only at execution. */
-@Slf4j @Service @RequiredArgsConstructor
+@Slf4j @Service
 public class LaplacePaperTradeCoordinator {
  private final LaplaceStrategyProperties config;private final LaplacePaperPositionRepository positions;private final LaplacePaperExecutionService execution;private final LaplaceTradeJsonlWriter writer;private final ConcurrentHashMap<String,ReentrantLock> locks=new ConcurrentHashMap<>();private final ConcurrentHashMap<String,LaplaceSignal> rawStates=new ConcurrentHashMap<>();private final LaplaceCoinPoolService coinPool;
+ @Autowired
+ public LaplacePaperTradeCoordinator(LaplaceStrategyProperties config,LaplacePaperPositionRepository positions,LaplacePaperExecutionService execution,LaplaceTradeJsonlWriter writer,LaplaceCoinPoolService coinPool){this.config=config;this.positions=positions;this.execution=execution;this.writer=writer;this.coinPool=coinPool;}
  public LaplacePaperTradeCoordinator(LaplaceStrategyProperties config,LaplacePaperPositionRepository positions,LaplacePaperExecutionService execution,LaplaceTradeJsonlWriter writer){this.config=config;this.positions=positions;this.execution=execution;this.writer=writer;this.coinPool=null;}
 private final AtomicBoolean paperDisabledLogged=new AtomicBoolean(false);
  public Set<String> managementSymbols(){Set<String>x=new HashSet<>();for(var p:positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY,LaplacePositionStatus.OPEN))x.add(p.getSymbol());return Set.copyOf(x);}
