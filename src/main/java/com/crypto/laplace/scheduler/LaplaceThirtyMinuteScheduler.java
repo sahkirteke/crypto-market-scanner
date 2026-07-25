@@ -12,6 +12,7 @@ import com.crypto.laplace.pool.LaplaceCoinPoolService;
 import com.crypto.laplace.service.ThirtyMinuteKlineService;
 import com.crypto.laplace.stop.LaplaceFiveMinuteStopService;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -79,7 +80,13 @@ public class LaplaceThirtyMinuteScheduler {
                 LaplaceSignalResult baseline = signals.calculate(symbol, history.candles(), 0);
                 coordinator.initializeBaseline(symbol, baseline.entrySignal());
             }
-            close = data.getLast().getCloseTime();
+            Kline latestClosedCandle = data.getLast();
+            close = latestClosedCandle.getCloseTime();
+            if (!isLatestClosedCandle(latestClosedCandle, Instant.now())) {
+                log.warn("LAPLACE_STALE_SIGNAL_CANDLE_SKIPPED symbol={} candleOpenTime={} candleCloseTime={}",
+                        symbol, latestClosedCandle.getOpenTime(), close);
+                return;
+            }
             Instant previous = lastProcessed.putIfAbsent(symbol, history.baselineCloseTime());
             previous = previous == null ? history.baselineCloseTime() : previous;
             if (!close.isAfter(previous)) {
@@ -107,5 +114,15 @@ public class LaplaceThirtyMinuteScheduler {
                     symbol, close, exception.getClass().getSimpleName(), exception.getMessage(), exception);
             diagnostics.error(symbol, exception.getClass().getSimpleName(), exception.getMessage());
         }
+    }
+
+    static boolean isLatestClosedCandle(Kline candle, Instant now) {
+        if (candle == null || candle.getOpenTime() == null || candle.getCloseTime() == null
+                || candle.getCloseTime().isAfter(now)) {
+            return false;
+        }
+        Instant currentThirtyMinuteWindow = now.truncatedTo(ChronoUnit.HOURS)
+                .plusSeconds((now.atZone(java.time.ZoneOffset.UTC).getMinute() / 30L) * 30L * 60L);
+        return candle.getOpenTime().equals(currentThirtyMinuteWindow.minusSeconds(30L * 60L));
     }
 }
