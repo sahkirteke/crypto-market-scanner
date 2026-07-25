@@ -15,7 +15,7 @@ public class LaplacePaperPositionEntity {
  @Column(nullable=false,length=16) private String strategyVersion;
  @Column(nullable=false,length=32) private String symbol;
  @Enumerated(EnumType.STRING) @Column(nullable=false,length=8) private PositionSide side;
- @Enumerated(EnumType.STRING) @Column(nullable=false,length=16) private LaplacePositionStatus status;
+ @Enumerated(EnumType.STRING) @Column(name="status",nullable=false,length=32) private LaplacePositionStatus status;
  @Column(nullable=false,length=160,unique=true) private String entrySignalId;
  @Column(length=8) private String entryRawSignal;
  @Column(nullable=false) private Boolean signalInverted;
@@ -37,7 +37,7 @@ public class LaplacePaperPositionEntity {
  @Column(precision=30,scale=12) private BigDecimal netPnl;
  @Column(precision=20,scale=8) private BigDecimal netPnlPct;
  private Long holdingMinutes;
- @Column(length=80) private String exitReason;
+ @Column(name="exit_reason",length=80) private String exitReason;
  @Column(length=160,unique=true) private String exitSignalId;
  @Column(precision=20,scale=10) private BigDecimal stopLossPct;
  @Column(precision=30,scale=12) private BigDecimal stopPrice;
