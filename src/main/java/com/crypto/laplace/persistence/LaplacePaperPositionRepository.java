@@ -6,4 +6,6 @@ public interface LaplacePaperPositionRepository extends JpaRepository<LaplacePap
  List<LaplacePaperPositionEntity> findByStrategyAndSymbolAndStatus(String strategy,String symbol,LaplacePositionStatus status);
  @Lock(LockModeType.PESSIMISTIC_WRITE) @Query("select p from LaplacePaperPositionEntity p where p.strategy=:strategy and p.symbol=:symbol and p.status=:status")
  List<LaplacePaperPositionEntity> findOpenForUpdate(@Param("strategy")String strategy,@Param("symbol")String symbol,@Param("status")LaplacePositionStatus status);
+ @Lock(LockModeType.PESSIMISTIC_WRITE) @Query("select p from LaplacePaperPositionEntity p where p.id=:id")
+ Optional<LaplacePaperPositionEntity> findByIdForUpdate(@Param("id")String id);
 }

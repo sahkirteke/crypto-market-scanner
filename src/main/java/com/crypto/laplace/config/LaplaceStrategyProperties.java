@@ -1,6 +1,7 @@
 package com.crypto.laplace.config;
 
 import java.math.BigDecimal;
+import com.crypto.laplace.model.StopReentryPolicy;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -30,7 +31,9 @@ public class LaplaceStrategyProperties {
                 || laplace.notionalUsdt.compareTo(laplace.marginPerPositionUsdt.multiply(BigDecimal.valueOf(laplace.leverage))) != 0
                 || !"MARKET".equals(laplace.orderType)
                 || laplace.takerFeeRate == null
-                || laplace.takerFeeRate.signum() < 0) {
+                || laplace.takerFeeRate.signum() < 0
+                || laplace.stopReentryPolicy == null
+                || laplace.stopReentryCooldownMinutes < 0) {
             throw new IllegalStateException("Invalid immutable Laplace paper execution configuration");
         }
     }
@@ -53,6 +56,8 @@ public class LaplaceStrategyProperties {
         private int leverage = 10;
         private String orderType = "MARKET";
         private BigDecimal takerFeeRate = new BigDecimal("0.0004");
+        private StopReentryPolicy stopReentryPolicy = StopReentryPolicy.REQUIRE_FRESH_SIGNAL;
+        private long stopReentryCooldownMinutes = 60;
         private String diagnosticDirectory = "logs/laplace";
         private String tradeDirectory = "logs/laplace-trades";
     }

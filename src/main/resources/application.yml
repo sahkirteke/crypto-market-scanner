@@ -162,6 +162,8 @@ trading:
     leverage: 10
     order-type: MARKET
     taker-fee-rate: 0.0004
+    stop-reentry-policy: REQUIRE_FRESH_SIGNAL
+    stop-reentry-cooldown-minutes: 60
     cron: "5 0,30 * * * *"
     zone: UTC
     pool-cron: "5 0 10 * * *"

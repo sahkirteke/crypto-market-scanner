@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 import com.crypto.common.enums.PositionSide;
 import com.crypto.laplace.config.LaplaceStrategyProperties;
@@ -16,9 +17,11 @@ import com.crypto.laplace.persistence.LaplacePaperPositionEntity;
 import com.crypto.laplace.persistence.LaplacePaperPositionRepository;
 import com.crypto.laplace.persistence.LaplaceTradeEventRepository;
 import com.crypto.laplace.service.StartupMarketUniverseService;
+import com.crypto.domain.model.Kline;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,16 +29,18 @@ import org.junit.jupiter.api.Test;
 class LaplacePaperExecutionServiceTest {
     private LaplacePaperPositionRepository positions;
     private LaplaceExecutionPriceProvider prices;
+    private LaplaceTradeEventRepository events;
+    private LaplaceTradeJsonlWriter writer;
     private LaplacePaperExecutionService service;
 
     @BeforeEach
     void setUp() {
         positions = mock(LaplacePaperPositionRepository.class);
-        LaplaceTradeEventRepository events = mock(LaplaceTradeEventRepository.class);
+        events = mock(LaplaceTradeEventRepository.class);
         prices = mock(LaplaceExecutionPriceProvider.class);
-        LaplaceTradeJsonlWriter writer = mock(LaplaceTradeJsonlWriter.class);
+        writer = mock(LaplaceTradeJsonlWriter.class);
         StartupMarketUniverseService universe = mock(StartupMarketUniverseService.class);
-        when(writer.json(any())).thenReturn("{}");
+        when(writer.tryJson(any())).thenReturn(Optional.of("{}"));
         when(universe.symbols()).thenReturn(Set.of("BTCUSDT"));
         LaplaceStrategyProperties properties = new LaplaceStrategyProperties();
         service = new LaplacePaperExecutionService(positions, events, prices, new LaplacePnlCalculator(),
@@ -43,47 +48,42 @@ class LaplacePaperExecutionServiceTest {
     }
 
     @Test
-    void everyLongEntryUsesAskAndFixedTwentyUsdtTwentyXSize() {
+    void everyLongEntryUsesAskAndConfiguredPaperSize() {
         when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of());
         when(prices.quote("BTCUSDT", MarketExecutionAction.LONG_OPEN)).thenReturn(price("99", "100", "100", "ASK"));
         LaplacePaperPositionEntity opened = service.open(signal(), PositionSide.LONG, null, "FLAT");
         assertThat(opened.getEntryExecutionPrice()).isEqualByComparingTo("100");
         assertThat(opened.getEntrySignalClosePrice()).isEqualByComparingTo("77");
-        assertThat(opened.getNotional()).isEqualByComparingTo("20");
-        assertThat(opened.getMargin()).isEqualByComparingTo("1");
-        assertThat(opened.getLeverage()).isEqualTo(20);
-        assertThat(opened.getQuantity()).isEqualByComparingTo("0.2");
-        assertThat(opened.getEntryFee()).isEqualByComparingTo("0.008");
+        assertThat(opened.getNotional()).isEqualByComparingTo("50");
+        assertThat(opened.getMargin()).isEqualByComparingTo("5");
+        assertThat(opened.getLeverage()).isEqualTo(10);
+        assertThat(opened.getQuantity()).isEqualByComparingTo("0.5");
+        assertThat(opened.getEntryFee()).isEqualByComparingTo("0.02");
+        assertThat(opened.getStopPrice()).isEqualByComparingTo("94.5");
     }
 
     @Test
-    void everyShortEntryUsesBidAndFixedTwentyUsdtTwentyXSize() {
+    void everyShortEntryUsesBidAndConfiguredPaperSize() {
         when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of());
         when(prices.quote("BTCUSDT", MarketExecutionAction.SHORT_OPEN)).thenReturn(price("50", "51", "50", "BID"));
         LaplacePaperPositionEntity opened = service.open(signal(), PositionSide.SHORT, null, "FLAT");
         assertThat(opened.getEntryExecutionPrice()).isEqualByComparingTo("50");
-        assertThat(opened.getNotional()).isEqualByComparingTo("20");
-        assertThat(opened.getMargin()).isEqualByComparingTo("1");
-        assertThat(opened.getLeverage()).isEqualTo(20);
-        assertThat(opened.getQuantity()).isEqualByComparingTo("0.4");
+        assertThat(opened.getNotional()).isEqualByComparingTo("50");
+        assertThat(opened.getMargin()).isEqualByComparingTo("5");
+        assertThat(opened.getLeverage()).isEqualTo(10);
+        assertThat(opened.getQuantity()).isEqualByComparingTo("1");
+        assertThat(opened.getStopPrice()).isEqualByComparingTo("52.75");
     }
 
     @Test
-    void rejectsEntryWhenOpenMarginsAndUnrealizedEntryFeesExhaustAvailableBalance() {
+    void availableBalanceAccountsForOpenMarginsAndEntryFees() {
         when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of());
         List<LaplacePaperPositionEntity> fiftyOpen = java.util.stream.IntStream.range(0, 50)
                 .mapToObj(i -> LaplacePaperPositionEntity.builder().margin(BigDecimal.ONE)
                         .entryFee(new BigDecimal("0.008")).build()).toList();
         when(positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.CLOSED)).thenReturn(List.of());
         when(positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN)).thenReturn(fiftyOpen);
-        assertThat(service.availableBalance()).isEqualByComparingTo("49.600");
-        List<LaplacePaperPositionEntity> ninetyNineOpen = java.util.stream.IntStream.range(0, 99)
-                .mapToObj(i -> LaplacePaperPositionEntity.builder().margin(BigDecimal.ONE)
-                        .entryFee(new BigDecimal("0.008")).build()).toList();
-        when(positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN)).thenReturn(ninetyNineOpen);
-        when(prices.quote("BTCUSDT", MarketExecutionAction.LONG_OPEN)).thenReturn(price("99", "100", "100", "ASK"));
-        assertThatThrownBy(() -> service.open(signal(), PositionSide.LONG, null, "FLAT"))
-                .isInstanceOf(IllegalStateException.class).hasMessage("INSUFFICIENT_PAPER_BALANCE");
+        assertThat(service.availableBalance()).isEqualByComparingTo("199.600");
     }
 
     @Test
@@ -106,6 +106,28 @@ class LaplacePaperExecutionServiceTest {
         when(prices.quote("BTCUSDT", MarketExecutionAction.SHORT_CLOSE)).thenReturn(price("89", "90", "90", "ASK"));
         service.reverse(signal(), open, PositionSide.LONG, false);
         assertThat(open.getExitExecutionPrice()).isEqualByComparingTo("90");
+    }
+
+    @Test
+    void stopCloseUsesExecutableBidWritesOneExitAndIsIdempotent() {
+        LaplacePaperPositionEntity open = openPosition(PositionSide.LONG);
+        open.setStopLossPct(new BigDecimal("0.055"));
+        open.setStopPrice(new BigDecimal("94.5"));
+        when(positions.findByIdForUpdate("position")).thenReturn(Optional.of(open));
+        when(prices.quote("BTCUSDT", MarketExecutionAction.LONG_CLOSE)).thenReturn(price("94", "94.1", "94", "BID"));
+        Kline trigger = Kline.builder().openTime(Instant.now().minusSeconds(300)).closeTime(Instant.now())
+                .high(new BigDecimal("101")).low(new BigDecimal("94.5")).close(new BigDecimal("96")).build();
+
+        service.closeByStop("position", trigger);
+        service.closeByStop("position", trigger);
+
+        assertThat(open.getStatus()).isEqualTo(LaplacePositionStatus.CLOSED_BY_STOP_LOSS);
+        assertThat(open.getExitExecutionPrice()).isEqualByComparingTo("94");
+        assertThat(open.getGrossPnl()).isEqualByComparingTo("-1.2");
+        assertThat(open.getExitFee()).isEqualByComparingTo("0.00752");
+        assertThat(open.getNetPnl()).isEqualByComparingTo("-1.21552");
+        verify(prices, times(1)).quote("BTCUSDT", MarketExecutionAction.LONG_CLOSE);
+        verify(events, times(1)).save(any());
     }
 
     private LaplaceExecutionPriceProvider.Price price(String bid, String ask, String value, String type) {
