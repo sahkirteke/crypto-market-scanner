@@ -29,6 +29,10 @@ import org.springframework.web.server.ResponseStatusException;
 public class LaplacePaperApiService implements ApplicationRunner {
     private static final BigDecimal ONE_HUNDRED = BigDecimal.valueOf(100);
     private static final int SCALE = 8;
+    private static final List<LaplacePositionStatus> CLOSED_STATUSES = List.of(
+            LaplacePositionStatus.CLOSED,
+            LaplacePositionStatus.CLOSED_BY_SIGNAL,
+            LaplacePositionStatus.CLOSED_BY_STOP_LOSS);
 
     private final LaplacePaperPositionRepository repository;
     private final LaplaceStrategyProperties properties;
@@ -63,7 +67,8 @@ public class LaplacePaperApiService implements ApplicationRunner {
     public LaplaceAnalysisSummaryResponse summary() {
         try {
             List<LaplacePaperPositionEntity> open = repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN);
-            List<LaplacePaperPositionEntity> closed = repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.CLOSED);
+            List<LaplacePaperPositionEntity> closed = repository.findByStrategyAndStatusIn(
+                    LaplacePaperExecutionService.STRATEGY, CLOSED_STATUSES);
             return buildSummary(open, closed);
         } catch (DataAccessException exception) {
             throw unavailable(exception);

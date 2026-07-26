@@ -1,6 +1,8 @@
 package com.crypto.laplace.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -54,7 +56,7 @@ class LaplacePaperApiServiceTest {
     void summaryCountsOpenPositionsButExcludesThemFromTradeAndPnlMetrics() {
         when(repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN))
                 .thenReturn(List.of(open("sol", "SOLUSDT", PositionSide.SHORT, "2026-07-18T09:00:00Z"), open("btc", "BTCUSDT", PositionSide.LONG, "2026-07-18T09:01:00Z")));
-        when(repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.CLOSED)).thenReturn(List.of());
+        when(repository.findByStrategyAndStatusIn(eq(LaplacePaperExecutionService.STRATEGY), anyCollection())).thenReturn(List.of());
         LaplaceAnalysisSummaryResponse summary = service.summary();
         assertThat(summary.openPositionCount()).isEqualTo(2);
         assertThat(summary.tradeCount()).isZero();
@@ -75,7 +77,7 @@ class LaplacePaperApiServiceTest {
                 closed("flat", "XRPUSDT", PositionSide.LONG, "0.008", "0.004", "0.004", "0", "0"));
         when(repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN))
                 .thenReturn(List.of(open("open", "REUSDT", PositionSide.LONG, "2026-07-18T09:00:00Z")));
-        when(repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.CLOSED)).thenReturn(closed);
+        when(repository.findByStrategyAndStatusIn(eq(LaplacePaperExecutionService.STRATEGY), anyCollection())).thenReturn(closed);
         LaplaceAnalysisSummaryResponse summary = service.summary();
         assertThat(summary.tradeCount()).isEqualTo(5);
         assertThat(summary.openPositionCount()).isEqualTo(1);
@@ -98,13 +100,35 @@ class LaplacePaperApiServiceTest {
     void reversalClosedPositionCountsAsCompletedTradeButNewOpenTargetDoesNot() {
         when(repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN))
                 .thenReturn(List.of(open("new-long", "SOLUSDT", PositionSide.LONG, "2026-07-18T10:00:00Z")));
-        when(repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.CLOSED))
+        when(repository.findByStrategyAndStatusIn(eq(LaplacePaperExecutionService.STRATEGY), anyCollection()))
                 .thenReturn(List.of(closed("old-short", "SOLUSDT", PositionSide.SHORT, "0.2", "0.004", "0.00392", "0.19208", "1.9208")));
         LaplaceAnalysisSummaryResponse summary = service.summary();
         assertThat(summary.tradeCount()).isEqualTo(1);
         assertThat(summary.shortTradeCount()).isEqualTo(1);
         assertThat(summary.longTradeCount()).isZero();
         assertThat(summary.openPositionCount()).isEqualTo(1);
+    }
+
+    @Test
+    void summaryIncludesSignalAndStopLossClosedPositions() {
+        LaplacePaperPositionEntity signalClosed = closed("signal", "BTCUSDT", PositionSide.LONG,
+                "1", "0.02", "0.02", "0.96", "1.92");
+        signalClosed.setStatus(LaplacePositionStatus.CLOSED_BY_SIGNAL);
+        LaplacePaperPositionEntity stopClosed = closed("stop", "ETHUSDT", PositionSide.SHORT,
+                "-2.75", "0.02", "0.0189", "-2.7889", "-5.5778");
+        stopClosed.setStatus(LaplacePositionStatus.CLOSED_BY_STOP_LOSS);
+        stopClosed.setExitReason("STOP_LOSS_5M");
+        when(repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN))
+                .thenReturn(List.of());
+        when(repository.findByStrategyAndStatusIn(eq(LaplacePaperExecutionService.STRATEGY), anyCollection()))
+                .thenReturn(List.of(signalClosed, stopClosed));
+
+        LaplaceAnalysisSummaryResponse summary = service.summary();
+
+        assertThat(summary.tradeCount()).isEqualTo(2);
+        assertThat(summary.winCount()).isEqualTo(1);
+        assertThat(summary.lossCount()).isEqualTo(1);
+        assertThat(summary.netPnl()).isEqualByComparingTo("-1.8289");
     }
 
     private LaplacePaperPositionEntity open(String id, String symbol, PositionSide side, String entryTime) {
