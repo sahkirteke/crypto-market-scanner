@@ -56,7 +56,7 @@ public class LaplaceStrategyProperties {
         private int leverage = 10;
         private String orderType = "MARKET";
         private BigDecimal takerFeeRate = new BigDecimal("0.0004");
-        private StopReentryPolicy stopReentryPolicy = StopReentryPolicy.REQUIRE_FRESH_SIGNAL;
+        private StopReentryPolicy stopReentryPolicy = StopReentryPolicy.REQUIRE_OPPOSITE_SIGNAL;
         private long stopReentryCooldownMinutes = 60;
         private String diagnosticDirectory = "logs/laplace";
         private String tradeDirectory = "logs/laplace-trades";

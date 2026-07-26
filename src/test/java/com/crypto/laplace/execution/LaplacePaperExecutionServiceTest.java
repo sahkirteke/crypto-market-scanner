@@ -87,6 +87,18 @@ class LaplacePaperExecutionServiceTest {
     }
 
     @Test
+    void rejectsEntryWhenAtomicCapitalReservationIsInsufficient() {
+        when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of());
+        when(positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN))
+                .thenReturn(java.util.stream.IntStream.range(0, 249).mapToObj(i ->
+                        LaplacePaperPositionEntity.builder().margin(BigDecimal.ONE).entryFee(BigDecimal.ZERO).build()).toList());
+        when(prices.quote("BTCUSDT", MarketExecutionAction.LONG_OPEN)).thenReturn(price("99", "100", "100", "ASK"));
+        assertThatThrownBy(() -> service.open(signal(), PositionSide.LONG, null, "FLAT"))
+                .isInstanceOf(IllegalStateException.class).hasMessage("INSUFFICIENT_PAPER_BALANCE");
+        verify(positions).lockCapitalForUpdate();
+    }
+
+    @Test
     void longCloseUsesBidAndExitNotionalForTakerFee() {
         LaplacePaperPositionEntity open = openPosition(PositionSide.LONG);
         when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of(open));

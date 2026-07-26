@@ -11,6 +11,7 @@ import com.crypto.laplace.service.StartupMarketUniverseService;
 import com.crypto.laplace.pool.LaplaceCoinPoolService;
 import com.crypto.laplace.service.ThirtyMinuteKlineService;
 import com.crypto.laplace.stop.LaplaceFiveMinuteStopService;
+import com.crypto.laplace.execution.LaplaceTradeReconciliationService;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.HashSet;
@@ -37,12 +38,14 @@ public class LaplaceThirtyMinuteScheduler {
     private final LaplaceDiagnosticLogService diagnostics;
     private final LaplacePaperTradeCoordinator coordinator;
     private final LaplaceFiveMinuteStopService stopService;
+    private final LaplaceTradeReconciliationService reconciliation;
     private final AtomicBoolean running = new AtomicBoolean();
     private final ConcurrentHashMap<String, Instant> lastProcessed = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Integer> postStartupBarCounts = new ConcurrentHashMap<>();
 
     @Scheduled(cron = "${trading.laplace.cron}", zone = "${trading.laplace.zone}")
     public void scan() {
+        if (!reconciliation.isComplete()) { log.error("LAPLACE_SCAN_SKIPPED reconciliationComplete=false"); return; }
         if (!running.compareAndSet(false, true)) {
             log.info("LAPLACE_SCAN_SKIPPED concurrentRun=true");
             return;

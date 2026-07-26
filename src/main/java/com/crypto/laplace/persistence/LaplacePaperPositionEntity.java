@@ -44,5 +44,7 @@ public class LaplacePaperPositionEntity {
  private Instant lastChecked5mCandleCloseTime;
  private Instant stopTriggeredCandleOpenTime, stopTriggeredCandleCloseTime;
  @Column(precision=30,scale=12) private BigDecimal stopTriggeredCandleHigh, stopTriggeredCandleLow, stopTriggeredCandleClose;
+ @Column(precision=30,scale=12) private BigDecimal minBidSinceEntry, maxAskSinceEntry, lastObservedBid, lastObservedAsk;
+ private Instant lastStopPriceCheckedAt;
  @Version private Long version;
 }

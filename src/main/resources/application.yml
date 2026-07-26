@@ -162,7 +162,7 @@ trading:
     leverage: 10
     order-type: MARKET
     taker-fee-rate: 0.0004
-    stop-reentry-policy: REQUIRE_FRESH_SIGNAL
+    stop-reentry-policy: REQUIRE_OPPOSITE_SIGNAL
     stop-reentry-cooldown-minutes: 60
     cron: "5 0,30 * * * *"
     zone: UTC
@@ -170,6 +170,7 @@ trading:
     pool-zone: America/New_York
     stop-cron: "3 5,10,15,20,25,35,40,45,50,55 * * * *"
     stop-zone: UTC
+    live-stop-poll-ms: 3000
     diagnostic-directory: logs/laplace
     trade-directory: logs/laplace-trades
 logging:

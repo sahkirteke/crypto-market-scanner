@@ -9,12 +9,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Service;
+import org.springframework.core.annotation.Order;
 
-@Slf4j @Service @RequiredArgsConstructor
+@Slf4j @Service @RequiredArgsConstructor @Order(50)
 public class LaplaceTradeReconciliationService implements ApplicationRunner {
     private final LaplacePaperPositionRepository positions;
     private final LaplaceTradeEventRepository events;
     private final LaplaceTradeJsonlWriter writer;
+    private volatile boolean complete;
+
+    public boolean isComplete() { return complete; }
 
     @Override
     public void run(ApplicationArguments args) {
@@ -43,5 +47,6 @@ public class LaplaceTradeReconciliationService implements ApplicationRunner {
         }
         log.info("LAPLACE_RECONCILIATION_COMPLETED repairedMissingExitEvents={} openPositions={}", repaired, openBySymbol.values().stream().mapToLong(Long::longValue).sum());
         writer.drain();
+        complete = true;
     }
 }

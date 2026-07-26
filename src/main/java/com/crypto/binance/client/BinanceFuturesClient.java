@@ -138,6 +138,19 @@ public class BinanceFuturesClient {
                         symbol, interval, attempt, rootMessage(exception)));
     }
 
+    public List<Kline> getKlines(String symbol, String interval, int limit, Instant startTime) {
+        return execute("klines", () -> {
+            List<List<Object>> response = binanceWebClient.get()
+                    .uri(uriBuilder -> uriBuilder.path("/fapi/v1/klines")
+                            .queryParam("symbol", symbol).queryParam("interval", interval)
+                            .queryParam("limit", limit).queryParam("startTime", startTime.toEpochMilli()).build())
+                    .retrieve().onStatus(HttpStatusCode::isError, this::toClientException)
+                    .bodyToMono(new ParameterizedTypeReference<List<List<Object>>>() {}).block();
+            return response == null ? Collections.emptyList() : response.stream().filter(Objects::nonNull)
+                    .map(kline -> mapKline(symbol, interval, kline)).toList();
+        });
+    }
+
     public List<BinanceFundingRateDto> getFundingRate(String symbol) {
         return execute("funding rate for symbol " + symbol, () -> {
             List<BinanceFundingRateDto> response = binanceWebClient.get()

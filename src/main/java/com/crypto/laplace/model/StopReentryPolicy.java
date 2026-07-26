@@ -1,2 +1,2 @@
 package com.crypto.laplace.model;
-public enum StopReentryPolicy { REQUIRE_FRESH_SIGNAL, ALLOW, COOLDOWN }
+public enum StopReentryPolicy { REQUIRE_FRESH_SIGNAL, REQUIRE_OPPOSITE_SIGNAL, ALLOW, COOLDOWN }
