@@ -166,8 +166,10 @@ trading:
     stop-reentry-cooldown-minutes: 60
     cron: "5 0,30 * * * *"
     zone: UTC
-    pool-cron: "5 0 10 * * *"
-    pool-zone: America/New_York
+    volume-scan:
+      cron: "5 0 10 * * *"
+      timezone: America/New_York
+      audit-jsonl-path: "./logs/laplace-volume-scan.jsonl"
     stop-cron: "3 5,10,15,20,25,35,40,45,50,55 * * * *"
     stop-zone: UTC
     diagnostic-directory: logs/laplace

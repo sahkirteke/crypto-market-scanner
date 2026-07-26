@@ -60,5 +60,13 @@ public class LaplaceStrategyProperties {
         private long stopReentryCooldownMinutes = 60;
         private String diagnosticDirectory = "logs/laplace";
         private String tradeDirectory = "logs/laplace-trades";
+        private VolumeScan volumeScan = new VolumeScan();
+    }
+
+    @Getter @Setter
+    public static class VolumeScan {
+        private String cron = "5 0 10 * * *";
+        private String timezone = "America/New_York";
+        private String auditJsonlPath = "./logs/laplace-volume-scan.jsonl";
     }
 }
