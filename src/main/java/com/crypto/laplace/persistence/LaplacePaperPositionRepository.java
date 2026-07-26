@@ -8,6 +8,4 @@ public interface LaplacePaperPositionRepository extends JpaRepository<LaplacePap
  List<LaplacePaperPositionEntity> findOpenForUpdate(@Param("strategy")String strategy,@Param("symbol")String symbol,@Param("status")LaplacePositionStatus status);
  @Lock(LockModeType.PESSIMISTIC_WRITE) @Query("select p from LaplacePaperPositionEntity p where p.id=:id")
  Optional<LaplacePaperPositionEntity> findByIdForUpdate(@Param("id")String id);
- @Query(value="select 1 from pg_advisory_xact_lock(731425)",nativeQuery=true)
- Integer lockCapitalForUpdate();
 }

@@ -87,15 +87,15 @@ class LaplacePaperExecutionServiceTest {
     }
 
     @Test
-    void rejectsEntryWhenAtomicCapitalReservationIsInsufficient() {
+    void opensEligiblePaperEntryEvenWhenReportedCapitalIsInsufficient() {
         when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of());
         when(positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN))
                 .thenReturn(java.util.stream.IntStream.range(0, 249).mapToObj(i ->
                         LaplacePaperPositionEntity.builder().margin(BigDecimal.ONE).entryFee(BigDecimal.ZERO).build()).toList());
         when(prices.quote("BTCUSDT", MarketExecutionAction.LONG_OPEN)).thenReturn(price("99", "100", "100", "ASK"));
-        assertThatThrownBy(() -> service.open(signal(), PositionSide.LONG, null, "FLAT"))
-                .isInstanceOf(IllegalStateException.class).hasMessage("INSUFFICIENT_PAPER_BALANCE");
-        verify(positions).lockCapitalForUpdate();
+        LaplacePaperPositionEntity opened = service.open(signal(), PositionSide.LONG, null, "FLAT");
+        assertThat(opened.getStatus()).isEqualTo(LaplacePositionStatus.OPEN);
+        verify(positions).saveAndFlush(opened);
     }
 
     @Test
@@ -126,19 +126,17 @@ class LaplacePaperExecutionServiceTest {
         open.setStopLossPct(new BigDecimal("0.055"));
         open.setStopPrice(new BigDecimal("94.5"));
         when(positions.findByIdForUpdate("position")).thenReturn(Optional.of(open));
-        when(prices.quote("BTCUSDT", MarketExecutionAction.LONG_CLOSE)).thenReturn(price("94", "94.1", "94", "BID"));
         Kline trigger = Kline.builder().openTime(Instant.now().minusSeconds(300)).closeTime(Instant.now())
-                .high(new BigDecimal("101")).low(new BigDecimal("94.5")).close(new BigDecimal("96")).build();
+                .open(new BigDecimal("95")).high(new BigDecimal("101")).low(new BigDecimal("94.5")).close(new BigDecimal("96")).build();
 
-        service.closeByStop("position", trigger);
-        service.closeByStop("position", trigger);
+        service.closeByStop("position", trigger, new BigDecimal("94.5"), "FIVE_MINUTE_STOP_SIMULATION");
+        service.closeByStop("position", trigger, new BigDecimal("94.5"), "FIVE_MINUTE_STOP_SIMULATION");
 
         assertThat(open.getStatus()).isEqualTo(LaplacePositionStatus.CLOSED_BY_STOP_LOSS);
-        assertThat(open.getExitExecutionPrice()).isEqualByComparingTo("94");
-        assertThat(open.getGrossPnl()).isEqualByComparingTo("-1.2");
-        assertThat(open.getExitFee()).isEqualByComparingTo("0.00752");
-        assertThat(open.getNetPnl()).isEqualByComparingTo("-1.21552");
-        verify(prices, times(1)).quote("BTCUSDT", MarketExecutionAction.LONG_CLOSE);
+        assertThat(open.getExitExecutionPrice()).isEqualByComparingTo("94.5");
+        assertThat(open.getGrossPnl()).isEqualByComparingTo("-1.1");
+        assertThat(open.getExitFee()).isEqualByComparingTo("0.00756");
+        assertThat(open.getNetPnl()).isEqualByComparingTo("-1.11556");
         verify(events, times(1)).save(any());
     }
 

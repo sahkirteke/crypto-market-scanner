@@ -170,7 +170,6 @@ trading:
     pool-zone: America/New_York
     stop-cron: "3 5,10,15,20,25,35,40,45,50,55 * * * *"
     stop-zone: UTC
-    live-stop-poll-ms: 3000
     diagnostic-directory: logs/laplace
     trade-directory: logs/laplace-trades
 logging:
