@@ -45,5 +45,5 @@ public class LaplacePaperPositionEntity {
  private Instant stopTriggeredCandleOpenTime, stopTriggeredCandleCloseTime;
  @Column(precision=30,scale=12) private BigDecimal stopTriggeredCandleHigh, stopTriggeredCandleLow, stopTriggeredCandleClose;
  private Instant lastStopCheckedCandleOpenTime;
- @Version private Long version;
+ @Version @Column(name="version",nullable=false) private Long version;
 }

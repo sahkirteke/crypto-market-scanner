@@ -57,5 +57,6 @@ class LaplacePaperPositionRepositoryPersistenceTest {
         LaplacePaperPositionEntity reloaded = repository.findById(position.getId()).orElseThrow();
         assertThat(reloaded.getStatus()).isEqualTo(LaplacePositionStatus.CLOSED_BY_STOP_LOSS);
         assertThat(reloaded.getExitReason()).isEqualTo("STOP_LOSS_5M");
+        assertThat(reloaded.getVersion()).isNotNull();
     }
 }
