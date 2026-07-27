@@ -108,6 +108,20 @@ public class BinanceFuturesClient {
         });
     }
 
+    public BookTicker getBookTicker(String symbol) {
+        return execute("book ticker for symbol " + symbol, () -> {
+            BinanceBookTickerDto response = binanceWebClient.get()
+                    .uri(uriBuilder -> uriBuilder.path("/fapi/v1/ticker/bookTicker")
+                            .queryParam("symbol", symbol).build())
+                    .retrieve().onStatus(HttpStatusCode::isError, this::toClientException)
+                    .bodyToMono(BinanceBookTickerDto.class).block();
+            if (response == null) throw new BinanceClientException("Book ticker unavailable for " + symbol);
+            BookTicker ticker=mapBookTicker(response);
+            log.debug("BINANCE_BOOK_TICKER_READY symbol={} bid={} ask={}",symbol,ticker.getBidPrice(),ticker.getAskPrice());
+            return ticker;
+        });
+    }
+
     public List<Kline> getKlines(String symbol, String interval, int limit) {
         return execute("klines", () -> {
             List<List<Object>> response = binanceWebClient.get()

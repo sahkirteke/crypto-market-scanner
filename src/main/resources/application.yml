@@ -170,6 +170,8 @@ trading:
       cron: "5 0 10 * * *"
       timezone: America/New_York
       audit-jsonl-path: "./logs/laplace-volume-scan.jsonl"
+      entry-min-quote-volume: 25000000
+      retention-min-quote-volume: 20000000
     stop-cron: "3 5,10,15,20,25,35,40,45,50,55 * * * *"
     stop-zone: UTC
     diagnostic-directory: logs/laplace

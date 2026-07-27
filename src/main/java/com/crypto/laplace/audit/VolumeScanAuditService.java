@@ -1,6 +1,7 @@
 package com.crypto.laplace.audit;
 
 import com.crypto.laplace.execution.LaplacePaperExecutionService;
+import com.crypto.laplace.config.LaplaceStrategyProperties;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.*;
@@ -16,6 +17,7 @@ public class VolumeScanAuditService {
     public static final ZoneId ZONE = ZoneId.of("America/New_York");
     private final VolumeScanAuditOutboxRepository repository;
     private final ObjectMapper objectMapper;
+    private final LaplaceStrategyProperties properties;
 
     public record Run(String id, LocalDate date, OffsetDateTime startedAt) {}
 
@@ -42,8 +44,8 @@ public class VolumeScanAuditService {
         p.put("reasonCodes", e.reasonCodes()); p.put("failedRules", e.failedRules()); p.put("passedRules", e.passedRules());
         p.put("quoteVolume24h", e.quoteVolume24h()); p.put("previousVolume24h", e.previousVolume24h());
         p.put("volumeChangePct", e.volumeChangePct()); p.put("volumeRank", e.volumeRank()); p.put("lastPrice", e.lastPrice());
-        p.put("priceChange24hPct", e.priceChange24hPct()); p.put("appliedEntryMinVolume", 25_000_000);
-        p.put("appliedRetentionMinVolume", 20_000_000); p.put("dataComplete", e.dataComplete());
+        p.put("priceChange24hPct", e.priceChange24hPct()); p.put("appliedEntryMinVolume", properties.getLaplace().getVolumeScan().getEntryMinQuoteVolume());
+        p.put("appliedRetentionMinVolume", properties.getLaplace().getVolumeScan().getRetentionMinQuoteVolume()); p.put("dataComplete", e.dataComplete());
         p.put("dataSource", "BINANCE_FUTURES"); p.put("evaluationVersion", LaplacePaperExecutionService.VERSION);
         p.put("positionOpen", e.positionOpen()); p.put("reentryBlocked", e.reentryBlocked());
         p.put("errorCode", e.errorCode()); p.put("errorMessage", e.errorMessage());

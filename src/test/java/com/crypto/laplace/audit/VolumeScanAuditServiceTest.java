@@ -31,7 +31,7 @@ class VolumeScanAuditServiceTest {
     @Test void writesOneStartedCoinAndConsistentCompletedSummaryWithIdempotencyKeys() throws Exception {
         VolumeScanAuditOutboxRepository repository=mock(VolumeScanAuditOutboxRepository.class);
         when(repository.existsByIdempotencyKey(any())).thenReturn(false);
-        VolumeScanAuditService service=new VolumeScanAuditService(repository,new ObjectMapper().findAndRegisterModules());
+        VolumeScanAuditService service=new VolumeScanAuditService(repository,new ObjectMapper().findAndRegisterModules(),new com.crypto.laplace.config.LaplaceStrategyProperties());
         var run=new VolumeScanAuditService.Run("volume-scan-test",LocalDate.of(2026,7,27),OffsetDateTime.parse("2026-07-27T10:00:05-04:00"));
         var coin=new VolumeScanCoinEvaluation("BTCUSDT",VolumeScanAuditStatus.WATCHLIST,VolumeScanAuditStatus.ACTIVE,VolumeScanTransition.ENTERED_POOL,true,true,"VOLUME_CRITERIA_PASSED",List.of("VOLUME_CRITERIA_PASSED"),List.of(),List.of("MIN_VOLUME"),run.startedAt(),new java.math.BigDecimal("26000000"),new java.math.BigDecimal("24000000"),new java.math.BigDecimal("8.333333"),1,new java.math.BigDecimal("100"),new java.math.BigDecimal("2"),false,false,true,null,null);
         service.started(run,1); service.coin(run,coin); service.completed(run,List.of(coin));
@@ -48,7 +48,7 @@ class VolumeScanAuditServiceTest {
     @Test void duplicateRunCoinIsNotInserted() {
         VolumeScanAuditOutboxRepository repository=mock(VolumeScanAuditOutboxRepository.class);
         when(repository.existsByIdempotencyKey("run:COIN_EVALUATED:BTCUSDT")).thenReturn(true);
-        VolumeScanAuditService service=new VolumeScanAuditService(repository,new ObjectMapper());
+        VolumeScanAuditService service=new VolumeScanAuditService(repository,new ObjectMapper(),new com.crypto.laplace.config.LaplaceStrategyProperties());
         service.persist(new VolumeScanAuditService.Run("run",LocalDate.now(),OffsetDateTime.now()),"COIN_EVALUATED","BTCUSDT",new LinkedHashMap<>());
         verify(repository,never()).save(any());
     }

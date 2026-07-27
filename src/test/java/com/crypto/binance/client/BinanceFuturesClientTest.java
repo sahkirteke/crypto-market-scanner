@@ -82,6 +82,17 @@ class BinanceFuturesClientTest {
     }
 
     @Test
+    void getBookTickerRequestsOnlyTheRequestedSymbol() {
+        java.util.concurrent.atomic.AtomicReference<String> uri=new java.util.concurrent.atomic.AtomicReference<>();
+        ExchangeFunction exchange=request->{uri.set(request.url().toString());return Mono.just(ClientResponse.create(HttpStatus.OK).header("Content-Type",MediaType.APPLICATION_JSON_VALUE).body("{\"symbol\":\"BTCUSDT\",\"bidPrice\":\"99\",\"askPrice\":\"100\"}").build());};
+        BinanceFuturesClient client=new BinanceFuturesClient(WebClient.builder().baseUrl("http://localhost").exchangeFunction(exchange).build());
+        BookTicker ticker=client.getBookTicker("BTCUSDT");
+        assertThat(uri.get()).contains("/fapi/v1/ticker/bookTicker?symbol=BTCUSDT");
+        assertThat(ticker.getBidPrice()).isEqualByComparingTo("99");
+        assertThat(ticker.getAskPrice()).isEqualByComparingTo("100");
+    }
+
+    @Test
     void getExchangeInfoMapsSymbolFilters() {
         BinanceFuturesClient client = clientWithJson("""
                 {

@@ -68,5 +68,7 @@ public class LaplaceStrategyProperties {
         private String cron = "5 0 10 * * *";
         private String timezone = "America/New_York";
         private String auditJsonlPath = "./logs/laplace-volume-scan.jsonl";
+        private BigDecimal entryMinQuoteVolume = new BigDecimal("25000000");
+        private BigDecimal retentionMinQuoteVolume = new BigDecimal("20000000");
     }
 }

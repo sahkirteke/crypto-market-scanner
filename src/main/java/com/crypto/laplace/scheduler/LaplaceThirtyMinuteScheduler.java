@@ -56,11 +56,13 @@ public class LaplaceThirtyMinuteScheduler {
             Set<String> managed = coordinator.managementSymbols();
             if (coinPool.symbolsToProcess().isEmpty() && managed.isEmpty()) { log.info("LAPLACE_SCAN_SKIPPED coinPoolEmpty=true"); return; }
             Set<String> symbols = new HashSet<>(coinPool.symbolsToProcess());
-            for (String symbol : new HashSet<>(symbols)) { if (!startupHistory.isReady(symbol)) startupHistory.initializeSymbol(symbol); }
+            int historyInitializedCount=0;
+            for (String symbol : new HashSet<>(symbols)) { if (!startupHistory.isReady(symbol)) {startupHistory.initializeSymbol(symbol);historyInitializedCount++;} }
             symbols.retainAll(startupHistory.readySymbols());
             for (String symbol : managed) {
                 if (!startupHistory.isReady(symbol)) {
                     startupHistory.initializeSymbol(symbol);
+                    historyInitializedCount++;
                 }
                 if (startupHistory.isReady(symbol)) {
                     symbols.add(symbol);
@@ -68,7 +70,7 @@ public class LaplaceThirtyMinuteScheduler {
             }
             symbols.forEach(this::process);
             var summary=coordinator.cycleSummary();
-            log.info("LAPLACE_30M_CYCLE_SUMMARY processedSymbols={} waitingSymbols={} activatedSymbols={} freshSignalCount={} entryAttemptCount={} entryOpenedCount={} outsideEntryUniverseCount={} blockedByReentryCount={} alreadyOpenCount={} failureCount={}",symbols.size(),summary.waitingSymbols(),summary.activatedSymbols(),summary.freshSignalCount(),summary.entryAttemptCount(),summary.entryOpenedCount(),summary.outsideEntryUniverseCount(),summary.blockedByReentryCount(),summary.alreadyOpenCount(),summary.failureCount());
+            log.info("LAPLACE_30M_CYCLE_SUMMARY processedSymbols={} historyInitializedCount={} waitingSymbols={} activatedSymbols={} freshSignalCount={} entryAttemptCount={} entryOpenedCount={} outsideEntryUniverseCount={} blockedByReentryCount={} alreadyOpenCount={} failureCount={} bookTickerRequestCount={} bookTickerFailureCount={} bulkBookTickerRequestCount={}",symbols.size(),historyInitializedCount,summary.waitingSymbols(),summary.activatedSymbols(),summary.freshSignalCount(),summary.entryAttemptCount(),summary.entryOpenedCount(),summary.outsideEntryUniverseCount(),summary.blockedByReentryCount(),summary.alreadyOpenCount(),summary.failureCount(),summary.bookTickerRequestCount(),summary.bookTickerFailureCount(),summary.bulkBookTickerRequestCount());
         } finally {
             running.set(false);
         }
