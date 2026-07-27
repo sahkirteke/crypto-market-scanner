@@ -76,6 +76,12 @@ public class LaplaceTradeJsonlWriter implements ApplicationRunner {
     @Transactional
     public boolean failure(String symbol, Instant candle, String currentPosition, String action,
                            String reason, Throwable error, boolean retryable) {
+        return failure(symbol,candle,currentPosition,action,reason,error,retryable,Map.of());
+    }
+
+    @Transactional
+    public boolean failure(String symbol, Instant candle, String currentPosition, String action,
+                           String reason, Throwable error, boolean retryable, Map<String,Object> audit) {
         String id = UUID.randomUUID().toString();
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("eventType", "FAILURE");
@@ -90,6 +96,7 @@ public class LaplaceTradeJsonlWriter implements ApplicationRunner {
         payload.put("errorMessage", error == null ? null : error.getMessage());
         payload.put("retryable", retryable);
         payload.put("failureTime", Instant.now());
+        payload.putAll(audit);
         try {
             String json = mapper.writeValueAsString(payload);
             repository.save(LaplaceTradeEventEntity.builder()

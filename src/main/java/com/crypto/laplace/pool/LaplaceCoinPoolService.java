@@ -27,6 +27,19 @@ public class LaplaceCoinPoolService {
     private final VolumeScanAuditService audit;
 
     public boolean canOpen(String symbol){return pool.findById(symbol).map(p->p.getState()==LaplaceCoinPoolState.ACTIVE).orElse(false);}
+    public EntryEligibility isCurrentlyEligibleForEntry(String symbol) {
+        LaplaceCoinPoolEntity member=pool.findById(symbol).orElse(null);
+        List<com.crypto.laplace.persistence.LaplacePaperPositionEntity> open=positions.findByStrategyAndSymbolAndStatus(
+                LaplacePaperExecutionService.STRATEGY,symbol,LaplacePositionStatus.OPEN);
+        LaplaceCoinPoolState state=member==null?null:member.getState();
+        boolean included=state!=null&&state!=LaplaceCoinPoolState.REMOVED;
+        boolean reentryBlocked=member!=null&&Boolean.TRUE.equals(member.getReentryBlocked());
+        String reason=member==null?"COIN_POOL_RECORD_MISSING":state!=LaplaceCoinPoolState.ACTIVE?"POOL_STATE_"+state:
+                reentryBlocked?"REENTRY_LOCK_ACTIVE":open.size()>1?"POSITION_STATE_CONFLICT":!open.isEmpty()?"POSITION_ALREADY_OPEN":null;
+        return new EntryEligibility(reason==null,state,included,reentryBlocked,open.size(),reason,member==null?null:member.getUpdatedAt());
+    }
+    public record EntryEligibility(boolean allowed,LaplaceCoinPoolState poolState,boolean includedInPool,
+                                   boolean reentryBlocked,int openPositionCount,String blockReason,Instant poolStateUpdatedAt) {}
     public Set<String> symbolsToProcess(){return new HashSet<>(pool.findByStateIn(List.of(LaplaceCoinPoolState.ACTIVE,LaplaceCoinPoolState.WAITING_FOR_NEW_TREND,LaplaceCoinPoolState.PENDING_REMOVAL)).stream().map(LaplaceCoinPoolEntity::getSymbol).toList());}
     public BigDecimal dailyMargin(){return snapshots.findById(LocalDate.now(ZoneId.of("America/New_York"))).map(LaplaceCapitalSnapshotEntity::getDailyTradeMargin).orElse(INITIAL_MARGIN);}
 

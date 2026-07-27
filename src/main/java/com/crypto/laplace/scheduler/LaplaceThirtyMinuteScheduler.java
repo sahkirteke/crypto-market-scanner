@@ -51,6 +51,7 @@ public class LaplaceThirtyMinuteScheduler {
             return;
         }
         try {
+            Instant cycleStartedAt=Instant.now(); coordinator.beginCycle(cycleStartedAt);
             stopService.checkOpenPositions();
             Set<String> managed = coordinator.managementSymbols();
             if (coinPool.symbolsToProcess().isEmpty() && managed.isEmpty()) { log.info("LAPLACE_SCAN_SKIPPED coinPoolEmpty=true"); return; }
@@ -66,6 +67,8 @@ public class LaplaceThirtyMinuteScheduler {
                 }
             }
             symbols.forEach(this::process);
+            var summary=coordinator.cycleSummary();
+            log.info("LAPLACE_30M_CYCLE_SUMMARY processedSymbols={} waitingSymbols={} activatedSymbols={} freshSignalCount={} entryAttemptCount={} entryOpenedCount={} outsideEntryUniverseCount={} blockedByReentryCount={} alreadyOpenCount={} failureCount={}",symbols.size(),summary.waitingSymbols(),summary.activatedSymbols(),summary.freshSignalCount(),summary.entryAttemptCount(),summary.entryOpenedCount(),summary.outsideEntryUniverseCount(),summary.blockedByReentryCount(),summary.alreadyOpenCount(),summary.failureCount());
         } finally {
             running.set(false);
         }
