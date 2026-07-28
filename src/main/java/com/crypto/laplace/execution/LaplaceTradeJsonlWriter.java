@@ -80,6 +80,26 @@ public class LaplaceTradeJsonlWriter implements ApplicationRunner {
     }
 
     @Transactional
+    public void riskyEntrySkipped(String symbol, Instant signalCandleCloseTime,
+                                  com.crypto.common.enums.PositionSide effectiveExecutionSide) {
+        Instant skipTime = Instant.now();
+        String key = "RISKY_ENTRY_SKIPPED:" + symbol + ":" + signalCandleCloseTime;
+        String id = UUID.nameUUIDFromBytes(key.getBytes(StandardCharsets.UTF_8)).toString();
+        if (repository.existsById(id)) {
+            return;
+        }
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("eventType", "RISKY_ENTRY_SKIPPED");
+        payload.put("eventId", id);
+        payload.put("symbol", symbol);
+        payload.put("skipTime", skipTime);
+        payload.put("effectiveExecutionSide", effectiveExecutionSide);
+        String json = tryJson(payload).orElseThrow(() -> new IllegalStateException("RISKY_ENTRY_SKIP_SERIALIZATION_FAILED"));
+        repository.save(LaplaceTradeEventEntity.builder().eventId(id).eventType("RISKY_ENTRY_SKIPPED")
+                .symbol(symbol).payloadJson(json).jsonlWritten(false).createdAt(skipTime).build());
+    }
+
+    @Transactional
     public boolean failure(String symbol, Instant candle, String currentPosition, String action,
                            String reason, Throwable error, boolean retryable, Map<String,Object> audit) {
         String id = UUID.randomUUID().toString();

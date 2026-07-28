@@ -2,6 +2,7 @@ package com.crypto.api.dto;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 public record LaplaceAnalysisSummaryResponse(
         String strategy,
@@ -31,6 +32,8 @@ public record LaplaceAnalysisSummaryResponse(
         BigDecimal shortWinRate,
         Instant firstTradeTime,
         Instant lastTradeTime,
-        Instant lastUpdatedAt
+        Instant lastUpdatedAt,
+        long skippedEntryCount,
+        List<LaplaceSkippedEntrySummary> skippedEntries
 ) {
 }

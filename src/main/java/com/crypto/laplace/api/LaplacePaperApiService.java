@@ -2,12 +2,15 @@ package com.crypto.laplace.api;
 
 import com.crypto.api.dto.LaplaceAnalysisSummaryResponse;
 import com.crypto.api.dto.LaplaceOpenPaperPositionResponse;
+import com.crypto.api.dto.LaplaceSkippedEntrySummary;
 import com.crypto.common.enums.PositionSide;
 import com.crypto.laplace.config.LaplaceStrategyProperties;
 import com.crypto.laplace.execution.LaplacePaperExecutionService;
 import com.crypto.laplace.model.LaplacePositionStatus;
 import com.crypto.laplace.persistence.LaplacePaperPositionEntity;
 import com.crypto.laplace.persistence.LaplacePaperPositionRepository;
+import com.crypto.laplace.persistence.LaplaceTradeEventRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
@@ -36,6 +39,8 @@ public class LaplacePaperApiService implements ApplicationRunner {
 
     private final LaplacePaperPositionRepository repository;
     private final LaplaceStrategyProperties properties;
+    private final LaplaceTradeEventRepository events;
+    private final ObjectMapper objectMapper;
 
     @Value("${server.port:8080}")
     private String serverPort;
@@ -69,7 +74,7 @@ public class LaplacePaperApiService implements ApplicationRunner {
             List<LaplacePaperPositionEntity> open = repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN);
             List<LaplacePaperPositionEntity> closed = repository.findByStrategyAndStatusIn(
                     LaplacePaperExecutionService.STRATEGY, CLOSED_STATUSES);
-            return buildSummary(open, closed);
+            return buildSummary(open, closed, events.countByEventType("RISKY_ENTRY_SKIPPED"), skippedEntries());
         } catch (DataAccessException exception) {
             throw unavailable(exception);
         }
@@ -84,7 +89,8 @@ public class LaplacePaperApiService implements ApplicationRunner {
                 p.getEntryFeeRate(), p.getEntryFee(), null, p.getEntryTime(), p.getEntryTime());
     }
 
-    private LaplaceAnalysisSummaryResponse buildSummary(List<LaplacePaperPositionEntity> open, List<LaplacePaperPositionEntity> closed) {
+    private LaplaceAnalysisSummaryResponse buildSummary(List<LaplacePaperPositionEntity> open, List<LaplacePaperPositionEntity> closed,
+                                                        long skippedEntryCount, List<LaplaceSkippedEntrySummary> skippedEntries) {
         List<LaplacePaperPositionEntity> safeOpen = open == null ? List.of() : open;
         List<LaplacePaperPositionEntity> safeClosed = closed == null ? List.of() : closed;
         long tradeCount = safeClosed.size();
@@ -112,7 +118,20 @@ public class LaplacePaperApiService implements ApplicationRunner {
                 totalEntryFee, totalExitFee, totalFee, netPnl, average(grossPnl, tradeCount), average(netPnl, tradeCount),
                 average(sum(safeClosed.stream().map(LaplacePaperPositionEntity::getNetPnlPct).toList()), tradeCount), bestTrade,
                 worstTrade, longNetPnl, shortNetPnl, pct(longWinCount, longTradeCount), pct(shortWinCount, shortTradeCount),
-                firstTradeTime, lastTradeTime, lastTradeTime);
+                firstTradeTime, lastTradeTime, lastTradeTime, skippedEntryCount, skippedEntries);
+    }
+
+    private List<LaplaceSkippedEntrySummary> skippedEntries() {
+        return events.findTop100ByEventTypeOrderByCreatedAtDesc("RISKY_ENTRY_SKIPPED").stream().map(event -> {
+            try {
+                var json = objectMapper.readTree(event.getPayloadJson());
+                return new LaplaceSkippedEntrySummary(json.path("symbol").asText(),
+                        Instant.parse(json.path("skipTime").asText()),
+                        PositionSide.valueOf(json.path("effectiveExecutionSide").asText()));
+            } catch (RuntimeException | java.io.IOException exception) {
+                throw new IllegalStateException("Invalid risky-entry skip audit event " + event.getEventId(), exception);
+            }
+        }).toList();
     }
 
     private ResponseStatusException unavailable(Exception exception) {

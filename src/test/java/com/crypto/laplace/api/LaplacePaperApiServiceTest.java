@@ -14,6 +14,9 @@ import com.crypto.laplace.execution.LaplacePaperExecutionService;
 import com.crypto.laplace.model.LaplacePositionStatus;
 import com.crypto.laplace.persistence.LaplacePaperPositionEntity;
 import com.crypto.laplace.persistence.LaplacePaperPositionRepository;
+import com.crypto.laplace.persistence.LaplaceTradeEventEntity;
+import com.crypto.laplace.persistence.LaplaceTradeEventRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -23,13 +26,16 @@ import org.junit.jupiter.api.Test;
 class LaplacePaperApiServiceTest {
     private LaplacePaperPositionRepository repository;
     private LaplacePaperApiService service;
+    private LaplaceTradeEventRepository events;
 
     @BeforeEach
     void setUp() {
         repository = mock(LaplacePaperPositionRepository.class);
         LaplaceStrategyProperties properties = new LaplaceStrategyProperties();
         properties.setActiveStrategy("LAPLACE_KERNEL_REGRESSION_30M");
-        service = new LaplacePaperApiService(repository, properties);
+        events = mock(LaplaceTradeEventRepository.class);
+        when(events.findTop100ByEventTypeOrderByCreatedAtDesc("RISKY_ENTRY_SKIPPED")).thenReturn(List.of());
+        service = new LaplacePaperApiService(repository, properties, events, new ObjectMapper().findAndRegisterModules());
     }
 
     @Test
@@ -129,6 +135,40 @@ class LaplacePaperApiServiceTest {
         assertThat(summary.winCount()).isEqualTo(1);
         assertThat(summary.lossCount()).isEqualTo(1);
         assertThat(summary.netPnl()).isEqualByComparingTo("-1.8289");
+    }
+
+    @Test
+    void summaryAddsOnlyRiskyEntrySkipsNewestFirstWithoutChangingTradeMetrics() {
+        when(repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN)).thenReturn(List.of());
+        when(repository.findByStrategyAndStatusIn(eq(LaplacePaperExecutionService.STRATEGY), anyCollection())).thenReturn(List.of());
+        when(events.countByEventType("RISKY_ENTRY_SKIPPED")).thenReturn(2L);
+        when(events.findTop100ByEventTypeOrderByCreatedAtDesc("RISKY_ENTRY_SKIPPED")).thenReturn(List.of(
+                skip("new", "BTCUSDT", "2026-07-28T16:30:03.456Z", "LONG"),
+                skip("old", "ETHUSDT", "2026-07-28T16:00:04.123Z", "SHORT")));
+
+        LaplaceAnalysisSummaryResponse summary = service.summary();
+
+        assertThat(summary.skippedEntryCount()).isEqualTo(2);
+        assertThat(summary.skippedEntries()).extracting(e -> e.symbol()).containsExactly("BTCUSDT", "ETHUSDT");
+        assertThat(summary.skippedEntries()).extracting(e -> e.effectiveExecutionSide()).containsExactly(PositionSide.LONG, PositionSide.SHORT);
+        assertThat(summary.tradeCount()).isZero();
+        assertThat(summary.netPnl()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void summaryReturnsEmptySkipFieldsWhenNoRiskyEntriesExist() {
+        when(repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN)).thenReturn(List.of());
+        when(repository.findByStrategyAndStatusIn(eq(LaplacePaperExecutionService.STRATEGY), anyCollection())).thenReturn(List.of());
+        LaplaceAnalysisSummaryResponse summary = service.summary();
+        assertThat(summary.skippedEntryCount()).isZero();
+        assertThat(summary.skippedEntries()).isEmpty();
+    }
+
+    private LaplaceTradeEventEntity skip(String id, String symbol, String time, String side) {
+        return LaplaceTradeEventEntity.builder().eventId(id).eventType("RISKY_ENTRY_SKIPPED").symbol(symbol)
+                .payloadJson("{\"symbol\":\"" + symbol + "\",\"skipTime\":\"" + time
+                        + "\",\"effectiveExecutionSide\":\"" + side + "\"}")
+                .createdAt(Instant.parse(time)).build();
     }
 
     private LaplacePaperPositionEntity open(String id, String symbol, PositionSide side, String entryTime) {
