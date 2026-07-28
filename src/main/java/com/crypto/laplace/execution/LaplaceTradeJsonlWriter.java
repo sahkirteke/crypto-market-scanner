@@ -81,7 +81,8 @@ public class LaplaceTradeJsonlWriter implements ApplicationRunner {
 
     @Transactional
     public void riskyEntrySkipped(String symbol, Instant signalCandleCloseTime,
-                                  com.crypto.common.enums.PositionSide effectiveExecutionSide) {
+                                  com.crypto.common.enums.PositionSide effectiveExecutionSide,
+                                  java.math.BigDecimal entryPrice) {
         Instant skipTime = Instant.now();
         String key = "RISKY_ENTRY_SKIPPED:" + symbol + ":" + signalCandleCloseTime;
         String id = UUID.nameUUIDFromBytes(key.getBytes(StandardCharsets.UTF_8)).toString();
@@ -94,6 +95,7 @@ public class LaplaceTradeJsonlWriter implements ApplicationRunner {
         payload.put("symbol", symbol);
         payload.put("skipTime", skipTime);
         payload.put("effectiveExecutionSide", effectiveExecutionSide);
+        payload.put("entryPrice", entryPrice);
         String json = tryJson(payload).orElseThrow(() -> new IllegalStateException("RISKY_ENTRY_SKIP_SERIALIZATION_FAILED"));
         repository.save(LaplaceTradeEventEntity.builder().eventId(id).eventType("RISKY_ENTRY_SKIPPED")
                 .symbol(symbol).payloadJson(json).jsonlWritten(false).createdAt(skipTime).build());
