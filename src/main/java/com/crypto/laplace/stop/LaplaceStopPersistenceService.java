@@ -56,7 +56,7 @@ public class LaplaceStopPersistenceService {
         return new Result(Outcome.NO_CHANGE,checkpoint);
     }
 
-    private void ensureStopPrice(LaplacePaperPositionEntity p){if(p.getStopPrice()!=null||p.getEntryExecutionPrice()==null)return;p.setStopLossPct(new BigDecimal("0.055"));p.setStopPrice(p.getSide()==com.crypto.common.enums.PositionSide.LONG?p.getEntryExecutionPrice().multiply(new BigDecimal("0.945")):p.getEntryExecutionPrice().multiply(new BigDecimal("1.055")));}
+    private void ensureStopPrice(LaplacePaperPositionEntity p){if(p.getStopPrice()!=null||p.getEntryExecutionPrice()==null)return;p.setStopLossPct(new BigDecimal("0.046"));p.setStopPrice(p.getSide()==com.crypto.common.enums.PositionSide.LONG?p.getEntryExecutionPrice().multiply(new BigDecimal("0.954")):p.getEntryExecutionPrice().multiply(new BigDecimal("1.046")));}
     public enum Outcome { CHECKPOINT_ADVANCED, STOP_CLOSED, ALREADY_CLOSED, NO_CHANGE }
     public record Result(Outcome outcome,Instant checkpoint) {}
 }

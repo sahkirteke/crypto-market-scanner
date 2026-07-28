@@ -11,10 +11,11 @@ import lombok.extern.slf4j.Slf4j;import org.springframework.beans.factory.annota
 /** Keeps raw strategy signals untouched and applies the contrarian mapping only at execution. */
 @Slf4j @Service
 public class LaplacePaperTradeCoordinator {
- private final LaplaceStrategyProperties config;private final LaplacePaperPositionRepository positions;private final LaplacePaperExecutionService execution;private final LaplaceTradeJsonlWriter writer;private final ConcurrentHashMap<String,ReentrantLock> locks=new ConcurrentHashMap<>();private final ConcurrentHashMap<String,LaplaceSignal> rawStates=new ConcurrentHashMap<>();private final LaplaceCoinPoolService coinPool;
+ private final LaplaceStrategyProperties config;private final LaplacePaperPositionRepository positions;private final LaplacePaperExecutionService execution;private final LaplaceTradeJsonlWriter writer;private final ConcurrentHashMap<String,ReentrantLock> locks=new ConcurrentHashMap<>();private final ConcurrentHashMap<String,LaplaceSignal> rawStates=new ConcurrentHashMap<>();private final LaplaceCoinPoolService coinPool;private final LaplaceRiskyEntryFilter riskyEntryFilter;
  @Autowired
- public LaplacePaperTradeCoordinator(LaplaceStrategyProperties config,LaplacePaperPositionRepository positions,LaplacePaperExecutionService execution,LaplaceTradeJsonlWriter writer,LaplaceCoinPoolService coinPool){this.config=config;this.positions=positions;this.execution=execution;this.writer=writer;this.coinPool=coinPool;}
- public LaplacePaperTradeCoordinator(LaplaceStrategyProperties config,LaplacePaperPositionRepository positions,LaplacePaperExecutionService execution,LaplaceTradeJsonlWriter writer){this.config=config;this.positions=positions;this.execution=execution;this.writer=writer;this.coinPool=null;}
+ public LaplacePaperTradeCoordinator(LaplaceStrategyProperties config,LaplacePaperPositionRepository positions,LaplacePaperExecutionService execution,LaplaceTradeJsonlWriter writer,LaplaceCoinPoolService coinPool,LaplaceRiskyEntryFilter riskyEntryFilter){this.config=config;this.positions=positions;this.execution=execution;this.writer=writer;this.coinPool=coinPool;this.riskyEntryFilter=riskyEntryFilter;}
+ public LaplacePaperTradeCoordinator(LaplaceStrategyProperties config,LaplacePaperPositionRepository positions,LaplacePaperExecutionService execution,LaplaceTradeJsonlWriter writer,LaplaceCoinPoolService coinPool){this(config,positions,execution,writer,coinPool,new LaplaceRiskyEntryFilter());}
+ public LaplacePaperTradeCoordinator(LaplaceStrategyProperties config,LaplacePaperPositionRepository positions,LaplacePaperExecutionService execution,LaplaceTradeJsonlWriter writer){this(config,positions,execution,writer,null,new LaplaceRiskyEntryFilter());}
 private final AtomicBoolean paperDisabledLogged=new AtomicBoolean(false);
  private final ConcurrentHashMap<String,Instant> stopCooldowns=new ConcurrentHashMap<>();
  private final ConcurrentHashMap<String,LaplaceSignal> oppositeSignalLocks=new ConcurrentHashMap<>();
@@ -56,7 +57,7 @@ private final AtomicBoolean paperDisabledLogged=new AtomicBoolean(false);
   List<LaplacePaperPositionEntity> open=positions.findByStrategyAndSymbolAndStatus(LaplacePaperExecutionService.STRATEGY,signal.symbol(),LaplacePositionStatus.OPEN);if(open.size()>1){failure(signal,"CONFLICT","NONE","POSITION_STATE_CONFLICT",null,false);return;}
   LaplaceCoinPoolService.EntryEligibility eligibility=coinPool==null?null:coinPool.isCurrentlyEligibleForEntry(signal.symbol());
   boolean currentlyEligible=coinPool==null?poolActiveAfterTransition:eligibility.allowed();
-  if(open.isEmpty()){if(effective==null||!signal.eligibleForExecution())return;metrics.entryAttempts.incrementAndGet();if(!currentlyEligible){
+  if(open.isEmpty()){if(effective==null||!signal.eligibleForExecution())return;if(riskyEntryFilter.isRisky(signal)){log.info("LAPLACE_RISKY_ENTRY_FILTER action=SKIP reason=RISKY_ENTRY_FILTER symbol={} rawSignal={} effectiveExecutionSide={} atrPercentage={} previousRawTakerImbalance={} riskyEntry=true signalCandleCloseTime={}",signal.symbol(),signal.entrySignal(),effective,signal.atrPercentage(),signal.previousRawTakerImbalance(),signal.signalCandleCloseTime());return;}metrics.entryAttempts.incrementAndGet();if(!currentlyEligible){
     Map<String,Object> audit=eligibilityAudit(eligibility,entryUniverseSnapshotContainsSymbol,"FLAT",eligibilityEvaluatedAt);
     String failureReason=eligibility!=null&&eligibility.blockReason()!=null?eligibility.blockReason():"SYMBOL_OUTSIDE_ENTRY_UNIVERSE";
     if("SYMBOL_OUTSIDE_ENTRY_UNIVERSE".equals(failureReason)){metrics.outsideUniverse.incrementAndGet();if(eligibility!=null&&eligibility.poolState()==LaplaceCoinPoolState.ACTIVE&&signal.eligibleForExecution())log.error("LAPLACE_STALE_ENTRY_UNIVERSE_INCONSISTENCY symbol={} poolState=ACTIVE eligibleForExecution=true currentPosition=FLAT freshSignal=true snapshotContains={}",signal.symbol(),entryUniverseSnapshotContainsSymbol);}
@@ -65,7 +66,8 @@ private final AtomicBoolean paperDisabledLogged=new AtomicBoolean(false);
   metrics.alreadyOpen.incrementAndGet();
   LaplacePaperPositionEntity p=open.getFirst();if(effective==null||p.getSide()==effective){log.info("LAPLACE_SAME_EFFECTIVE_SIDE_SIGNAL_IGNORED symbol={} side={}",signal.symbol(),p.getSide());return;}
   PositionSide reversalTarget=mapRawSignalToExecutionSide(signal.strongReversalSignal());if(reversalTarget==null||reversalTarget!=effective)return;
-  boolean reversalTargetAllowed=eligibility==null?poolActiveAfterTransition:eligibility.poolState()==LaplaceCoinPoolState.ACTIVE&&!eligibility.reentryBlocked();
+  boolean riskyReversalEntry=riskyEntryFilter.isRisky(signal);if(riskyReversalEntry)log.info("LAPLACE_RISKY_ENTRY_FILTER action=SKIP reason=RISKY_ENTRY_FILTER symbol={} rawSignal={} effectiveExecutionSide={} atrPercentage={} previousRawTakerImbalance={} riskyEntry=true signalCandleCloseTime={}",signal.symbol(),signal.entrySignal(),effective,signal.atrPercentage(),signal.previousRawTakerImbalance(),signal.signalCandleCloseTime());
+  boolean reversalTargetAllowed=(eligibility==null?poolActiveAfterTransition:eligibility.poolState()==LaplaceCoinPoolState.ACTIVE&&!eligibility.reentryBlocked())&&!riskyReversalEntry;
   try{execution.reverse(signal,p,effective,reversalTargetAllowed);writer.drain();}catch(RuntimeException e){failure(signal,p.getSide().name(),"REVERSAL",reason(e,"REVERSAL_CLOSE_FAILED"),e,true);}
  }
  private void failure(LaplaceSignalResult s,String current,String action,String reason,Throwable e,boolean retry){writer.failure(s.symbol(),s.signalCandleCloseTime(),current,action,reason,e,retry);writer.drain();}

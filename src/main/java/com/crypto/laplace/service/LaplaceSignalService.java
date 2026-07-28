@@ -4,6 +4,8 @@ import com.crypto.domain.model.Kline;
 import com.crypto.laplace.model.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import org.springframework.stereotype.Service;
 import lombok.RequiredArgsConstructor;
 
@@ -23,6 +25,9 @@ public class LaplaceSignalService {
   else { if(cn>-ENTRY&&cn<ENTRY) reasons.add(RejectionReason.SLOPE_IN_DEAD_ZONE); else reasons.add(RejectionReason.SECOND_CONFIRMATION_MISSING); }
   if(warmed && cn>=REVERSAL&&pn>=REVERSAL&&candle.getClose().doubleValue()>r.current()) reversal=LaplaceSignal.LONG;
   if(warmed && cn<=-REVERSAL&&pn<=-REVERSAL&&candle.getClose().doubleValue()<r.current()) reversal=LaplaceSignal.SHORT;
-  return new LaplaceSignalResult("LAPLACE_KERNEL_REGRESSION_30M","1.0",symbol,"30m","LAPLACE",14,"CLOSE",false,candle.getOpenTime(),candle.getCloseTime(),candle.getClose().doubleValue(),r.current(),r.previous(),r.twoBarsAgo(),cs,ps,ca,pa,cn,pn,ENTRY,REVERSAL,2,entry,reversal,warmed?StartupState.ACTIVE:StartupState.READY_WAITING_NEXT_CLOSE,newBars,warmed && entry!=LaplaceSignal.NONE,reasons);
+  double atrPercentage=ca/candle.getClose().doubleValue()*100.0;
+  double previousRawTakerImbalance=rawDirectedTakerImbalance(candles.get(end-1),entry);
+  return new LaplaceSignalResult("LAPLACE_KERNEL_REGRESSION_30M","1.0",symbol,"30m","LAPLACE",14,"CLOSE",false,candle.getOpenTime(),candle.getCloseTime(),candle.getClose().doubleValue(),r.current(),r.previous(),r.twoBarsAgo(),cs,ps,ca,pa,atrPercentage,previousRawTakerImbalance,cn,pn,ENTRY,REVERSAL,2,entry,reversal,warmed?StartupState.ACTIVE:StartupState.READY_WAITING_NEXT_CLOSE,newBars,warmed && entry!=LaplaceSignal.NONE,reasons);
  }
+ private double rawDirectedTakerImbalance(Kline candle,LaplaceSignal rawSignal){BigDecimal volume=candle.getVolume(),buy=candle.getTakerBuyBaseVolume();if(volume==null||buy==null||volume.signum()<=0)return Double.NaN;double market=buy.multiply(BigDecimal.valueOf(2)).subtract(volume).divide(volume,12,RoundingMode.HALF_UP).doubleValue();return rawSignal==LaplaceSignal.SHORT?-market:market;}
 }

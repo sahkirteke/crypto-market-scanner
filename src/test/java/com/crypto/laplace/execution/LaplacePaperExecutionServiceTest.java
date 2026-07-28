@@ -59,7 +59,8 @@ class LaplacePaperExecutionServiceTest {
         assertThat(opened.getLeverage()).isEqualTo(10);
         assertThat(opened.getQuantity()).isEqualByComparingTo("0.5");
         assertThat(opened.getEntryFee()).isEqualByComparingTo("0.02");
-        assertThat(opened.getStopPrice()).isEqualByComparingTo("94.5");
+        assertThat(opened.getStopPrice()).isEqualByComparingTo("95.4");
+        assertThat(opened.getStopLossPct()).isEqualByComparingTo("0.046");
     }
 
     @Test
@@ -72,7 +73,8 @@ class LaplacePaperExecutionServiceTest {
         assertThat(opened.getMargin()).isEqualByComparingTo("5");
         assertThat(opened.getLeverage()).isEqualTo(10);
         assertThat(opened.getQuantity()).isEqualByComparingTo("1");
-        assertThat(opened.getStopPrice()).isEqualByComparingTo("52.75");
+        assertThat(opened.getStopPrice()).isEqualByComparingTo("52.3");
+        assertThat(opened.getStopLossPct()).isEqualByComparingTo("0.046");
     }
 
     @Test
@@ -123,17 +125,17 @@ class LaplacePaperExecutionServiceTest {
     @Test
     void stopCloseUsesExecutableBidWritesOneExitAndIsIdempotent() {
         LaplacePaperPositionEntity open = openPosition(PositionSide.LONG);
-        open.setStopLossPct(new BigDecimal("0.055"));
-        open.setStopPrice(new BigDecimal("94.5"));
+        open.setStopLossPct(new BigDecimal("0.046"));
+        open.setStopPrice(new BigDecimal("95.4"));
         when(positions.findByIdForUpdate("position")).thenReturn(Optional.of(open));
         Kline trigger = Kline.builder().openTime(Instant.now().minusSeconds(300)).closeTime(Instant.now())
-                .open(new BigDecimal("95")).high(new BigDecimal("101")).low(new BigDecimal("94.5")).close(new BigDecimal("96")).build();
+                .open(new BigDecimal("95")).high(new BigDecimal("101")).low(new BigDecimal("95.4")).close(new BigDecimal("96")).build();
 
-        service.closeByStop("position", trigger, new BigDecimal("94.5"), "FIVE_MINUTE_STOP_SIMULATION");
-        service.closeByStop("position", trigger, new BigDecimal("94.5"), "FIVE_MINUTE_STOP_SIMULATION");
+        service.closeByStop("position", trigger, new BigDecimal("95.4"), "FIVE_MINUTE_STOP_SIMULATION");
+        service.closeByStop("position", trigger, new BigDecimal("95.4"), "FIVE_MINUTE_STOP_SIMULATION");
 
         assertThat(open.getStatus()).isEqualTo(LaplacePositionStatus.CLOSED_BY_STOP_LOSS);
-        assertThat(open.getExitExecutionPrice()).isEqualByComparingTo("94.5");
+        assertThat(open.getExitExecutionPrice()).isEqualByComparingTo("95.4");
         assertThat(open.getGrossPnl()).isEqualByComparingTo("-1.1");
         assertThat(open.getExitFee()).isEqualByComparingTo("0.00756");
         assertThat(open.getNetPnl()).isEqualByComparingTo("-1.11556");
@@ -159,7 +161,7 @@ class LaplacePaperExecutionServiceTest {
         Instant now = Instant.now();
         return new LaplaceSignalResult(LaplacePaperExecutionService.STRATEGY, "1.0", "BTCUSDT", "30m",
                 "LAPLACE", 14, "CLOSE", false, now.minusSeconds(1800), now, 77,
-                76, 75, 74, 1, 1, 10, 10, .1, .1, .03, .04, 2,
+                76, 75, 74, 1, 1, 10, 10, 1.0, .10, .1, .1, .03, .04, 2,
                 LaplaceSignal.LONG, LaplaceSignal.LONG, StartupState.ACTIVE, 1, true, List.of());
     }
 }
