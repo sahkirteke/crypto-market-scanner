@@ -44,6 +44,7 @@ public class LaplaceCoinPoolService {
     private BigDecimal entryThreshold(){return properties.getLaplace().getVolumeScan().getEntryMinQuoteVolume();}
     private BigDecimal retentionThreshold(){return properties.getLaplace().getVolumeScan().getRetentionMinQuoteVolume();}
     public Set<String> symbolsToProcess(){return new HashSet<>(pool.findByStateIn(List.of(LaplaceCoinPoolState.ACTIVE,LaplaceCoinPoolState.WAITING_FOR_NEW_TREND,LaplaceCoinPoolState.PENDING_REMOVAL)).stream().map(LaplaceCoinPoolEntity::getSymbol).toList());}
+    public Set<String> activeSymbols(){return new HashSet<>(pool.findByStateIn(List.of(LaplaceCoinPoolState.ACTIVE)).stream().map(LaplaceCoinPoolEntity::getSymbol).toList());}
     public BigDecimal dailyMargin(){return snapshots.findById(LocalDate.now(ZoneId.of("America/New_York"))).map(LaplaceCapitalSnapshotEntity::getDailyTradeMargin).orElse(INITIAL_MARGIN);}
 
     @Transactional
