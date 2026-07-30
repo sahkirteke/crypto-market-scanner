@@ -80,11 +80,13 @@ public class LaplaceTradeJsonlWriter implements ApplicationRunner {
     }
 
     @Transactional
-    public void riskyEntrySkipped(String symbol, Instant signalCandleCloseTime,
-                                  com.crypto.common.enums.PositionSide effectiveExecutionSide,
-                                  java.math.BigDecimal entryPrice) {
+    public void entrySkipped(com.crypto.laplace.model.LaplaceSignalResult signal,
+                             com.crypto.common.enums.PositionSide effectiveExecutionSide,
+                             LaplaceEntryDecision decision) {
         Instant skipTime = Instant.now();
-        String key = "RISKY_ENTRY_SKIPPED:" + symbol + ":" + signalCandleCloseTime;
+        String symbol = signal.symbol();
+        String key = "RISKY_ENTRY_SKIPPED:" + symbol + ":" + signal.entrySignal() + ":"
+                + signal.signalCandleCloseTime() + ":" + decision.skipReasons();
         String id = UUID.nameUUIDFromBytes(key.getBytes(StandardCharsets.UTF_8)).toString();
         if (repository.existsById(id)) {
             return;
@@ -94,8 +96,21 @@ public class LaplaceTradeJsonlWriter implements ApplicationRunner {
         payload.put("eventId", id);
         payload.put("symbol", symbol);
         payload.put("skipTime", skipTime);
+        payload.put("signalCandleCloseTime", signal.signalCandleCloseTime());
+        payload.put("rawSignal", signal.entrySignal());
         payload.put("effectiveExecutionSide", effectiveExecutionSide);
-        payload.put("entryPrice", entryPrice);
+        payload.put("entryPrice", java.math.BigDecimal.valueOf(signal.signalCandleClose()));
+        payload.put("atrPercentage", signal.atrPercentage());
+        payload.put("previousRawTakerImbalance", signal.previousRawTakerImbalance());
+        payload.put("currentNormalizedSlope", signal.currentNormalizedSlope());
+        payload.put("previousNormalizedSlope", signal.previousNormalizedSlope());
+        payload.put("currentSlopeStrength", Math.abs(signal.currentNormalizedSlope()));
+        payload.put("previousSlopeStrength", Math.abs(signal.previousNormalizedSlope()));
+        payload.put("riskyEntry", decision.riskyEntry());
+        payload.put("strongConfirmedSignal", decision.strongConfirmedSignal());
+        payload.put("skipReasons", decision.skipReasons());
+        payload.put("blockedRawDirection", signal.entrySignal());
+        payload.put("entryStateConsumed", true);
         String json = tryJson(payload).orElseThrow(() -> new IllegalStateException("RISKY_ENTRY_SKIP_SERIALIZATION_FAILED"));
         repository.save(LaplaceTradeEventEntity.builder().eventId(id).eventType("RISKY_ENTRY_SKIPPED")
                 .symbol(symbol).payloadJson(json).jsonlWritten(false).createdAt(skipTime).build());

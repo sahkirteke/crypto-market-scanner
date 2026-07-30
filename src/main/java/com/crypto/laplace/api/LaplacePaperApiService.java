@@ -128,7 +128,10 @@ public class LaplacePaperApiService implements ApplicationRunner {
                 return new LaplaceSkippedEntrySummary(json.path("symbol").asText(),
                         Instant.parse(json.path("skipTime").asText()),
                         PositionSide.valueOf(json.path("effectiveExecutionSide").asText()),
-                        json.hasNonNull("entryPrice") ? json.get("entryPrice").decimalValue() : null);
+                        json.hasNonNull("entryPrice") ? json.get("entryPrice").decimalValue() : null,
+                        objectMapper.convertValue(json.path("skipReasons"),
+                                objectMapper.getTypeFactory().constructCollectionType(java.util.List.class,
+                                        com.crypto.laplace.execution.LaplaceEntrySkipReason.class)));
             } catch (RuntimeException | java.io.IOException exception) {
                 throw new IllegalStateException("Invalid risky-entry skip audit event " + event.getEventId(), exception);
             }
