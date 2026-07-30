@@ -46,10 +46,10 @@ public class LaplaceStartupHistoryService implements ApplicationRunner {
             List<Kline> candles = klines.loadStartupClosed(symbol);
             List<PreparedLaplaceCandle> prepared = prepare(candles);
             StartupHistory history = new StartupHistory(symbol, candles, prepared,
-                    candles.getLast().getCloseTime(), StartupState.READY_WAITING_NEXT_CLOSE);
+                    candles.get(candles.size() - 1).getCloseTime(), StartupState.READY_WAITING_NEXT_CLOSE);
             histories.put(symbol, history);
             log.info("LAPLACE_STARTUP_HISTORY_LOAD_COMPLETED symbol={} requestedClosedCandleCount={} receivedClosedCandleCount={} oldestCandleOpenTime={} latestClosedCandleCloseTime={} startupState={}",
-                    symbol, requested, candles.size(), candles.getFirst().getOpenTime(),
+                    symbol, requested, candles.size(), candles.get(0).getOpenTime(),
                     history.baselineCloseTime(), history.state());
         } catch (RuntimeException exception) {
             histories.remove(symbol);

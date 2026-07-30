@@ -18,13 +18,13 @@ class ThirtyMinuteKlineServiceTest {
     void startupUsesLatestTwentyClosedCandlesAndExcludesOpenCandle() {
         BinanceFuturesClient client = mock(BinanceFuturesClient.class);
         List<Kline> response = candles(21);
-        response.add(candle(response.getLast().getOpenTime().plusSeconds(1800), Instant.now().plusSeconds(1800), false));
+        response.add(candle(response.get(response.size() - 1).getOpenTime().plusSeconds(1800), Instant.now().plusSeconds(1800), false));
         when(client.getKlines("BTCUSDT", "30m", 100)).thenReturn(response);
         List<Kline> result = new ThirtyMinuteKlineService(client, new LaplaceStrategyProperties())
                 .loadStartupClosed("BTCUSDT");
         assertThat(result).hasSize(20);
-        assertThat(result.getFirst().getOpenTime()).isEqualTo(response.get(1).getOpenTime());
-        assertThat(result.getLast().getClosed()).isTrue();
+        assertThat(result.get(0).getOpenTime()).isEqualTo(response.get(1).getOpenTime());
+        assertThat(result.get(result.size() - 1).getClosed()).isTrue();
     }
 
     @Test

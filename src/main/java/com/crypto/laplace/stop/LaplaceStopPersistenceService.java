@@ -46,7 +46,7 @@ public class LaplaceStopPersistenceService {
             }
         }
         if(!closed.isEmpty()){
-            Kline last=closed.getLast();
+            Kline last=closed.get(closed.size() - 1);
             if(checkpoint==null||last.getOpenTime().isAfter(checkpoint)){
                 position.setLastStopCheckedCandleOpenTime(last.getOpenTime());
                 position.setLastChecked5mCandleCloseTime(last.getCloseTime());

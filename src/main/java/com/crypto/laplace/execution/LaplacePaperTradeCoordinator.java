@@ -57,7 +57,7 @@ private final AtomicBoolean paperDisabledLogged=new AtomicBoolean(false);
  }
  private boolean oppositeSignalAllowed(String symbol,LaplaceSignal current){if(config.getLaplace().getStopReentryPolicy()!=StopReentryPolicy.REQUIRE_OPPOSITE_SIGNAL)return true;if(coinPool!=null)return coinPool.allowAfterOppositeSignal(symbol,current.name());LaplaceSignal stopped=oppositeSignalLocks.get(symbol);if(stopped==null)return true;if(current==LaplaceSignal.NONE||current==stopped)return false;oppositeSignalLocks.remove(symbol);return true;}
  private LaplaceTrend trend(LaplaceSignal s){return s==LaplaceSignal.LONG?LaplaceTrend.LONG:s==LaplaceSignal.SHORT?LaplaceTrend.SHORT:LaplaceTrend.NEUTRAL;}
- private String current(String symbol){var x=positions.findByStrategyAndSymbolAndStatus(LaplacePaperExecutionService.STRATEGY,symbol,LaplacePositionStatus.OPEN);return x.isEmpty()?"FLAT":x.getFirst().getSide().name();}
+ private String current(String symbol){var x=positions.findByStrategyAndSymbolAndStatus(LaplacePaperExecutionService.STRATEGY,symbol,LaplacePositionStatus.OPEN);return x.isEmpty()?"FLAT":x.get(0).getSide().name();}
  private void coordinate(LaplaceSignalResult signal,boolean poolActiveAfterTransition,PositionSide effective,boolean entryUniverseSnapshotContainsSymbol,Instant eligibilityEvaluatedAt){
   List<LaplacePaperPositionEntity> open=positions.findByStrategyAndSymbolAndStatus(LaplacePaperExecutionService.STRATEGY,signal.symbol(),LaplacePositionStatus.OPEN);if(open.size()>1){failure(signal,"CONFLICT","NONE","POSITION_STATE_CONFLICT",null,false);return;}
   LaplaceCoinPoolService.EntryEligibility eligibility=coinPool==null?null:coinPool.isCurrentlyEligibleForEntry(signal.symbol());
@@ -69,7 +69,7 @@ private final AtomicBoolean paperDisabledLogged=new AtomicBoolean(false);
     metrics.failures.incrementAndGet();failure(signal,"FLAT","ENTRY",failureReason,null,false,audit);return;
    }Instant requestStartedAt=Instant.now();try{execution.open(signal,effective,null,"FLAT");metrics.entryOpened.incrementAndGet();writer.drain();}catch(RuntimeException e){metrics.failures.incrementAndGet();String reason=reason(e,"ENTRY_EXECUTION_FAILED");if("BOOK_TICKER_UNAVAILABLE".equals(reason)){Map<String,Object>a=new LinkedHashMap<>();a.put("requestedSide",effective);a.put("requestedExecutionPriceType",effective==PositionSide.LONG?"ASK":"BID");a.put("requestStartedAt",requestStartedAt);a.put("failedAt",Instant.now());failure(signal,"FLAT","ENTRY",reason,e,false,a);}else failure(signal,"FLAT","ENTRY",reason,e,true);}return;}
   metrics.alreadyOpen.incrementAndGet();
-  LaplacePaperPositionEntity p=open.getFirst();if(effective==null||p.getSide()==effective){log.info("LAPLACE_SAME_EFFECTIVE_SIDE_SIGNAL_IGNORED symbol={} side={}",signal.symbol(),p.getSide());return;}
+  LaplacePaperPositionEntity p=open.get(0);if(effective==null||p.getSide()==effective){log.info("LAPLACE_SAME_EFFECTIVE_SIDE_SIGNAL_IGNORED symbol={} side={}",signal.symbol(),p.getSide());return;}
   PositionSide reversalTarget=mapRawSignalToExecutionSide(signal.strongReversalSignal());if(reversalTarget==null||reversalTarget!=effective)return;
   LaplaceEntryDecision decision=entryDecisionService.decide(signal);if(!decision.entryAllowed()){blockRiskyDirection(signal);writer.entrySkipped(signal,effective,decision);logDecision(signal,effective,decision,"SKIP",true);}
   boolean reversalTargetAllowed=(eligibility==null?poolActiveAfterTransition:eligibility.poolState()==LaplaceCoinPoolState.ACTIVE&&!eligibility.reentryBlocked())&&decision.entryAllowed();

@@ -53,8 +53,8 @@ class EntryCandidateServiceTest {
         ), List.of(), List.of()));
 
         assertThat(candidates).hasSize(1);
-        assertThat(candidates.getFirst().getSide()).isEqualTo(PositionSide.LONG);
-        assertThat(candidates.getFirst().getCandidateReason()).isEqualTo("STRONG_LONG_CANDIDATE");
+        assertThat(candidates.get(0).getSide()).isEqualTo(PositionSide.LONG);
+        assertThat(candidates.get(0).getCandidateReason()).isEqualTo("STRONG_LONG_CANDIDATE");
     }
 
     @Test
@@ -64,8 +64,8 @@ class EntryCandidateServiceTest {
         ), List.of()));
 
         assertThat(candidates).hasSize(1);
-        assertThat(candidates.getFirst().getSide()).isEqualTo(PositionSide.SHORT);
-        assertThat(candidates.getFirst().getCandidateReason()).isEqualTo("STRONG_SHORT_CANDIDATE");
+        assertThat(candidates.get(0).getSide()).isEqualTo(PositionSide.SHORT);
+        assertThat(candidates.get(0).getCandidateReason()).isEqualTo("STRONG_SHORT_CANDIDATE");
     }
 
     @Test
@@ -208,9 +208,9 @@ class EntryCandidateServiceTest {
         List<EntryCandidate> candidates = entryCandidateService.selectCandidatesFromScanRun(scanRunId);
 
         assertThat(candidates).hasSize(1);
-        assertThat(candidates.getFirst().getScanRunId()).isEqualTo(scanRunId);
-        assertThat(candidates.getFirst().getMarketRegime()).isEqualTo(MarketRegime.RISK_ON);
-        assertThat(candidates.getFirst().getMarketBreadthPct()).isEqualByComparingTo("62.5");
+        assertThat(candidates.get(0).getScanRunId()).isEqualTo(scanRunId);
+        assertThat(candidates.get(0).getMarketRegime()).isEqualTo(MarketRegime.RISK_ON);
+        assertThat(candidates.get(0).getMarketBreadthPct()).isEqualByComparingTo("62.5");
     }
 
     @Test

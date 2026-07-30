@@ -57,6 +57,6 @@ public class BinanceManualTestRunner implements CommandLineRunner {
         if (klines == null || klines.isEmpty()) {
             return null;
         }
-        return klines.getLast().getClose();
+        return klines.get(klines.size() - 1).getClose();
     }
 }

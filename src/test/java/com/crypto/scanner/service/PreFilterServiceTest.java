@@ -24,7 +24,7 @@ class PreFilterServiceTest {
                 List.of(bookTicker("BTCUSDT", "0.01"))
         );
 
-        FilterDecision decision = result.getDecisions().getFirst();
+        FilterDecision decision = result.getDecisions().get(0);
         assertThat(result.getPassedCount()).isZero();
         assertThat(decision.getEliminatedReason()).isEqualTo(EliminationReason.MISSING_TICKER);
         assertThat(decision.getReasons()).contains(ReasonTag.MISSING_TICKER);
@@ -38,7 +38,7 @@ class PreFilterServiceTest {
                 List.of()
         );
 
-        FilterDecision decision = result.getDecisions().getFirst();
+        FilterDecision decision = result.getDecisions().get(0);
         assertThat(result.getPassedCount()).isZero();
         assertThat(decision.getEliminatedReason()).isEqualTo(EliminationReason.MISSING_BOOK_TICKER);
         assertThat(decision.getReasons()).contains(ReasonTag.MISSING_BOOK_TICKER);
@@ -52,7 +52,7 @@ class PreFilterServiceTest {
                 List.of(bookTicker("BTCUSDT", "0.01"))
         );
 
-        FilterDecision decision = result.getDecisions().getFirst();
+        FilterDecision decision = result.getDecisions().get(0);
         assertThat(result.getPassedCount()).isZero();
         assertThat(decision.getEliminatedReason()).isEqualTo(EliminationReason.LOW_VOLUME);
         assertThat(decision.getReasons()).contains(ReasonTag.LOW_VOLUME);
@@ -66,7 +66,7 @@ class PreFilterServiceTest {
                 List.of(bookTicker("BTCUSDT", "0.20"))
         );
 
-        FilterDecision decision = result.getDecisions().getFirst();
+        FilterDecision decision = result.getDecisions().get(0);
         assertThat(result.getPassedCount()).isZero();
         assertThat(decision.getEliminatedReason()).isEqualTo(EliminationReason.HIGH_SPREAD);
         assertThat(decision.getReasons()).contains(ReasonTag.HIGH_SPREAD);
@@ -80,7 +80,7 @@ class PreFilterServiceTest {
                 List.of(bookTicker("BTCUSDT", "0.01"))
         );
 
-        FilterDecision decision = result.getDecisions().getFirst();
+        FilterDecision decision = result.getDecisions().get(0);
         assertThat(result.getPassedCount()).isOne();
         assertThat(decision.getPassed()).isTrue();
         assertThat(decision.getEliminatedReason()).isEqualTo(EliminationReason.NONE);
@@ -95,7 +95,7 @@ class PreFilterServiceTest {
                 List.of(bookTicker("BTCUSDT", "0.01"))
         );
 
-        FilterDecision decision = result.getDecisions().getFirst();
+        FilterDecision decision = result.getDecisions().get(0);
         assertThat(result.getPassedCount()).isOne();
         assertThat(decision.getPassed()).isTrue();
         assertThat(decision.getEliminatedReason()).isEqualTo(EliminationReason.NONE);
@@ -110,7 +110,7 @@ class PreFilterServiceTest {
                 List.of(bookTicker("BTCUSDT", "0.01"))
         );
 
-        FilterDecision decision = result.getDecisions().getFirst();
+        FilterDecision decision = result.getDecisions().get(0);
         assertThat(result.getPassedCount()).isOne();
         assertThat(result.getEliminatedCount()).isZero();
         assertThat(decision.getPassed()).isTrue();

@@ -88,7 +88,7 @@ public class LaplaceThirtyMinuteScheduler {
                 LaplaceSignalResult baseline = signals.calculate(symbol, history.candles(), 0);
                 coordinator.initializeBaseline(symbol, baseline.entrySignal());
             }
-            Kline latestClosedCandle = data.getLast();
+            Kline latestClosedCandle = data.get(data.size() - 1);
             close = latestClosedCandle.getCloseTime();
             if (!isLatestClosedCandle(latestClosedCandle, Instant.now())) {
                 log.warn("LAPLACE_STALE_SIGNAL_CANDLE_SKIPPED symbol={} candleOpenTime={} candleCloseTime={}",
