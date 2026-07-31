@@ -2,6 +2,7 @@ package com.crypto.laplace.execution;
 
 import com.crypto.common.enums.PositionSide;
 import com.crypto.laplace.model.LaplaceMarketBreadthSnapshot;
+import com.crypto.laplace.model.LaplaceEntryRejectionPolicy;
 import com.crypto.laplace.model.LaplaceSignalResult;
 import org.springframework.stereotype.Component;
 
@@ -25,9 +26,12 @@ public class LaplaceEntryFilter {
         boolean allowed = available && !riskyEntry && (longAllowed || shortAllowed);
         String reason = allowed ? null : !available ? "MARKET_BREADTH_UNAVAILABLE" : riskyEntry ? "RISKY_ENTRY_FILTER"
                 : effectiveSide == PositionSide.LONG ? "LONG_MARKET_NOT_RISING" : "SHORT_BULL_ACCELERATION";
-        return new Decision(allowed, reason, riskyEntry, marketRising, shortBullRisk, acceleration);
+        LaplaceEntryRejectionPolicy policy=reason==null?null:"RISKY_ENTRY_FILTER".equals(reason)
+                ?LaplaceEntryRejectionPolicy.PERSIST_UNTIL_OPPOSITE_RAW_SIGNAL
+                :LaplaceEntryRejectionPolicy.RETRY_NEXT_CLOSED_30M_BAR;
+        return new Decision(allowed, reason, policy, riskyEntry, marketRising, shortBullRisk, acceleration);
     }
 
-    public record Decision(boolean entryAllowed, String rejectionReason, boolean riskyEntry,
+    public record Decision(boolean entryAllowed, String rejectionReason, LaplaceEntryRejectionPolicy rejectionPolicy, boolean riskyEntry,
                            boolean marketRising, boolean shortBullRisk, double marketBreadthAcceleration) {}
 }

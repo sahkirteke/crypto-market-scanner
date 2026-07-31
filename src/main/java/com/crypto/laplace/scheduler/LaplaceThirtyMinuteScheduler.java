@@ -51,7 +51,7 @@ public class LaplaceThirtyMinuteScheduler {
             return;
         }
         try {
-            Instant cycleStartedAt=Instant.now(); coordinator.beginCycle(cycleStartedAt);
+            Instant cycleStartedAt=Instant.now(); coordinator.beginCycle(cycleStartedAt,Set.copyOf(coinPool.activeSymbols()));
             stopService.checkOpenPositions();
             Set<String> managed = coordinator.managementSymbols();
             if (coinPool.symbolsToProcess().isEmpty() && managed.isEmpty()) { log.info("LAPLACE_SCAN_SKIPPED coinPoolEmpty=true"); return; }

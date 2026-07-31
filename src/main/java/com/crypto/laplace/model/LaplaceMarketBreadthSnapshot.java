@@ -4,6 +4,7 @@ import java.time.Instant;
 
 /** Immutable, candle-aligned view of the active Laplace coin pool. */
 public record LaplaceMarketBreadthSnapshot(
+        Instant cycleStartedAt,
         Instant referenceTime,
         double marketBreadth2h,
         double marketBreadth4h,
