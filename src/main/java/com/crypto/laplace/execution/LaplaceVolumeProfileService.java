@@ -5,6 +5,7 @@ import com.crypto.common.enums.PositionSide;
 import com.crypto.domain.model.Kline;
 import java.time.*;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -12,6 +13,7 @@ public class LaplaceVolumeProfileService {
     static final ZoneId NEW_YORK = ZoneId.of("America/New_York");
     static final int ROW_COUNT = 12, REQUIRED_SESSION_CANDLES = 78, REQUIRED_DELTA_CANDLES = 12;
     private final BinanceFuturesClient client;
+    private final Map<SessionCacheKey,SessionProfile> sessionCache=new ConcurrentHashMap<>();
 
     public LaplaceVolumeProfileService(BinanceFuturesClient client) { this.client=client; }
 
@@ -42,9 +44,12 @@ public class LaplaceVolumeProfileService {
         for(int day=0;day<10;day++,date=date.minusDays(1)){
             SessionWindow window=session(date);
             if(window.end().isAfter(signalTime))continue;
+            SessionCacheKey key=new SessionCacheKey(symbol,date);
+            SessionProfile cached=sessionCache.get(key);
+            if(cached!=null)return cached;
             List<Kline> candles=completed(client.getKlines(symbol,"5m",REQUIRED_SESSION_CANDLES,window.start()),signalTime).stream()
                     .filter(c->!c.getOpenTime().isBefore(window.start())&&c.getCloseTime().isBefore(window.end())).toList();
-            if(candles.size()==REQUIRED_SESSION_CANDLES)return buildProfile(window,candles);
+            if(candles.size()==REQUIRED_SESSION_CANDLES){SessionProfile profile=buildProfile(window,candles);sessionCache.putIfAbsent(key,profile);return sessionCache.get(key);}
         }
         return null;
     }
@@ -78,6 +83,7 @@ public class LaplaceVolumeProfileService {
     }
     private static LaplaceVolumeProfileDecision unavailable(double entry,VolumeProfileRejectionReason reason){return new LaplaceVolumeProfileDecision(null,null,null,Double.NaN,Double.NaN,Double.NaN,ROW_COUNT,entry,false,null,null,false,false,false,false,false,reason);}
     record SessionWindow(LocalDate date,Instant start,Instant end){}
+    record SessionCacheKey(String symbol,LocalDate nySessionDate){}
     record ProfileRow(double low,double high,double quoteVolume,double takerBuyQuoteVolume,double deltaRatio){double mid(){return (low+high)/2;}}
     record SessionProfile(LocalDate date,Instant start,Instant end,double low,double high,double poc,List<ProfileRow> rows){ProfileRow rowAt(double price){if(price<low||price>high)return null;int index=price>=high?rows.size()-1:(int)((price-low)/((high-low)/rows.size()));return rows.get(index);}}
 }
