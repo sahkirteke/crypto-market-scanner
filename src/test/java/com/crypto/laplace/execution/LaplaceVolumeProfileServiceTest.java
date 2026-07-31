@@ -1,0 +1,43 @@
+package com.crypto.laplace.execution;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+import com.crypto.binance.client.BinanceFuturesClient;
+import com.crypto.common.enums.PositionSide;
+import com.crypto.domain.model.Kline;
+import java.math.BigDecimal;
+import java.time.*;
+import java.util.*;
+import org.junit.jupiter.api.Test;
+
+class LaplaceVolumeProfileServiceTest {
+ @Test void summerSessionUsesNewYorkDaylightOffset(){var w=LaplaceVolumeProfileService.session(LocalDate.of(2026,7,30));assertThat(w.start()).isEqualTo(Instant.parse("2026-07-30T13:30:00Z"));assertThat(w.end()).isEqualTo(Instant.parse("2026-07-30T20:00:00Z"));}
+ @Test void winterSessionUsesNewYorkStandardOffset(){var w=LaplaceVolumeProfileService.session(LocalDate.of(2026,1,30));assertThat(w.start()).isEqualTo(Instant.parse("2026-01-30T14:30:00Z"));assertThat(w.end()).isEqualTo(Instant.parse("2026-01-30T21:00:00Z"));}
+ @Test void profileHasTwelveRowsAndHighestVolumeRowIsPoc(){var p=profile(false);assertThat(p.rows()).hasSize(12);assertThat(p.poc()).isEqualTo(105.5);}
+ @Test void entryMapsToItsOwnRowButOutsidePriceDoesNotMap(){var p=profile(false);assertThat(p.rowAt(102.2)).isEqualTo(p.rows().get(2));assertThat(p.rowAt(99)).isNull();assertThat(p.rowAt(113)).isNull();}
+ @Test void insideLongBelowPocWithSellingDeltaIsAllowed(){assertAllowed(PositionSide.LONG,102,false,true,null);}
+ @Test void insideLongAbovePocIsRejected(){assertAllowed(PositionSide.LONG,108,false,false,VolumeProfileRejectionReason.VP_INSIDE_LONG_ABOVE_POC);}
+ @Test void insideLongWithBuyingDeltaIsRejected(){assertAllowed(PositionSide.LONG,102,true,false,VolumeProfileRejectionReason.VP_INSIDE_LONG_DELTA_NOT_SELLING);}
+ @Test void insideShortAbovePocWithBuyingDeltaIsAllowed(){assertAllowed(PositionSide.SHORT,108,true,true,null);}
+ @Test void insideShortBelowPocIsRejected(){assertAllowed(PositionSide.SHORT,102,true,false,VolumeProfileRejectionReason.VP_INSIDE_SHORT_BELOW_POC);}
+ @Test void insideShortWithSellingDeltaIsRejected(){assertAllowed(PositionSide.SHORT,108,false,false,VolumeProfileRejectionReason.VP_INSIDE_SHORT_DELTA_NOT_BUYING);}
+ @Test void belowProfileLongUsesPositiveCurrentDelta(){assertOutside(PositionSide.LONG,99,true,true,null);}
+ @Test void belowProfileLongRejectsNegativeCurrentDelta(){assertOutside(PositionSide.LONG,99,false,false,VolumeProfileRejectionReason.VP_OUTSIDE_LONG_NO_BUY_CONFIRMATION);}
+ @Test void aboveProfileShortUsesNegativeCurrentDelta(){assertOutside(PositionSide.SHORT,113,false,true,null);}
+ @Test void aboveProfileShortRejectsPositiveCurrentDelta(){assertOutside(PositionSide.SHORT,113,true,false,VolumeProfileRejectionReason.VP_OUTSIDE_SHORT_NO_SELL_CONFIRMATION);}
+ @Test void longAboveSessionIsRejected(){assertOutside(PositionSide.LONG,113,true,false,VolumeProfileRejectionReason.VP_LONG_ABOVE_SESSION_HIGH);}
+ @Test void shortBelowSessionIsRejected(){assertOutside(PositionSide.SHORT,99,false,false,VolumeProfileRejectionReason.VP_SHORT_BELOW_SESSION_LOW);}
+ @Test void insufficientProfileRejectsSafely(){BinanceFuturesClient c=mock(BinanceFuturesClient.class);when(c.getKlines(anyString(),eq("5m"),eq(78),any())).thenReturn(List.of());var d=new LaplaceVolumeProfileService(c).evaluate("BTCUSDT",signalTime(),105,PositionSide.LONG);assertThat(d.rejectionReason()).isEqualTo(VolumeProfileRejectionReason.VP_PROFILE_NOT_AVAILABLE);}
+ @Test void insufficientSixtyMinuteDataRejectsOutsideEntry(){var service=service(false,List.of());var d=service.evaluate("BTCUSDT",signalTime(),99,PositionSide.LONG);assertThat(d.rejectionReason()).isEqualTo(VolumeProfileRejectionReason.VP_INSUFFICIENT_60M_DATA);}
+ @Test void futureAndIncompleteCandlesAreNotAcceptedAsSessionData(){BinanceFuturesClient c=mock(BinanceFuturesClient.class);List<Kline> bad=new ArrayList<>(sessionCandles(false));bad.set(77,candle(signalTime().plusSeconds(300),100,101,100,40));when(c.getKlines(anyString(),eq("5m"),eq(78),any())).thenReturn(bad,List.of(),List.of(),List.of(),List.of(),List.of(),List.of(),List.of(),List.of(),List.of());assertThat(new LaplaceVolumeProfileService(c).evaluate("BTCUSDT",signalTime(),102,PositionSide.LONG).rejectionReason()).isEqualTo(VolumeProfileRejectionReason.VP_PROFILE_NOT_AVAILABLE);}
+
+ private void assertAllowed(PositionSide side,double price,boolean buying,boolean allowed,VolumeProfileRejectionReason reason){var d=service(buying,List.of()).evaluate("BTCUSDT",signalTime(),price,side);assertThat(d.volumeProfileAllowed()).isEqualTo(allowed);assertThat(d.rejectionReason()).isEqualTo(reason);}
+ private void assertOutside(PositionSide side,double price,boolean buying,boolean allowed,VolumeProfileRejectionReason reason){var d=service(false,recent(buying)).evaluate("BTCUSDT",signalTime(),price,side);assertThat(d.volumeProfileAllowed()).isEqualTo(allowed);assertThat(d.rejectionReason()).isEqualTo(reason);assertThat(d.localDeltaRatio()).isNull();}
+ private LaplaceVolumeProfileService service(boolean buying,List<Kline> recent){BinanceFuturesClient c=mock(BinanceFuturesClient.class);when(c.getKlines(anyString(),eq("5m"),eq(78),any())).thenReturn(sessionCandles(buying));when(c.getKlines(anyString(),eq("5m"),eq(20),any())).thenReturn(recent);return new LaplaceVolumeProfileService(c);}
+ private static LaplaceVolumeProfileService.SessionProfile profile(boolean buying){var w=LaplaceVolumeProfileService.session(LocalDate.of(2026,7,30));return LaplaceVolumeProfileService.buildProfile(w,sessionCandles(buying));}
+ private static List<Kline> sessionCandles(boolean buying){var w=LaplaceVolumeProfileService.session(LocalDate.of(2026,7,30));List<Kline>x=new ArrayList<>();for(int i=0;i<78;i++){int row=i%12;double volume=row==5?1000:100;x.add(candle(w.start().plusSeconds(i*300),100+row,101+row,volume,buying?70:30));}return x;}
+ private static List<Kline> recent(boolean buying){List<Kline>x=new ArrayList<>();Instant start=signalTime().minusSeconds(3600);for(int i=0;i<12;i++)x.add(candle(start.plusSeconds(i*300),100,101,100,buying?70:30));return x;}
+ private static Kline candle(Instant open,double low,double high,double quote,double buyPct){return Kline.builder().openTime(open).closeTime(open.plusMillis(299999)).open(BigDecimal.valueOf(low)).low(BigDecimal.valueOf(low)).high(BigDecimal.valueOf(high)).close(BigDecimal.valueOf(high)).quoteAssetVolume(BigDecimal.valueOf(quote)).takerBuyQuoteVolume(BigDecimal.valueOf(quote*buyPct/100)).closed(true).build();}
+ private static Instant signalTime(){return Instant.parse("2026-07-31T15:00:00Z");}
+}
