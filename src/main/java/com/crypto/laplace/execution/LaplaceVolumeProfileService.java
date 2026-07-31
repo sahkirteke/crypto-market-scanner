@@ -12,8 +12,9 @@ import org.springframework.stereotype.Service;
 public class LaplaceVolumeProfileService {
     static final ZoneId NEW_YORK = ZoneId.of("America/New_York");
     public static final int NY_SESSION_5M_CANDLE_COUNT = 78;
-    public static final int CURRENT_DELTA_60M_CANDLE_COUNT = 12;
-    static final int ROW_COUNT = 12, REQUIRED_SESSION_CANDLES = NY_SESSION_5M_CANDLE_COUNT, REQUIRED_DELTA_CANDLES = CURRENT_DELTA_60M_CANDLE_COUNT;
+    public static final int CURRENT_DELTA_REQUEST_LIMIT = 13;
+    public static final int REQUIRED_COMPLETED_60M_CANDLES = 12;
+    static final int ROW_COUNT = 12, REQUIRED_SESSION_CANDLES = NY_SESSION_5M_CANDLE_COUNT, REQUIRED_DELTA_CANDLES = REQUIRED_COMPLETED_60M_CANDLES;
     private final BinanceFuturesClient client;
     private final Map<SessionCacheKey,SessionProfile> sessionCache=new ConcurrentHashMap<>();
 
@@ -23,8 +24,9 @@ public class LaplaceVolumeProfileService {
         long started=System.nanoTime();LocalDate date=now.atZone(NEW_YORK).toLocalDate().minusDays(1);SessionWindow window=session(date);SessionCacheKey key=new SessionCacheKey(symbol,date);
         boolean hit=sessionCache.containsKey(key);int loadedSession=REQUIRED_SESSION_CANDLES;
         if(!hit){List<Kline> sessionCandles=completed(client.getKlines(symbol,"5m",REQUIRED_SESSION_CANDLES,window.start()),now).stream().filter(c->!c.getOpenTime().isBefore(window.start())&&c.getCloseTime().isBefore(window.end())).toList();loadedSession=sessionCandles.size();if(loadedSession!=REQUIRED_SESSION_CANDLES)throw new IllegalStateException("VP_PROFILE_NOT_AVAILABLE");sessionCache.putIfAbsent(key,buildProfile(window,sessionCandles));evictOldProfiles(symbol,date);}
-        List<Kline> current=completed(client.getKlines(symbol,"5m",CURRENT_DELTA_60M_CANDLE_COUNT),now);if(current.size()!=CURRENT_DELTA_60M_CANDLE_COUNT)throw new IllegalStateException("VP_INSUFFICIENT_60M_DATA");
-        return new WarmupResult(date,loadedSession,current.size(),hit,!hit,(System.nanoTime()-started)/1_000_000);
+        List<Kline> completedCurrent=completed(client.getKlines(symbol,"5m",CURRENT_DELTA_REQUEST_LIMIT),now);if(completedCurrent.size()<REQUIRED_COMPLETED_60M_CANDLES)throw new IllegalStateException("VP_INSUFFICIENT_60M_DATA");
+        List<Kline> last12Completed=completedCurrent.subList(completedCurrent.size()-REQUIRED_COMPLETED_60M_CANDLES,completedCurrent.size());
+        return new WarmupResult(date,loadedSession,last12Completed.size(),delta60(last12Completed),hit,!hit,(System.nanoTime()-started)/1_000_000);
     }
 
     public LaplaceVolumeProfileDecision evaluate(String symbol,Instant signalTime,double entryPrice,PositionSide side) {
@@ -95,7 +97,7 @@ public class LaplaceVolumeProfileService {
     private static LaplaceVolumeProfileDecision unavailable(double entry,VolumeProfileRejectionReason reason){return new LaplaceVolumeProfileDecision(null,null,null,Double.NaN,Double.NaN,Double.NaN,ROW_COUNT,entry,false,null,null,false,false,false,false,false,reason);}
     record SessionWindow(LocalDate date,Instant start,Instant end){}
     record SessionCacheKey(String symbol,LocalDate nySessionDate){}
-    public record WarmupResult(LocalDate nySessionDate,int loadedSessionCandleCount,int loadedCurrentCandleCount,boolean profileCacheHit,boolean profileCacheMiss,long durationMs){}
+    public record WarmupResult(LocalDate nySessionDate,int loadedSessionCandleCount,int loadedCurrentCandleCount,double currentDelta60m,boolean profileCacheHit,boolean profileCacheMiss,long durationMs){}
     record ProfileRow(double low,double high,double quoteVolume,double takerBuyQuoteVolume,double deltaRatio){double mid(){return (low+high)/2;}}
     record SessionProfile(LocalDate date,Instant start,Instant end,double low,double high,double poc,List<ProfileRow> rows){ProfileRow rowAt(double price){if(price<low||price>high)return null;int index=price>=high?rows.size()-1:(int)((price-low)/((high-low)/rows.size()));return rows.get(index);}}
 }
