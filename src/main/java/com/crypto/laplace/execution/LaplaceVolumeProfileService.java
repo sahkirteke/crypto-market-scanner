@@ -11,11 +11,21 @@ import org.springframework.stereotype.Service;
 @Service
 public class LaplaceVolumeProfileService {
     static final ZoneId NEW_YORK = ZoneId.of("America/New_York");
-    static final int ROW_COUNT = 12, REQUIRED_SESSION_CANDLES = 78, REQUIRED_DELTA_CANDLES = 12;
+    public static final int NY_SESSION_5M_CANDLE_COUNT = 78;
+    public static final int CURRENT_DELTA_60M_CANDLE_COUNT = 12;
+    static final int ROW_COUNT = 12, REQUIRED_SESSION_CANDLES = NY_SESSION_5M_CANDLE_COUNT, REQUIRED_DELTA_CANDLES = CURRENT_DELTA_60M_CANDLE_COUNT;
     private final BinanceFuturesClient client;
     private final Map<SessionCacheKey,SessionProfile> sessionCache=new ConcurrentHashMap<>();
 
     public LaplaceVolumeProfileService(BinanceFuturesClient client) { this.client=client; }
+
+    public WarmupResult prewarm(String symbol,Instant now) {
+        long started=System.nanoTime();LocalDate date=now.atZone(NEW_YORK).toLocalDate().minusDays(1);SessionWindow window=session(date);SessionCacheKey key=new SessionCacheKey(symbol,date);
+        boolean hit=sessionCache.containsKey(key);int loadedSession=REQUIRED_SESSION_CANDLES;
+        if(!hit){List<Kline> sessionCandles=completed(client.getKlines(symbol,"5m",REQUIRED_SESSION_CANDLES,window.start()),now).stream().filter(c->!c.getOpenTime().isBefore(window.start())&&c.getCloseTime().isBefore(window.end())).toList();loadedSession=sessionCandles.size();if(loadedSession!=REQUIRED_SESSION_CANDLES)throw new IllegalStateException("VP_PROFILE_NOT_AVAILABLE");sessionCache.putIfAbsent(key,buildProfile(window,sessionCandles));evictOldProfiles(symbol,date);}
+        List<Kline> current=completed(client.getKlines(symbol,"5m",CURRENT_DELTA_60M_CANDLE_COUNT),now);if(current.size()!=CURRENT_DELTA_60M_CANDLE_COUNT)throw new IllegalStateException("VP_INSUFFICIENT_60M_DATA");
+        return new WarmupResult(date,loadedSession,current.size(),hit,!hit,(System.nanoTime()-started)/1_000_000);
+    }
 
     public LaplaceVolumeProfileDecision evaluate(String symbol,Instant signalTime,double entryPrice,PositionSide side) {
         try {
@@ -49,7 +59,7 @@ public class LaplaceVolumeProfileService {
             if(cached!=null)return cached;
             List<Kline> candles=completed(client.getKlines(symbol,"5m",REQUIRED_SESSION_CANDLES,window.start()),signalTime).stream()
                     .filter(c->!c.getOpenTime().isBefore(window.start())&&c.getCloseTime().isBefore(window.end())).toList();
-            if(candles.size()==REQUIRED_SESSION_CANDLES){SessionProfile profile=buildProfile(window,candles);sessionCache.putIfAbsent(key,profile);return sessionCache.get(key);}
+            if(candles.size()==REQUIRED_SESSION_CANDLES){SessionProfile profile=buildProfile(window,candles);sessionCache.putIfAbsent(key,profile);evictOldProfiles(symbol,date);return sessionCache.get(key);}
         }
         return null;
     }
@@ -70,6 +80,7 @@ public class LaplaceVolumeProfileService {
     static double delta60(List<Kline> candles){double quote=candles.stream().mapToDouble(c->value(c.getQuoteAssetVolume())).sum(),buy=candles.stream().mapToDouble(c->value(c.getTakerBuyQuoteVolume())).sum();return quote>0?(2*buy-quote)/quote:0;}
     private static List<Kline> completed(List<Kline> candles,Instant before){return candles.stream().filter(Objects::nonNull).filter(c->c.getCloseTime()!=null&&!c.getCloseTime().isAfter(before)&&!Boolean.FALSE.equals(c.getClosed())).sorted(Comparator.comparing(Kline::getOpenTime)).toList();}
     private static double value(java.math.BigDecimal value){return value==null?0:value.doubleValue();}
+    private void evictOldProfiles(String symbol,LocalDate newest){sessionCache.keySet().removeIf(k->k.symbol().equals(symbol)&&k.nySessionDate().isBefore(newest.minusDays(3)));}
     private static VolumeProfileRejectionReason reason(PositionSide side,double price,SessionProfile p,boolean inside,Double local,Double delta){
         if(side==PositionSide.LONG&&price>p.high())return VolumeProfileRejectionReason.VP_LONG_ABOVE_SESSION_HIGH;
         if(side==PositionSide.SHORT&&price<p.low())return VolumeProfileRejectionReason.VP_SHORT_BELOW_SESSION_LOW;
@@ -84,6 +95,7 @@ public class LaplaceVolumeProfileService {
     private static LaplaceVolumeProfileDecision unavailable(double entry,VolumeProfileRejectionReason reason){return new LaplaceVolumeProfileDecision(null,null,null,Double.NaN,Double.NaN,Double.NaN,ROW_COUNT,entry,false,null,null,false,false,false,false,false,reason);}
     record SessionWindow(LocalDate date,Instant start,Instant end){}
     record SessionCacheKey(String symbol,LocalDate nySessionDate){}
+    public record WarmupResult(LocalDate nySessionDate,int loadedSessionCandleCount,int loadedCurrentCandleCount,boolean profileCacheHit,boolean profileCacheMiss,long durationMs){}
     record ProfileRow(double low,double high,double quoteVolume,double takerBuyQuoteVolume,double deltaRatio){double mid(){return (low+high)/2;}}
     record SessionProfile(LocalDate date,Instant start,Instant end,double low,double high,double poc,List<ProfileRow> rows){ProfileRow rowAt(double price){if(price<low||price>high)return null;int index=price>=high?rows.size()-1:(int)((price-low)/((high-low)/rows.size()));return rows.get(index);}}
 }

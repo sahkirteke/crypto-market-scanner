@@ -60,6 +60,8 @@ public class LaplaceStrategyProperties {
         private long stopReentryCooldownMinutes = 60;
         private String diagnosticDirectory = "logs/laplace";
         private String tradeDirectory = "logs/laplace-trades";
+        private int volumeProfileWarmupConcurrency = 4;
+        private int maxWarmupAttempts = 3;
         private VolumeScan volumeScan = new VolumeScan();
     }
 
