@@ -60,7 +60,7 @@ class LaplacePaperExecutionServiceTest {
         assertThat(opened.getQuantity()).isEqualByComparingTo("0.5");
         assertThat(opened.getEntryFee()).isEqualByComparingTo("0.02");
         assertThat(opened.getStopPrice()).isEqualByComparingTo("95.4");
-        assertThat(opened.getStopLossPct()).isEqualByComparingTo("0.046");
+        assertThat(opened.getStopLossPct()).isEqualByComparingTo("0.05");
     }
 
     @Test
@@ -74,7 +74,7 @@ class LaplacePaperExecutionServiceTest {
         assertThat(opened.getLeverage()).isEqualTo(10);
         assertThat(opened.getQuantity()).isEqualByComparingTo("1");
         assertThat(opened.getStopPrice()).isEqualByComparingTo("52.3");
-        assertThat(opened.getStopLossPct()).isEqualByComparingTo("0.046");
+        assertThat(opened.getStopLossPct()).isEqualByComparingTo("0.05");
     }
 
     @Test
@@ -125,7 +125,7 @@ class LaplacePaperExecutionServiceTest {
     @Test
     void stopCloseUsesExecutableBidWritesOneExitAndIsIdempotent() {
         LaplacePaperPositionEntity open = openPosition(PositionSide.LONG);
-        open.setStopLossPct(new BigDecimal("0.046"));
+        open.setStopLossPct(new BigDecimal("0.05"));
         open.setStopPrice(new BigDecimal("95.4"));
         when(positions.findByIdForUpdate("position")).thenReturn(Optional.of(open));
         Kline trigger = Kline.builder().openTime(Instant.now().minusSeconds(300)).closeTime(Instant.now())

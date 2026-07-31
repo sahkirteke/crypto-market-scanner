@@ -152,7 +152,7 @@ class LaplacePaperApiServiceTest {
         assertThat(summary.skippedEntries()).extracting(e -> e.symbol()).containsExactly("BTCUSDT", "ETHUSDT");
         assertThat(summary.skippedEntries()).extracting(e -> e.effectiveExecutionSide()).containsExactly(PositionSide.LONG, PositionSide.SHORT);
         assertThat(summary.skippedEntries()).extracting(e -> e.entryPrice()).containsExactly(new BigDecimal("0.3422"), new BigDecimal("100.25"));
-        assertThat(summary.skippedEntries()).allSatisfy(e -> assertThat(e.skipReasons()).containsExactly(com.crypto.laplace.execution.LaplaceEntrySkipReason.RISKY_ENTRY_FILTER));
+        assertThat(summary.skippedEntries()).allSatisfy(e -> assertThat(e.skipReasons()).containsExactly(com.crypto.laplace.execution.LaplaceEntrySkipReason.RISKY_ENTRY));
         assertThat(summary.tradeCount()).isZero();
         assertThat(summary.netPnl()).isEqualByComparingTo("0");
     }
@@ -170,7 +170,7 @@ class LaplacePaperApiServiceTest {
         return LaplaceTradeEventEntity.builder().eventId(id).eventType("RISKY_ENTRY_SKIPPED").symbol(symbol)
                 .payloadJson("{\"symbol\":\"" + symbol + "\",\"skipTime\":\"" + time
                         + "\",\"effectiveExecutionSide\":\"" + side + "\",\"entryPrice\":"
-                        + ("BTCUSDT".equals(symbol) ? "0.3422" : "100.25") + ",\"skipReasons\":[\"RISKY_ENTRY_FILTER\"]}")
+                        + ("BTCUSDT".equals(symbol) ? "0.3422" : "100.25") + ",\"skipReasons\":[\"RISKY_ENTRY\"]}")
                 .createdAt(Instant.parse(time)).build();
     }
 

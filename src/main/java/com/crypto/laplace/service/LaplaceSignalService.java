@@ -27,7 +27,11 @@ public class LaplaceSignalService {
   if(warmed && cn<=-REVERSAL&&pn<=-REVERSAL&&candle.getClose().doubleValue()<r.current()) reversal=LaplaceSignal.SHORT;
   double atrPercentage=ca/candle.getClose().doubleValue()*100.0;
   double previousRawTakerImbalance=rawDirectedTakerImbalance(candles.get(end-1),entry);
-  return new LaplaceSignalResult("LAPLACE_KERNEL_REGRESSION_30M","1.0",symbol,"30m","LAPLACE",14,"CLOSE",false,candle.getOpenTime(),candle.getCloseTime(),candle.getClose().doubleValue(),r.current(),r.previous(),r.twoBarsAgo(),cs,ps,ca,pa,atrPercentage,previousRawTakerImbalance,cn,pn,ENTRY,REVERSAL,2,entry,reversal,warmed?StartupState.ACTIVE:StartupState.READY_WAITING_NEXT_CLOSE,newBars,warmed && entry!=LaplaceSignal.NONE,reasons);
+  double previous30mRawReturnPct=returnPct(candles.get(end-1).getOpen(),candles.get(end-1).getClose());
+  double ret120mPct=returnPct(candles.get(end-3).getOpen(),candle.getClose());
+  double aligned120mReturnPct=entry==LaplaceSignal.SHORT?-ret120mPct:ret120mPct;
+  return new LaplaceSignalResult("LAPLACE_KERNEL_REGRESSION_30M","1.0",symbol,"30m","LAPLACE",14,"CLOSE",false,candle.getOpenTime(),candle.getCloseTime(),candle.getClose().doubleValue(),r.current(),r.previous(),r.twoBarsAgo(),cs,ps,ca,pa,atrPercentage,previousRawTakerImbalance,ret120mPct,previous30mRawReturnPct,aligned120mReturnPct,cn,pn,ENTRY,REVERSAL,2,entry,reversal,warmed?StartupState.ACTIVE:StartupState.READY_WAITING_NEXT_CLOSE,newBars,warmed && entry!=LaplaceSignal.NONE,reasons);
  }
+ private double returnPct(BigDecimal open,BigDecimal close){if(open==null||close==null||open.signum()==0)return Double.NaN;return close.subtract(open).divide(open,12,RoundingMode.HALF_UP).multiply(BigDecimal.valueOf(100)).doubleValue();}
  private double rawDirectedTakerImbalance(Kline candle,LaplaceSignal rawSignal){BigDecimal volume=candle.getVolume(),buy=candle.getTakerBuyBaseVolume();if(volume==null||buy==null||volume.signum()<=0)return Double.NaN;double market=buy.multiply(BigDecimal.valueOf(2)).subtract(volume).divide(volume,12,RoundingMode.HALF_UP).doubleValue();return rawSignal==LaplaceSignal.SHORT?-market:market;}
 }

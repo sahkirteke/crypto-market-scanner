@@ -34,6 +34,7 @@ public class LaplaceStopPersistenceService {
                 .filter(c->checkpoint==null||c.getOpenTime().isAfter(checkpoint))
                 .sorted(Comparator.comparing(Kline::getOpenTime)).toList();
         for(Kline candle:closed){
+            // Stop is deliberately evaluated before the time exit on the same candle.
             if(LaplaceFiveMinuteStopService.touchesStop(position,candle)){
                 position.setLastStopCheckedCandleOpenTime(candle.getOpenTime());
                 position.setLastChecked5mCandleCloseTime(candle.getCloseTime());
@@ -43,6 +44,12 @@ public class LaplaceStopPersistenceService {
                 var p=closedPosition.get();
                 coordinator.onStopLossClosed(p.getSymbol(),p.getEntryRawSignal(),p.getSide().name(),p.getId(),p.getExitTime());
                 return new Result(Outcome.STOP_CLOSED,candle.getOpenTime());
+            }
+            if(!candle.getCloseTime().isBefore(position.getEntryTime().plusSeconds(4*60*60))){
+                position.setLastStopCheckedCandleOpenTime(candle.getOpenTime());
+                position.setLastChecked5mCandleCloseTime(candle.getCloseTime());
+                if(execution.closeByMaxHolding(position.getId(),candle).isEmpty())return new Result(Outcome.ALREADY_CLOSED,candle.getOpenTime());
+                return new Result(Outcome.TIME_CLOSED,candle.getOpenTime());
             }
         }
         if(!closed.isEmpty()){
@@ -56,7 +63,7 @@ public class LaplaceStopPersistenceService {
         return new Result(Outcome.NO_CHANGE,checkpoint);
     }
 
-    private void ensureStopPrice(LaplacePaperPositionEntity p){if(p.getStopPrice()!=null||p.getEntryExecutionPrice()==null)return;p.setStopLossPct(new BigDecimal("0.046"));p.setStopPrice(p.getSide()==com.crypto.common.enums.PositionSide.LONG?p.getEntryExecutionPrice().multiply(new BigDecimal("0.954")):p.getEntryExecutionPrice().multiply(new BigDecimal("1.046")));}
-    public enum Outcome { CHECKPOINT_ADVANCED, STOP_CLOSED, ALREADY_CLOSED, NO_CHANGE }
+    private void ensureStopPrice(LaplacePaperPositionEntity p){if(p.getStopPrice()!=null||p.getEntryExecutionPrice()==null)return;p.setStopLossPct(new BigDecimal("0.05"));p.setStopPrice(p.getSide()==com.crypto.common.enums.PositionSide.LONG?p.getEntryExecutionPrice().multiply(new BigDecimal("0.95")):p.getEntryExecutionPrice().multiply(new BigDecimal("1.05")));}
+    public enum Outcome { CHECKPOINT_ADVANCED, STOP_CLOSED, TIME_CLOSED, ALREADY_CLOSED, NO_CHANGE }
     public record Result(Outcome outcome,Instant checkpoint) {}
 }
