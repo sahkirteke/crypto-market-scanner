@@ -35,10 +35,10 @@ class LaplaceStartupHistoryServiceTest {
         assertThat(history.candles()).hasSize(20);
         assertThat(history.preparedCandles()).hasSize(20);
         assertThat(history.state()).isEqualTo(StartupState.READY_WAITING_NEXT_CLOSE);
-        assertThat(history.preparedCandles().getLast().regressionValue()).isNotNull();
-        assertThat(history.preparedCandles().getLast().atr14()).isNotNull();
-        assertThat(history.preparedCandles().getLast().slope()).isNotNull();
-        assertThat(history.preparedCandles().getLast().normalizedSlope()).isNotNull();
+        assertThat(history.preparedCandles().get(history.preparedCandles().size() - 1).regressionValue()).isNotNull();
+        assertThat(history.preparedCandles().get(history.preparedCandles().size() - 1).atr14()).isNotNull();
+        assertThat(history.preparedCandles().get(history.preparedCandles().size() - 1).slope()).isNotNull();
+        assertThat(history.preparedCandles().get(history.preparedCandles().size() - 1).normalizedSlope()).isNotNull();
         assertThat(service.readySymbols()).containsExactlyInAnyOrder("BTCUSDT", "ETHUSDT");
     }
 

@@ -70,7 +70,7 @@ class BinanceFuturesClientTest {
         List<BookTicker> tickers = client.getAllBookTickers();
 
         assertThat(tickers).hasSize(1);
-        BookTicker ticker = tickers.getFirst();
+        BookTicker ticker = tickers.get(0);
         assertThat(ticker.getSymbol()).isEqualTo("BTCUSDT");
         assertThat(ticker.getBidPrice()).isEqualByComparingTo("100");
         assertThat(ticker.getAskPrice()).isEqualByComparingTo("101");
@@ -119,7 +119,7 @@ class BinanceFuturesClientTest {
         List<SymbolInfo> symbols = client.getExchangeInfo();
 
         assertThat(symbols).hasSize(1);
-        SymbolInfo symbol = symbols.getFirst();
+        SymbolInfo symbol = symbols.get(0);
         assertThat(symbol.getSymbol()).isEqualTo("ETHUSDT");
         assertThat(symbol.getBaseAsset()).isEqualTo("ETH");
         assertThat(symbol.getQuoteAsset()).isEqualTo("USDT");
@@ -159,7 +159,7 @@ class BinanceFuturesClientTest {
         List<Kline> klines = client.getKlines("BNBUSDT", "1h", 1);
 
         assertThat(klines).hasSize(1);
-        Kline kline = klines.getFirst();
+        Kline kline = klines.get(0);
         assertThat(kline.getSymbol()).isEqualTo("BNBUSDT");
         assertThat(kline.getInterval()).isEqualTo("1h");
         assertThat(kline.getOpenTime()).isEqualTo(Instant.ofEpochMilli(openTime));

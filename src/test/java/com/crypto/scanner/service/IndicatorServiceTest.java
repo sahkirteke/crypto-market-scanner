@@ -59,7 +59,7 @@ class IndicatorServiceTest {
     @Test
     void calculateIgnoresUnclosedKline() {
         List<Kline> klines = new ArrayList<>(closedKlines(230));
-        BigDecimal lastClosedClose = klines.getLast().getClose();
+        BigDecimal lastClosedClose = klines.get(klines.size() - 1).getClose();
         klines.add(kline(230, new BigDecimal("99999"), new BigDecimal("10"), false));
 
         TechnicalSnapshot snapshot = indicatorService.calculate("TESTUSDT", "1h", klines);
