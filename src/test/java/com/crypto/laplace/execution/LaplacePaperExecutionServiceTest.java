@@ -59,7 +59,7 @@ class LaplacePaperExecutionServiceTest {
         assertThat(opened.getLeverage()).isEqualTo(10);
         assertThat(opened.getQuantity()).isEqualByComparingTo("0.5");
         assertThat(opened.getEntryFee()).isEqualByComparingTo("0.02");
-        assertThat(opened.getStopPrice()).isEqualByComparingTo("95.4");
+        assertThat(opened.getStopPrice()).isEqualByComparingTo("95");
         assertThat(opened.getStopLossPct()).isEqualByComparingTo("0.05");
     }
 
@@ -73,8 +73,29 @@ class LaplacePaperExecutionServiceTest {
         assertThat(opened.getMargin()).isEqualByComparingTo("5");
         assertThat(opened.getLeverage()).isEqualTo(10);
         assertThat(opened.getQuantity()).isEqualByComparingTo("1");
-        assertThat(opened.getStopPrice()).isEqualByComparingTo("52.3");
+        assertThat(opened.getStopPrice()).isEqualByComparingTo("52.5");
         assertThat(opened.getStopLossPct()).isEqualByComparingTo("0.05");
+    }
+
+    @Test
+    void rawLongExecutionUsesAskAndLongStopWhileAuditKeepsShortFilteringSide() {
+        when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of());
+        when(prices.quote("BTCUSDT", MarketExecutionAction.LONG_OPEN)).thenReturn(price("99", "100", "100", "ASK"));
+        LaplacePaperPositionEntity opened=service.open(signal(),PositionSide.LONG,PositionSide.SHORT,null,"FLAT");
+        assertThat(opened.getSide()).isEqualTo(PositionSide.LONG);
+        assertThat(opened.getSignalInverted()).isTrue();
+        assertThat(opened.getStopPrice()).isEqualByComparingTo("95");
+        verify(writer).tryJson(org.mockito.ArgumentMatchers.argThat(value->{var payload=(java.util.Map<?,?>)value;return payload.get("rawEntrySignal")==LaplaceSignal.LONG&&payload.get("filteringSide")==PositionSide.SHORT&&payload.get("executionSide")==PositionSide.LONG;}));
+    }
+
+    @Test
+    void rawShortExecutionUsesBidAndShortStopWhileAuditKeepsLongFilteringSide() {
+        when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of());
+        when(prices.quote("BTCUSDT", MarketExecutionAction.SHORT_OPEN)).thenReturn(price("50", "51", "50", "BID"));
+        LaplacePaperPositionEntity opened=service.open(signal(),PositionSide.SHORT,PositionSide.LONG,null,"FLAT");
+        assertThat(opened.getSide()).isEqualTo(PositionSide.SHORT);
+        assertThat(opened.getSignalInverted()).isTrue();
+        assertThat(opened.getStopPrice()).isEqualByComparingTo("52.5");
     }
 
     @Test
