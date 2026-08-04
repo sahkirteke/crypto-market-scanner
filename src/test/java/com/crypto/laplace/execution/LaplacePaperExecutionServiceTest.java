@@ -107,7 +107,7 @@ class LaplacePaperExecutionServiceTest {
         Instant time=Instant.now();Kural4MarketContext market=new Kural4MarketContext(time,time,100,.05,-.03,.2,20);
         Kural4ExecutionDecision decision=new Kural4ExecutionDecision(true,PositionSide.LONG,PositionSide.SHORT,
                 Kural4ExecutionAction.INVERTED,List.of(Kural4DecisionReason.K4_INVERT_RAW_LONG),market);
-        service.open(signal(),PositionSide.SHORT,new LaplaceExecutionOverlayContext(PositionSide.LONG,
+        service.openWithOverlay(signal(),PositionSide.SHORT,new LaplaceExecutionOverlayContext(PositionSide.LONG,
                 PositionSide.SHORT,decision,true),null,"FLAT");
         verify(writer).tryJson(org.mockito.ArgumentMatchers.argThat(value->{Map<?,?> payload=(Map<?,?>)value;
             return payload.get("rawExecutionSide")==PositionSide.LONG
@@ -171,7 +171,7 @@ class LaplacePaperExecutionServiceTest {
         Kural4ExecutionDecision raw=new Kural4ExecutionDecision(true,PositionSide.SHORT,PositionSide.SHORT,
                 Kural4ExecutionAction.RAW,List.of(),null);
         LaplaceExecutionOverlayContext overlay=new LaplaceExecutionOverlayContext(PositionSide.SHORT,PositionSide.LONG,raw,true);
-        assertThatThrownBy(()->service.reverse(signal(),open,PositionSide.SHORT,overlay,true))
+        assertThatThrownBy(()->service.reverseWithOverlay(signal(),open,PositionSide.SHORT,overlay,true))
                 .isInstanceOf(IllegalStateException.class).hasMessage("close failed");
         assertThat(open.getStatus()).isEqualTo(LaplacePositionStatus.OPEN);
         verify(prices,never()).quote("BTCUSDT",MarketExecutionAction.SHORT_OPEN);
@@ -189,7 +189,7 @@ class LaplacePaperExecutionServiceTest {
         LaplaceExecutionOverlayContext overlay=new LaplaceExecutionOverlayContext(PositionSide.SHORT,
                 PositionSide.LONG,skipped,true);
 
-        LaplacePaperExecutionService.ReversalOutcome outcome=service.reverse(signal(),open,PositionSide.SHORT,overlay,false);
+        LaplacePaperExecutionService.ReversalOutcome outcome=service.reverseWithOverlay(signal(),open,PositionSide.SHORT,overlay,false);
 
         assertThat(outcome.closed().getStatus()).isEqualTo(LaplacePositionStatus.CLOSED_BY_SIGNAL);
         assertThat(outcome.opened()).isNull();
