@@ -74,6 +74,33 @@ public class LaplaceTradeJsonlWriter implements ApplicationRunner {
     }
 
     @Transactional
+    public void kural4EntrySkipped(com.crypto.laplace.model.LaplaceSignalResult signal,
+            com.crypto.common.enums.PositionSide rawSide,
+            com.crypto.common.enums.PositionSide filteringSide,
+            Kural4ExecutionDecision decision, LaplaceVolumeProfileDecision vp) {
+        Instant now = Instant.now();
+        String key = "KURAL4_SKIP:" + signal.symbol() + ":" + signal.signalCandleCloseTime() + ":" + decision.reasons();
+        String id = UUID.nameUUIDFromBytes(key.getBytes(StandardCharsets.UTF_8)).toString();
+        if (repository.existsById(id)) return;
+        Map<String,Object> payload = new LinkedHashMap<>();
+        payload.put("eventType", "KURAL4_SKIP"); payload.put("eventId", id); payload.put("symbol", signal.symbol());
+        payload.put("signalCandleCloseTime", signal.signalCandleCloseTime()); payload.put("rawEntrySignal", signal.entrySignal());
+        payload.put("rawExecutionSide", rawSide); payload.put("legacySignalInverted", rawSide != null && filteringSide != rawSide); payload.put("volumeProfileFilteringSide", filteringSide);
+        payload.put("kural4Enabled", properties.getLaplace().getKural4().isEnabled());
+        payload.put("kural4EntryAllowed", decision.entryAllowed()); payload.put("kural4Action", decision.action());
+        payload.put("kural4Reasons", decision.reasons()); payload.put("kural4FinalExecutionSide", decision.finalExecutionSide());
+        payload.put("actualSignalInverted", false); payload.put("atrPercentage", signal.atrPercentage());
+        payload.put("previousRawTakerImbalance", signal.previousRawTakerImbalance());
+        payload.put("previous30mRawReturnPct", signal.previous30mRawReturnPct()); payload.put("aligned120mReturnPct", signal.aligned120mReturnPct());
+        Kural4MarketContext c=decision.marketContext(); payload.put("btcReturn15mPct",c==null?null:c.btcReturn15mPct());
+        payload.put("btcReturn30mPct",c==null?null:c.btcReturn30mPct()); payload.put("btcRangePosition60",c==null?null:c.btcRangePosition60());
+        payload.put("btcLastClose",c==null?null:c.btcLastClose()); payload.put("btcContextLastCompleted5mCloseTime",c==null?null:c.lastCompleted5mCloseTime());
+        payload.put("btcContextCompletedCandleCount",c==null?null:c.completedCandleCount()); payload.put("volumeProfileDecision",vp);
+        String json=tryJson(payload).orElseThrow(()->new IllegalStateException("KURAL4_SKIP_SERIALIZATION_FAILED"));
+        repository.save(LaplaceTradeEventEntity.builder().eventId(id).eventType("KURAL4_SKIP").symbol(signal.symbol()).payloadJson(json).jsonlWritten(false).createdAt(now).build());
+    }
+
+    @Transactional
     public boolean failure(String symbol, Instant candle, String currentPosition, String action,
                            String reason, Throwable error, boolean retryable) {
         return failure(symbol,candle,currentPosition,action,reason,error,retryable,Map.of());

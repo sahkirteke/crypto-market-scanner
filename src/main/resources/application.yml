@@ -176,6 +176,21 @@ trading:
     stop-zone: UTC
     diagnostic-directory: logs/laplace
     trade-directory: logs/laplace-trades
+    kural4:
+      enabled: true
+      extreme-atr-skip-threshold: 4.30
+      long-invert-btc-return-30m-max: -0.03
+      long-invert-atr-max-exclusive: 3.00
+      short-invert-btc-return-15m-min: 0.05
+      short-invert-aligned-120m-min: 0.50
+      short-invert-aligned-120m-max: 1.00
+      short-invert-atr-max-exclusive: 4.30
+      extension-a-enabled: true
+      extension-a-previous-imbalance-max-exclusive: 0.0
+      extension-a-aligned-120m-max: 0.25
+      extension-b-enabled: true
+      extension-b-previous-30m-return-max: 0.0
+      extension-b-btc-range-position-60m-max: 0.20
 logging:
   pattern:
     dateformat: "yyyy-MM-dd HH:mm:ss.SSS,Europe/Istanbul"

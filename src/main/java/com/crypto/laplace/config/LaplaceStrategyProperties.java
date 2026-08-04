@@ -63,6 +63,25 @@ public class LaplaceStrategyProperties {
         private int volumeProfileWarmupConcurrency = 4;
         private int maxWarmupAttempts = 3;
         private VolumeScan volumeScan = new VolumeScan();
+        private Kural4 kural4 = new Kural4();
+    }
+
+    @Getter @Setter
+    public static class Kural4 {
+        private boolean enabled = true;
+        private double extremeAtrSkipThreshold = 4.30;
+        private double longInvertBtcReturn30mMax = -0.03;
+        private double longInvertAtrMaxExclusive = 3.00;
+        private double shortInvertBtcReturn15mMin = 0.05;
+        private double shortInvertAligned120mMin = 0.50;
+        private double shortInvertAligned120mMax = 1.00;
+        private double shortInvertAtrMaxExclusive = 4.30;
+        private boolean extensionAEnabled = true;
+        private double extensionAPreviousImbalanceMaxExclusive = 0.0;
+        private double extensionAAligned120mMax = 0.25;
+        private boolean extensionBEnabled = true;
+        private double extensionBPrevious30mReturnMax = 0.0;
+        private double extensionBBtcRangePosition60mMax = 0.20;
     }
 
     @Getter @Setter

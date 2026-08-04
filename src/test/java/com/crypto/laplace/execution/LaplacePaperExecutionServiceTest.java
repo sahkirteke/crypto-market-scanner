@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
@@ -21,6 +22,7 @@ import com.crypto.domain.model.Kline;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
@@ -99,6 +101,24 @@ class LaplacePaperExecutionServiceTest {
     }
 
     @Test
+    void entryAuditContainsAllOverlaySidesAndBtcContext() {
+        when(positions.findOpenForUpdate(any(),any(),any())).thenReturn(List.of());
+        when(prices.quote("BTCUSDT",MarketExecutionAction.SHORT_OPEN)).thenReturn(price("99","100","99","BID"));
+        Instant time=Instant.now();Kural4MarketContext market=new Kural4MarketContext(time,time,100,.05,-.03,.2,20);
+        Kural4ExecutionDecision decision=new Kural4ExecutionDecision(true,PositionSide.LONG,PositionSide.SHORT,
+                Kural4ExecutionAction.INVERTED,List.of(Kural4DecisionReason.K4_INVERT_RAW_LONG),market);
+        service.open(signal(),PositionSide.SHORT,new LaplaceExecutionOverlayContext(PositionSide.LONG,
+                PositionSide.SHORT,decision,true),null,"FLAT");
+        verify(writer).tryJson(org.mockito.ArgumentMatchers.argThat(value->{Map<?,?> payload=(Map<?,?>)value;
+            return payload.get("rawExecutionSide")==PositionSide.LONG
+                    && payload.get("volumeProfileFilteringSide")==PositionSide.SHORT
+                    && payload.get("kural4FinalExecutionSide")==PositionSide.SHORT
+                    && payload.get("btcContextLastCompleted5mCloseTime").equals(time)
+                    && payload.get("btcContextCompletedCandleCount").equals(20);
+        }));
+    }
+
+    @Test
     void availableBalanceAccountsForOpenMarginsAndEntryFees() {
         when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of());
         List<LaplacePaperPositionEntity> fiftyOpen = java.util.stream.IntStream.range(0, 50)
@@ -141,6 +161,44 @@ class LaplacePaperExecutionServiceTest {
         when(prices.quote("BTCUSDT", MarketExecutionAction.SHORT_CLOSE)).thenReturn(price("89", "90", "90", "ASK"));
         service.reverse(signal(), open, PositionSide.LONG, false);
         assertThat(open.getExitExecutionPrice()).isEqualByComparingTo("90");
+    }
+
+    @Test
+    void reversalCloseFailureNeverAttemptsReplacement() {
+        LaplacePaperPositionEntity open=openPosition(PositionSide.LONG);
+        when(positions.findOpenForUpdate(any(),any(),any())).thenReturn(List.of(open));
+        when(prices.quote("BTCUSDT",MarketExecutionAction.LONG_CLOSE)).thenThrow(new IllegalStateException("close failed"));
+        Kural4ExecutionDecision raw=new Kural4ExecutionDecision(true,PositionSide.SHORT,PositionSide.SHORT,
+                Kural4ExecutionAction.RAW,List.of(),null);
+        LaplaceExecutionOverlayContext overlay=new LaplaceExecutionOverlayContext(PositionSide.SHORT,PositionSide.LONG,raw,true);
+        assertThatThrownBy(()->service.reverse(signal(),open,PositionSide.SHORT,overlay,true))
+                .isInstanceOf(IllegalStateException.class).hasMessage("close failed");
+        assertThat(open.getStatus()).isEqualTo(LaplacePositionStatus.OPEN);
+        verify(prices,never()).quote("BTCUSDT",MarketExecutionAction.SHORT_OPEN);
+    }
+
+    @Test
+    void reversalOverlaySkipClosesPositionWithoutReplacementAndAuditsReason() {
+        LaplacePaperPositionEntity open = openPosition(PositionSide.LONG);
+        when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of(open));
+        when(prices.quote("BTCUSDT", MarketExecutionAction.LONG_CLOSE)).thenReturn(price("99", "100", "99", "BID"));
+        Instant time=Instant.now();
+        Kural4MarketContext market=new Kural4MarketContext(time,time,100,.1,.1,.2,20);
+        Kural4ExecutionDecision skipped=new Kural4ExecutionDecision(false,PositionSide.SHORT,null,
+                Kural4ExecutionAction.SKIP,List.of(Kural4DecisionReason.EXT_B_SKIP_RAW_SHORT),market);
+        LaplaceExecutionOverlayContext overlay=new LaplaceExecutionOverlayContext(PositionSide.SHORT,
+                PositionSide.LONG,skipped,true);
+
+        LaplacePaperExecutionService.ReversalOutcome outcome=service.reverse(signal(),open,PositionSide.SHORT,overlay,false);
+
+        assertThat(outcome.closed().getStatus()).isEqualTo(LaplacePositionStatus.CLOSED_BY_SIGNAL);
+        assertThat(outcome.opened()).isNull();
+        verify(prices,never()).quote("BTCUSDT",MarketExecutionAction.SHORT_OPEN);
+        verify(positions).saveAndFlush(open);
+        verify(writer).tryJson(org.mockito.ArgumentMatchers.argThat(value->{Map<?,?> payload=(Map<?,?>)value;
+            return payload.get("eventType").equals("EXIT")&&payload.get("kural4Action")==Kural4ExecutionAction.SKIP
+                    && ((List<?>)payload.get("kural4Reasons")).contains(Kural4DecisionReason.EXT_B_SKIP_RAW_SHORT)
+                    && payload.get("kural4FinalExecutionSide")==null;}));
     }
 
     @Test

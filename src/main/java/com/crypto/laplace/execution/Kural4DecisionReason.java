@@ -1,0 +1,6 @@
+package com.crypto.laplace.execution;
+
+public enum Kural4DecisionReason {
+    K4_EXTREME_VOLATILITY_SKIP, K4_INVERT_RAW_LONG, K4_INVERT_RAW_SHORT,
+    EXT_A_INVERT_RAW_LONG, EXT_B_SKIP_RAW_SHORT, MARKET_CONTEXT_UNAVAILABLE
+}
