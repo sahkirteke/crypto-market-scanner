@@ -10,6 +10,7 @@ import com.crypto.common.enums.PositionSide;
 import com.crypto.domain.model.Kline;
 import com.crypto.laplace.config.LaplaceStrategyProperties;
 import com.crypto.laplace.model.LaplacePositionStatus;
+import com.crypto.laplace.model.PositionManagementOutcome;
 import com.crypto.laplace.model.LaplaceSignal;
 import com.crypto.laplace.model.LaplaceSignalResult;
 import com.crypto.laplace.model.StartupState;
@@ -141,10 +142,120 @@ class LaplacePaperExecutionServiceTest {
         assertThat(open.getExitExecutionPrice()).isEqualByComparingTo("90");
     }
 
+    @Test
+    void longPartialThenOppositeSignalClosesOnlyRunnerWithTwoLegPnl() {
+        LaplacePaperPositionEntity open = kural5Position(PositionSide.LONG);
+        when(positions.findByIdForUpdate("position")).thenReturn(java.util.Optional.of(open));
+        assertThat(service.evaluateClosedFiveMinuteCandle("position", managementCandle("99", "103", "2026-08-06T10:34:59.999Z")))
+                .isEqualTo(PositionManagementOutcome.PARTIAL_EXIT);
+        assertThat(open.getPartialTakeProfitPrice()).isEqualByComparingTo("103");
+        assertThat(open.getPartialTakeProfitQuantity()).isEqualByComparingTo("0.1875");
+        assertThat(open.getRemainingQuantity()).isEqualByComparingTo("0.5625");
+        assertThat(open.getPartialGrossPnl()).isEqualByComparingTo("0.5625");
+        assertThat(open.getPartialExitNotional()).isEqualByComparingTo("19.3125");
+        assertThat(open.getPartialExitFee()).isEqualByComparingTo("0.007725");
+        when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of(open));
+        when(prices.quote("BTCUSDT", MarketExecutionAction.LONG_CLOSE)).thenReturn(price("104", "105", "104", "BID"));
+        service.closeForOppositeSignal(signal(), open, PositionSide.SHORT);
+        assertThat(open.getGrossPnl()).isEqualByComparingTo("2.8125");
+        assertThat(open.getExitFee()).isEqualByComparingTo("0.031125");
+        assertThat(open.getNetPnl()).isEqualByComparingTo("2.751375");
+        assertThat(open.getRemainingQuantity()).isZero();
+        assertThat(open.getExitReason()).isEqualTo("OPPOSITE_CONFIRMED_LAPLACE_SIGNAL");
+    }
+
+    @Test
+    void shortPartialThenOppositeSignalUsesExpectedTwoLegPnl() {
+        LaplacePaperPositionEntity open = kural5Position(PositionSide.SHORT);
+        when(positions.findByIdForUpdate("position")).thenReturn(java.util.Optional.of(open));
+        service.evaluateClosedFiveMinuteCandle("position", managementCandle("97", "101", "2026-08-06T10:34:59.999Z"));
+        assertThat(open.getPartialExitFee()).isEqualByComparingTo("0.007275");
+        when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of(open));
+        when(prices.quote("BTCUSDT", MarketExecutionAction.SHORT_CLOSE)).thenReturn(price("95", "96", "96", "ASK"));
+        service.closeForOppositeSignal(signal(), open, PositionSide.LONG);
+        assertThat(open.getGrossPnl()).isEqualByComparingTo("2.8125");
+        assertThat(open.getExitFee()).isEqualByComparingTo("0.028875");
+        assertThat(open.getNetPnl()).isEqualByComparingTo("2.753625");
+    }
+
+    @Test
+    void hardStopHasPriorityWhenSameCandleAlsoTouchesPartialTarget() {
+        LaplacePaperPositionEntity open = kural5Position(PositionSide.LONG);
+        when(positions.findByIdForUpdate("position")).thenReturn(java.util.Optional.of(open));
+        assertThat(service.evaluateClosedFiveMinuteCandle("position", managementCandle("94", "104", "2026-08-06T10:34:59.999Z")))
+                .isEqualTo(PositionManagementOutcome.CLOSED_STOP_LOSS);
+        assertThat(open.getExitExecutionPrice()).isEqualByComparingTo("95");
+        assertThat(open.getExitReason()).isEqualTo("STOP_LOSS");
+        assertThat(open.getPartialTakeProfitExecuted()).isFalse();
+        assertThat(open.getPartialTakeProfitQuantity()).isNull();
+    }
+
+    @Test
+    void breakEvenIsArmedOnTargetCandleAndRunsOnlyOnNextCandle() {
+        LaplacePaperPositionEntity open = kural5Position(PositionSide.LONG);
+        when(positions.findByIdForUpdate("position")).thenReturn(java.util.Optional.of(open));
+        Kline target = managementCandle("99", "103", "2026-08-06T10:34:59.999Z");
+        assertThat(service.evaluateClosedFiveMinuteCandle("position", target)).isEqualTo(PositionManagementOutcome.PARTIAL_EXIT);
+        assertThat(open.getStatus()).isEqualTo(LaplacePositionStatus.OPEN);
+        assertThat(open.getExitReason()).isNull();
+        BigDecimal be = open.getBreakEvenStopPrice();
+        Kline next = managementCandle(be.subtract(new BigDecimal("0.01")).toPlainString(), "104", "2026-08-06T10:39:59.999Z");
+        assertThat(service.evaluateClosedFiveMinuteCandle("position", next)).isEqualTo(PositionManagementOutcome.CLOSED_BREAK_EVEN);
+        assertThat(open.getExitExecutionPrice()).isEqualByComparingTo(be);
+        assertThat(open.getExitReason()).isEqualTo("BREAK_EVEN_AFTER_PARTIAL");
+        assertThat(open.getRemainingQuantity()).isZero();
+    }
+
+    @Test
+    void repeatedPartialCandleIsIdempotent() {
+        LaplacePaperPositionEntity open = kural5Position(PositionSide.LONG);
+        when(positions.findByIdForUpdate("position")).thenReturn(java.util.Optional.of(open));
+        Kline candle = managementCandle("99", "103", "2026-08-06T10:34:59.999Z");
+        assertThat(service.evaluateClosedFiveMinuteCandle("position", candle)).isEqualTo(PositionManagementOutcome.PARTIAL_EXIT);
+        BigDecimal fee = open.getPartialExitFee();
+        assertThat(service.evaluateClosedFiveMinuteCandle("position", candle)).isEqualTo(PositionManagementOutcome.ALREADY_PROCESSED);
+        assertThat(open.getRemainingQuantity()).isEqualByComparingTo("0.5625");
+        assertThat(open.getPartialExitFee()).isEqualByComparingTo(fee);
+    }
+
+    @Test
+    void shortBreakEvenUsesFeeAdjustedExactPriceOnLaterCandle() {
+        LaplacePaperPositionEntity open = kural5Position(PositionSide.SHORT);
+        when(positions.findByIdForUpdate("position")).thenReturn(java.util.Optional.of(open));
+        service.evaluateClosedFiveMinuteCandle("position", managementCandle("97", "101", "2026-08-06T10:34:59.999Z"));
+        BigDecimal expected = new BigDecimal("100").multiply(BigDecimal.ONE.subtract(new BigDecimal("0.0004")))
+                .divide(BigDecimal.ONE.add(new BigDecimal("0.0004")), 12, java.math.RoundingMode.HALF_UP);
+        assertThat(open.getBreakEvenStopPrice()).isEqualByComparingTo(expected);
+        Kline next = managementCandle("96", expected.add(new BigDecimal("0.01")).toPlainString(), "2026-08-06T10:39:59.999Z");
+        assertThat(service.evaluateClosedFiveMinuteCandle("position", next)).isEqualTo(PositionManagementOutcome.CLOSED_BREAK_EVEN);
+        assertThat(open.getExitExecutionPrice()).isEqualByComparingTo(expected);
+    }
+
     private Kline stopCandle(String low, String high) {
         Instant close = Instant.parse("2026-08-06T10:05:00Z");
         return Kline.builder().symbol("BTCUSDT").interval("5m").openTime(close.minusSeconds(300))
                 .closeTime(close).low(new BigDecimal(low)).high(new BigDecimal(high)).closed(true).build();
+    }
+
+    private Kline managementCandle(String low, String high, String closeTime) {
+        Instant close = Instant.parse(closeTime);
+        return Kline.builder().symbol("BTCUSDT").interval("5m").openTime(close.minusMillis(299_999))
+                .closeTime(close).low(new BigDecimal(low)).high(new BigDecimal(high)).closed(true).build();
+    }
+
+    private LaplacePaperPositionEntity kural5Position(PositionSide side) {
+        Instant entryClose = Instant.parse("2026-08-06T10:29:59.999Z");
+        return LaplacePaperPositionEntity.builder().id("position").strategy(LaplacePaperExecutionService.STRATEGY)
+                .strategyVersion("KURAL5_V1").symbol("BTCUSDT").side(side).status(LaplacePositionStatus.OPEN)
+                .entrySignalId("entry").entryCandleCloseTime(entryClose).lastManagedFiveMinuteCandleCloseTime(entryClose)
+                .entryTime(entryClose.minusSeconds(60)).entrySignalClosePrice(BigDecimal.valueOf(100))
+                .entryExecutionPrice(BigDecimal.valueOf(100)).margin(new BigDecimal("5"))
+                .quantity(new BigDecimal("0.75")).originalQuantity(new BigDecimal("0.75"))
+                .remainingQuantity(new BigDecimal("0.75")).notional(new BigDecimal("75"))
+                .originalNotional(new BigDecimal("75")).remainingEntryNotional(new BigDecimal("75"))
+                .leverage(15).partialTakeProfitExecuted(false).cumulativeExitFee(BigDecimal.ZERO)
+                .realizedGrossPnl(BigDecimal.ZERO).entryFeeRate(new BigDecimal("0.0004"))
+                .entryFee(new BigDecimal("0.030")).build();
     }
 
     private LaplaceExecutionPriceProvider.Price price(String bid, String ask, String value, String type) {
@@ -159,7 +270,7 @@ class LaplacePaperExecutionServiceTest {
                 .entryTime(Instant.now().minusSeconds(1800)).entrySignalClosePrice(BigDecimal.valueOf(77))
                 .entryExecutionPrice(BigDecimal.valueOf(100)).margin(new BigDecimal("5"))
                 .quantity(new BigDecimal("0.5")).notional(new BigDecimal("50")).leverage(10)
-                .entryFeeRate(new BigDecimal("0.0004")).entryFee(new BigDecimal("0.030")).build();
+                .entryFeeRate(new BigDecimal("0.0004")).entryFee(new BigDecimal("0.020")).build();
     }
 
     private LaplaceSignalResult signal() {

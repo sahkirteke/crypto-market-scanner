@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 public class FiveMinuteKlineService {
     static final String INTERVAL = "5m";
     static final int MAX_BINANCE_LIMIT = 1000;
+    private static final long FIVE_MINUTES_MILLIS = Duration.ofMinutes(5).toMillis();
     private final BinanceFuturesClient client;
 
     public Kline loadLatestClosed(String symbol) {
@@ -83,8 +84,12 @@ public class FiveMinuteKlineService {
     }
 
     public Instant lastExpectedClosedFiveMinuteCandle(Instant cutoffInclusive) {
-        long seconds = cutoffInclusive.getEpochSecond();
-        return Instant.ofEpochSecond(seconds - Math.floorMod(seconds, 300));
+        if (cutoffInclusive == null) throw new IllegalArgumentException("cutoffInclusive is required");
+        long cutoffMillis = cutoffInclusive.toEpochMilli();
+        long completedIntervalIndex = Math.floorDiv(cutoffMillis + 1L, FIVE_MINUTES_MILLIS);
+        long expectedCloseMillis = completedIntervalIndex * FIVE_MINUTES_MILLIS - 1L;
+        if (expectedCloseMillis > cutoffMillis) expectedCloseMillis -= FIVE_MINUTES_MILLIS;
+        return Instant.ofEpochMilli(expectedCloseMillis);
     }
 
     private boolean sameCandle(Kline a, Kline b) {

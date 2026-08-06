@@ -5,6 +5,7 @@ import com.crypto.domain.model.Kline;
 import com.crypto.laplace.config.LaplaceStrategyProperties;
 import com.crypto.laplace.model.*;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -27,7 +28,8 @@ public class LaplaceEntryDecisionService {
         if (history.size() < Math.max(p.getFiveMinuteHistoryLimit(), window + TWELVE_BARS)) {
             return unavailable(effectiveSide, signal, p, LaplaceEntryRejectionReason.FIVE_MINUTE_HISTORY_UNAVAILABLE);
         }
-        if (!history.getLast().getCloseTime().equals(signal.signalCandleCloseTime())) {
+        Instant expectedLastClose = klines.lastExpectedClosedFiveMinuteCandle(signal.signalCandleCloseTime());
+        if (!history.getLast().getCloseTime().equals(expectedLastClose)) {
             return unavailable(effectiveSide, signal, p, LaplaceEntryRejectionReason.FIVE_MINUTE_HISTORY_UNAVAILABLE);
         }
         for (int i = 1; i < history.size(); i++) {
