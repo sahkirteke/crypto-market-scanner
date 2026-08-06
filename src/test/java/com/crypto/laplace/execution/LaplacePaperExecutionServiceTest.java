@@ -44,21 +44,23 @@ class LaplacePaperExecutionServiceTest {
     }
 
     @Test
-    void everyLongEntryUsesAskAndFixedFiftyUsdtTenXSize() {
+    void everyLongEntryUsesAskAndFixedSeventyFiveUsdtFifteenXSize() {
         when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of());
         when(prices.quote("BTCUSDT", MarketExecutionAction.LONG_OPEN)).thenReturn(price("99", "100", "100", "ASK"));
-        LaplacePaperPositionEntity opened = service.open(signal(), PositionSide.LONG, null, "FLAT");
+        LaplaceSignalResult signal = signal();
+        LaplacePaperPositionEntity opened = service.open(signal, PositionSide.LONG, null, "FLAT");
         assertThat(opened.getEntryExecutionPrice()).isEqualByComparingTo("100");
         assertThat(opened.getEntrySignalClosePrice()).isEqualByComparingTo("77");
         assertThat(opened.getNotional()).isEqualByComparingTo("75");
         assertThat(opened.getMargin()).isEqualByComparingTo("5");
         assertThat(opened.getLeverage()).isEqualTo(15);
-        assertThat(opened.getQuantity()).isEqualByComparingTo("0.5");
-        assertThat(opened.getEntryFee()).isEqualByComparingTo("0.020");
+        assertThat(opened.getQuantity()).isEqualByComparingTo("0.75");
+        assertThat(opened.getEntryFee()).isEqualByComparingTo("0.030");
+        assertThat(opened.getLastManagedFiveMinuteCandleCloseTime()).isEqualTo(signal.signalCandleCloseTime());
     }
 
     @Test
-    void everyShortEntryUsesBidAndFixedFiftyUsdtTenXSize() {
+    void everyShortEntryUsesBidAndFixedSeventyFiveUsdtFifteenXSize() {
         when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of());
         when(prices.quote("BTCUSDT", MarketExecutionAction.SHORT_OPEN)).thenReturn(price("50", "51", "50", "BID"));
         LaplacePaperPositionEntity opened = service.open(signal(), PositionSide.SHORT, null, "FLAT");
@@ -66,7 +68,8 @@ class LaplacePaperExecutionServiceTest {
         assertThat(opened.getNotional()).isEqualByComparingTo("75");
         assertThat(opened.getMargin()).isEqualByComparingTo("5");
         assertThat(opened.getLeverage()).isEqualTo(15);
-        assertThat(opened.getQuantity()).isEqualByComparingTo("1.0");
+        assertThat(opened.getQuantity()).isEqualByComparingTo("1.5");
+        assertThat(opened.getEntryFee()).isEqualByComparingTo("0.030");
     }
 
     @Test
@@ -77,7 +80,7 @@ class LaplacePaperExecutionServiceTest {
                         .entryFee(new BigDecimal("0.020")).build()).toList();
         when(positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.CLOSED)).thenReturn(List.of());
         when(positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN)).thenReturn(nineteenOpen);
-        assertThat(service.availableBalance()).isEqualByComparingTo("4.620");
+        assertThat(service.availableBalance()).isEqualByComparingTo("4.430");
         when(prices.quote("BTCUSDT", MarketExecutionAction.LONG_OPEN)).thenReturn(price("99", "100", "100", "ASK"));
         assertThatThrownBy(() -> service.open(signal(), PositionSide.LONG, null, "FLAT"))
                 .isInstanceOf(IllegalStateException.class).hasMessage("INSUFFICIENT_PAPER_BALANCE");

@@ -21,7 +21,7 @@ public class LaplaceEntryDecisionService {
         var p = properties.getLaplace();
         List<LaplaceEntryRejectionReason> reasons = new ArrayList<>();
         List<Kline> history;
-        try { history = klines.loadClosedThrough(signal.symbol(), signal.signalCandleCloseTime(), p.getFiveMinuteHistoryLimit()); }
+        try { history = klines.loadLastClosedThrough(signal.symbol(), signal.signalCandleCloseTime(), p.getFiveMinuteHistoryLimit()); }
         catch (RuntimeException e) { return unavailable(effectiveSide, signal, p, LaplaceEntryRejectionReason.FIVE_MINUTE_HISTORY_UNAVAILABLE); }
         int window = p.getVolumeProfileWindowBars();
         if (history.size() < Math.max(p.getFiveMinuteHistoryLimit(), window + TWELVE_BARS)) {

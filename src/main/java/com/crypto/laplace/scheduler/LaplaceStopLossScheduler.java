@@ -3,7 +3,7 @@ package com.crypto.laplace.scheduler;
 import com.crypto.laplace.execution.LaplacePaperExecutionService;
 import com.crypto.laplace.model.LaplacePositionStatus;
 import com.crypto.laplace.persistence.LaplacePaperPositionRepository;
-import com.crypto.laplace.service.FiveMinuteKlineService;
+import com.crypto.laplace.service.LaplacePositionManagementService;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +18,7 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(prefix = "trading.laplace", name = "paper-execution-enabled", havingValue = "true")
 public class LaplaceStopLossScheduler {
     private final LaplacePaperPositionRepository positions;
-    private final FiveMinuteKlineService klines;
+    private final LaplacePositionManagementService management;
     private final LaplacePaperExecutionService execution;
     private final AtomicBoolean running = new AtomicBoolean();
 
@@ -35,15 +35,7 @@ public class LaplaceStopLossScheduler {
 
     void evaluate(String positionId, String symbol) {
         try {
-            var position = positions.findById(positionId).orElse(null);
-            if (position == null) return;
-            Instant previous = position.getLastManagedFiveMinuteCandleCloseTime();
-            for (var candle : klines.loadClosedThrough(symbol, Instant.now(), 500)) {
-                if (previous != null && !candle.getCloseTime().isAfter(previous)) continue;
-                var outcome = execution.evaluateClosedFiveMinuteCandle(positionId, candle);
-                if (outcome == com.crypto.laplace.model.PositionManagementOutcome.CLOSED_STOP_LOSS
-                        || outcome == com.crypto.laplace.model.PositionManagementOutcome.CLOSED_BREAK_EVEN) break;
-            }
+            management.catchUp(positionId, Instant.now());
             execution.drainTradeEvents();
         } catch (RuntimeException exception) {
             log.error("LAPLACE_STOP_LOSS_EVALUATION_FAILED positionId={} symbol={} error={}",

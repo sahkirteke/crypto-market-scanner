@@ -109,14 +109,18 @@ public class BinanceFuturesClient {
     }
 
     public List<Kline> getKlines(String symbol, String interval, int limit) {
+        return getKlines(symbol, interval, limit, null);
+    }
+
+    public List<Kline> getKlines(String symbol, String interval, int limit, Instant endTimeInclusive) {
         return execute("klines", () -> {
             List<List<Object>> response = binanceWebClient.get()
-                    .uri(uriBuilder -> uriBuilder
-                            .path("/fapi/v1/klines")
-                            .queryParam("symbol", symbol)
-                            .queryParam("interval", interval)
-                            .queryParam("limit", limit)
-                            .build())
+                    .uri(uriBuilder -> {
+                        var builder = uriBuilder.path("/fapi/v1/klines").queryParam("symbol", symbol)
+                                .queryParam("interval", interval).queryParam("limit", limit);
+                        if (endTimeInclusive != null) builder.queryParam("endTime", endTimeInclusive.toEpochMilli());
+                        return builder.build();
+                    })
                     .retrieve()
                     .onStatus(HttpStatusCode::isError, this::toClientException)
                     .bodyToMono(new ParameterizedTypeReference<List<List<Object>>>() {
