@@ -158,8 +158,20 @@ trading:
     startup-closed-candle-count: 20
     initial-capital-usdt: 100
     margin-per-position-usdt: 5
-    notional-usdt: 50
-    leverage: 10
+    notional-usdt: 75
+    leverage: 15
+    five-minute-history-limit: 500
+    kural5-enabled: true
+    long-atr-threshold: 2.0
+    long-distance-from-low-threshold-pct: 0.50
+    short-ema-gap-threshold-pct: 0.25
+    short-ema50-rise-threshold-pct: 0.25
+    short-raw-slope-threshold: 0.15
+    volume-profile-window-bars: 24
+    volume-profile-bins: 36
+    volume-profile-min-gap-pct: 0.10
+    partial-take-profit-pct: 0.03
+    partial-close-ratio: 0.25
     stop-loss-pct: 0.05
     stop-loss-cron: "1 */5 * * * *"
     order-type: MARKET

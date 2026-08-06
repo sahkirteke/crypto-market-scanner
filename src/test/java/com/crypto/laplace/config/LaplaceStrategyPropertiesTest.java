@@ -15,7 +15,7 @@ class LaplaceStrategyPropertiesTest {
     }
 
     @Test
-    void acceptsFixedFiveUsdtMarginTenXFiftyUsdtNotionalAndFivePercentStop() {
+    void acceptsKural5SizingAndRiskDefaults() {
         assertThatCode(new LaplaceStrategyProperties()::validatePhaseOne).doesNotThrowAnyException();
     }
 

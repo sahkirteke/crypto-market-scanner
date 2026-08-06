@@ -1,0 +1,10 @@
+package com.crypto.laplace.model;
+
+public enum LaplaceEntryRejectionReason {
+    FIVE_MINUTE_HISTORY_UNAVAILABLE,
+    FIVE_MINUTE_HISTORY_GAP,
+    KURAL5_LONG_ATR_DISTANCE,
+    KURAL5_SHORT_EMA_TREND,
+    KURAL5_SHORT_STRONG_RAW_SLOPE,
+    KURAL5_VOLUME_PROFILE
+}

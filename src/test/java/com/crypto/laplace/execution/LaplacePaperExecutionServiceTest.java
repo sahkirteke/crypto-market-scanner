@@ -50,9 +50,9 @@ class LaplacePaperExecutionServiceTest {
         LaplacePaperPositionEntity opened = service.open(signal(), PositionSide.LONG, null, "FLAT");
         assertThat(opened.getEntryExecutionPrice()).isEqualByComparingTo("100");
         assertThat(opened.getEntrySignalClosePrice()).isEqualByComparingTo("77");
-        assertThat(opened.getNotional()).isEqualByComparingTo("50");
+        assertThat(opened.getNotional()).isEqualByComparingTo("75");
         assertThat(opened.getMargin()).isEqualByComparingTo("5");
-        assertThat(opened.getLeverage()).isEqualTo(10);
+        assertThat(opened.getLeverage()).isEqualTo(15);
         assertThat(opened.getQuantity()).isEqualByComparingTo("0.5");
         assertThat(opened.getEntryFee()).isEqualByComparingTo("0.020");
     }
@@ -63,9 +63,9 @@ class LaplacePaperExecutionServiceTest {
         when(prices.quote("BTCUSDT", MarketExecutionAction.SHORT_OPEN)).thenReturn(price("50", "51", "50", "BID"));
         LaplacePaperPositionEntity opened = service.open(signal(), PositionSide.SHORT, null, "FLAT");
         assertThat(opened.getEntryExecutionPrice()).isEqualByComparingTo("50");
-        assertThat(opened.getNotional()).isEqualByComparingTo("50");
+        assertThat(opened.getNotional()).isEqualByComparingTo("75");
         assertThat(opened.getMargin()).isEqualByComparingTo("5");
-        assertThat(opened.getLeverage()).isEqualTo(10);
+        assertThat(opened.getLeverage()).isEqualTo(15);
         assertThat(opened.getQuantity()).isEqualByComparingTo("1.0");
     }
 

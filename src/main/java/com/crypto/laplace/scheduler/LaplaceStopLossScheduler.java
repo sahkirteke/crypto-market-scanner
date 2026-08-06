@@ -5,7 +5,6 @@ import com.crypto.laplace.model.LaplacePositionStatus;
 import com.crypto.laplace.persistence.LaplacePaperPositionRepository;
 import com.crypto.laplace.service.FiveMinuteKlineService;
 import java.time.Instant;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,7 +20,6 @@ public class LaplaceStopLossScheduler {
     private final LaplacePaperPositionRepository positions;
     private final FiveMinuteKlineService klines;
     private final LaplacePaperExecutionService execution;
-    private final ConcurrentHashMap<String, Instant> lastProcessed = new ConcurrentHashMap<>();
     private final AtomicBoolean running = new AtomicBoolean();
 
     @Scheduled(cron = "${trading.laplace.stop-loss-cron}", zone = "${trading.laplace.zone}")
@@ -37,11 +35,16 @@ public class LaplaceStopLossScheduler {
 
     void evaluate(String positionId, String symbol) {
         try {
-            var candle = klines.loadLatestClosed(symbol);
-            Instant previous = lastProcessed.get(positionId);
-            if (previous != null && !candle.getCloseTime().isAfter(previous)) return;
-            if (execution.closeAtStopLoss(positionId, candle)) execution.drainTradeEvents();
-            lastProcessed.put(positionId, candle.getCloseTime());
+            var position = positions.findById(positionId).orElse(null);
+            if (position == null) return;
+            Instant previous = position.getLastManagedFiveMinuteCandleCloseTime();
+            for (var candle : klines.loadClosedThrough(symbol, Instant.now(), 500)) {
+                if (previous != null && !candle.getCloseTime().isAfter(previous)) continue;
+                var outcome = execution.evaluateClosedFiveMinuteCandle(positionId, candle);
+                if (outcome == com.crypto.laplace.model.PositionManagementOutcome.CLOSED_STOP_LOSS
+                        || outcome == com.crypto.laplace.model.PositionManagementOutcome.CLOSED_BREAK_EVEN) break;
+            }
+            execution.drainTradeEvents();
         } catch (RuntimeException exception) {
             log.error("LAPLACE_STOP_LOSS_EVALUATION_FAILED positionId={} symbol={} error={}",
                     positionId, symbol, exception.getMessage(), exception);
