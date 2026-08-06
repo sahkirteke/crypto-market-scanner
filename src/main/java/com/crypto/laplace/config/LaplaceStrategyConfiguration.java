@@ -10,6 +10,6 @@ import org.springframework.core.annotation.Order;
 @EnableConfigurationProperties(LaplaceStrategyProperties.class)
 public class LaplaceStrategyConfiguration {
     @Bean @Order(0) ApplicationRunner laplaceConfigurationGuard(LaplaceStrategyProperties properties) {
-        return args -> { properties.validatePhaseOne(); var p = properties.getLaplace(); org.slf4j.LoggerFactory.getLogger(LaplaceStrategyConfiguration.class).info("LAPLACE_INVERTED_EXECUTION_CONFIG_READY signalInverted=true initialCapitalUsdt={} marginPerPositionUsdt={} leverage={} notionalUsdt={} stopLossEnabled=false startupFreshSignalOnly=true", p.getInitialCapitalUsdt(), p.getMarginPerPositionUsdt(), p.getLeverage(), p.getNotionalUsdt()); };
+        return args -> { properties.validatePhaseOne(); var p = properties.getLaplace(); org.slf4j.LoggerFactory.getLogger(LaplaceStrategyConfiguration.class).info("LAPLACE_INVERTED_EXECUTION_CONFIG_READY signalInverted=true initialCapitalUsdt={} marginPerPositionUsdt={} leverage={} notionalUsdt={} stopLossEnabled=true stopLossPct={} startupFreshSignalOnly=true", p.getInitialCapitalUsdt(), p.getMarginPerPositionUsdt(), p.getLeverage(), p.getNotionalUsdt(), p.getStopLossPct()); };
     }
 }
