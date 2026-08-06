@@ -73,7 +73,7 @@ public class LaplacePaperApiService implements ApplicationRunner {
     private LaplaceOpenPaperPositionResponse toOpenResponse(LaplacePaperPositionEntity p) {
         return new LaplaceOpenPaperPositionResponse(
                 p.getId(), p.getStrategy(), p.getStrategyVersion(), p.getSymbol(), p.getSide(), p.getStatus(),
-                null, p.getEntryCandleCloseTime(), p.getEntrySignalClosePrice(), p.getEntryTime(),
+                p.getEntryRawSignal(), p.getSignalInverted(), p.getSide(), null, p.getEntryCandleCloseTime(), p.getEntrySignalClosePrice(), p.getEntryTime(),
                 p.getEntryExecutionPrice(), entryExecutionPriceType(p.getSide()), executionAction(p.getSide()),
                 p.getQuantity(), p.getNotional(), p.getMargin(), p.getLeverage(), properties.getLaplace().getOrderType(),
                 p.getEntryFeeRate(), p.getEntryFee(), null, p.getEntryTime(), p.getEntryTime());

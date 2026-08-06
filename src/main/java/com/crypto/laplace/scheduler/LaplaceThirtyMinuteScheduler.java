@@ -71,6 +71,10 @@ public class LaplaceThirtyMinuteScheduler {
                 return;
             }
             List<Kline> data = klines.loadClosed(symbol);
+            if (!postStartupBarCounts.containsKey(symbol)) {
+                LaplaceSignalResult baseline = signals.calculate(symbol, history.candles(), 0);
+                coordinator.initializeBaseline(symbol, baseline.entrySignal());
+            }
             close = data.getLast().getCloseTime();
             Instant previous = lastProcessed.putIfAbsent(symbol, history.baselineCloseTime());
             previous = previous == null ? history.baselineCloseTime() : previous;

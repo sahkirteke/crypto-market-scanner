@@ -156,8 +156,12 @@ trading:
     repaint: false
     kline-limit: 100
     startup-closed-candle-count: 20
-    notional-usdt: 10
-    leverage: 1
+    initial-capital-usdt: 100
+    margin-per-position-usdt: 5
+    notional-usdt: 50
+    leverage: 10
+    stop-loss-pct: 0.05
+    stop-loss-cron: "1 */5 * * * *"
     order-type: MARKET
     taker-fee-rate: 0.0004
     cron: "5 0,30 * * * *"
