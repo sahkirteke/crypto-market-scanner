@@ -40,6 +40,13 @@ class FiveMinuteKlineServiceTest {
         org.assertj.core.api.Assertions.assertThatThrownBy(()->new FiveMinuteKlineService(client).loadLastClosedThrough("BTCUSDT",cutoff,500)).isInstanceOf(IllegalStateException.class);
     }
 
+    @Test
+    void calculatesExpectedClosedBoundaryForExactAndInProgressIntervals() {
+        FiveMinuteKlineService service=new FiveMinuteKlineService(mock(BinanceFuturesClient.class));
+        assertThat(service.lastExpectedClosedFiveMinuteCandle(Instant.parse("2026-08-06T11:00:00Z"))).isEqualTo(Instant.parse("2026-08-06T11:00:00Z"));
+        assertThat(service.lastExpectedClosedFiveMinuteCandle(Instant.parse("2026-08-06T11:03:00Z"))).isEqualTo(Instant.parse("2026-08-06T11:00:00Z"));
+    }
+
     private Kline complete(Instant close,boolean closed){return Kline.builder().openTime(close.minusSeconds(300)).closeTime(close).open(BigDecimal.TEN).high(BigDecimal.TEN).low(BigDecimal.ONE).close(BigDecimal.TEN).volume(BigDecimal.ONE).quoteAssetVolume(BigDecimal.ONE).closed(closed).build();}
 
     private Kline candle(Instant close, boolean closed) {

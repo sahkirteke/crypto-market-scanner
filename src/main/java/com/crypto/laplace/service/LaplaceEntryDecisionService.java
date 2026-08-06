@@ -27,6 +27,9 @@ public class LaplaceEntryDecisionService {
         if (history.size() < Math.max(p.getFiveMinuteHistoryLimit(), window + TWELVE_BARS)) {
             return unavailable(effectiveSide, signal, p, LaplaceEntryRejectionReason.FIVE_MINUTE_HISTORY_UNAVAILABLE);
         }
+        if (!history.getLast().getCloseTime().equals(signal.signalCandleCloseTime())) {
+            return unavailable(effectiveSide, signal, p, LaplaceEntryRejectionReason.FIVE_MINUTE_HISTORY_UNAVAILABLE);
+        }
         for (int i = 1; i < history.size(); i++) {
             long seconds = Duration.between(history.get(i - 1).getCloseTime(), history.get(i).getCloseTime()).getSeconds();
             if (seconds > 300 || seconds <= 0) reasons.add(LaplaceEntryRejectionReason.FIVE_MINUTE_HISTORY_GAP);

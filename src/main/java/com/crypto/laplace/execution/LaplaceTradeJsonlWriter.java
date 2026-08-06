@@ -108,7 +108,8 @@ public class LaplaceTradeJsonlWriter implements ApplicationRunner {
     }
 
     private boolean isTradeEvent(LaplaceTradeEventEntity event) {
-        return "ENTRY".equals(event.getEventType()) || "EXIT".equals(event.getEventType());
+        return "ENTRY".equals(event.getEventType()) || "PARTIAL_EXIT".equals(event.getEventType())
+                || "EXIT".equals(event.getEventType());
     }
 
     private void writeSymbolTradeEvent(LaplaceTradeEventEntity event) throws Exception {

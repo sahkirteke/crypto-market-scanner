@@ -49,14 +49,23 @@ public class FiveMinuteKlineService {
     public List<Kline> loadClosedRange(String symbol, Instant afterExclusive, Instant cutoffInclusive) {
         TreeMap<Instant,Kline> pages = new TreeMap<>();
         Instant pageEnd = cutoffInclusive;
+        Instant previousEarliestCloseTime = null;
         while (true) {
+            Instant previousPageEnd = pageEnd;
             List<Kline> page = closedThrough(client.getKlines(symbol, INTERVAL, MAX_BINANCE_LIMIT, pageEnd), cutoffInclusive);
             if (page.isEmpty()) break;
-            page.forEach(c -> pages.putIfAbsent(c.getCloseTime(), c));
+            for (Kline candle : page) {
+                Kline existing = pages.putIfAbsent(candle.getCloseTime(), candle);
+                if (existing != null && !sameCandle(existing, candle)) throw new IllegalStateException("Conflicting duplicate 5m candle");
+            }
             Instant earliest = page.getFirst().getCloseTime();
+            if (Objects.equals(previousEarliestCloseTime, earliest)) throw new IllegalStateException("5m pagination repeated same page");
             if (!earliest.isAfter(afterExclusive)) break;
             if (page.size() < MAX_BINANCE_LIMIT) throw new IllegalStateException("Missing closed 5m candles before first returned candle");
-            pageEnd = earliest.minusMillis(1);
+            Instant nextPageEnd = page.getFirst().getOpenTime().minusMillis(1);
+            if (!nextPageEnd.isBefore(previousPageEnd)) throw new IllegalStateException("5m pagination did not make progress");
+            previousEarliestCloseTime = earliest;
+            pageEnd = nextPageEnd;
         }
         List<Kline> closed = new ArrayList<>(pages.values());
         List<Kline> range = closed.stream().filter(c -> c.getCloseTime().isAfter(afterExclusive)).toList();
@@ -64,7 +73,25 @@ public class FiveMinuteKlineService {
             throw new IllegalStateException("Missing closed 5m candles before first returned candle");
         }
         validateContinuity(range);
+        Instant expectedLast = lastExpectedClosedFiveMinuteCandle(cutoffInclusive);
+        if (range.isEmpty()) {
+            if (afterExclusive.isBefore(expectedLast)) throw new IllegalStateException("Closed 5m range does not reach cutoff");
+        } else if (!range.getLast().getCloseTime().equals(expectedLast)) {
+            throw new IllegalStateException("Closed 5m range does not reach cutoff");
+        }
         return range;
+    }
+
+    public Instant lastExpectedClosedFiveMinuteCandle(Instant cutoffInclusive) {
+        long seconds = cutoffInclusive.getEpochSecond();
+        return Instant.ofEpochSecond(seconds - Math.floorMod(seconds, 300));
+    }
+
+    private boolean sameCandle(Kline a, Kline b) {
+        return Objects.equals(a.getOpenTime(), b.getOpenTime()) && Objects.equals(a.getOpen(), b.getOpen())
+                && Objects.equals(a.getHigh(), b.getHigh()) && Objects.equals(a.getLow(), b.getLow())
+                && Objects.equals(a.getClose(), b.getClose()) && Objects.equals(a.getVolume(), b.getVolume())
+                && Objects.equals(a.getQuoteAssetVolume(), b.getQuoteAssetVolume());
     }
 
     private List<Kline> closedThrough(List<Kline> raw, Instant cutoffInclusive) {

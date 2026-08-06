@@ -77,7 +77,7 @@ class LaplacePaperExecutionServiceTest {
         when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of());
         List<LaplacePaperPositionEntity> nineteenOpen = java.util.stream.IntStream.range(0, 19)
                 .mapToObj(i -> LaplacePaperPositionEntity.builder().margin(new BigDecimal("5"))
-                        .entryFee(new BigDecimal("0.020")).build()).toList();
+                        .entryFee(new BigDecimal("0.030")).build()).toList();
         when(positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.CLOSED)).thenReturn(List.of());
         when(positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN)).thenReturn(nineteenOpen);
         assertThat(service.availableBalance()).isEqualByComparingTo("4.430");
@@ -159,7 +159,7 @@ class LaplacePaperExecutionServiceTest {
                 .entryTime(Instant.now().minusSeconds(1800)).entrySignalClosePrice(BigDecimal.valueOf(77))
                 .entryExecutionPrice(BigDecimal.valueOf(100)).margin(new BigDecimal("5"))
                 .quantity(new BigDecimal("0.5")).notional(new BigDecimal("50")).leverage(10)
-                .entryFeeRate(new BigDecimal("0.0004")).entryFee(new BigDecimal("0.020")).build();
+                .entryFeeRate(new BigDecimal("0.0004")).entryFee(new BigDecimal("0.030")).build();
     }
 
     private LaplaceSignalResult signal() {
