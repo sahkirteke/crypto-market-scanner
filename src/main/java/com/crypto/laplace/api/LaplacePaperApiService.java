@@ -2,6 +2,9 @@ package com.crypto.laplace.api;
 
 import com.crypto.api.dto.LaplaceAnalysisSummaryResponse;
 import com.crypto.api.dto.LaplaceOpenPaperPositionResponse;
+import com.crypto.api.dto.LaplaceOpenPositionCurrentStateResponse;
+import com.crypto.binance.client.BinanceFuturesClient;
+import com.crypto.domain.model.BookTicker;
 import com.crypto.common.enums.PositionSide;
 import com.crypto.laplace.config.LaplaceStrategyProperties;
 import com.crypto.laplace.execution.LaplacePaperExecutionService;
@@ -13,6 +16,9 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -32,6 +38,7 @@ public class LaplacePaperApiService implements ApplicationRunner {
 
     private final LaplacePaperPositionRepository repository;
     private final LaplaceStrategyProperties properties;
+    private final BinanceFuturesClient binanceFuturesClient;
 
     @Value("${server.port:8080}")
     private String serverPort;
@@ -58,6 +65,58 @@ public class LaplacePaperApiService implements ApplicationRunner {
         } catch (DataAccessException exception) {
             throw unavailable(exception);
         }
+    }
+
+    public List<LaplaceOpenPositionCurrentStateResponse> findCurrentOpenPositions() {
+        final List<LaplacePaperPositionEntity> open;
+        try {
+            open = repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN);
+        } catch (DataAccessException exception) {
+            throw unavailable(exception);
+        }
+        if (open == null || open.isEmpty()) return List.of();
+        try {
+            List<BookTicker> all = binanceFuturesClient.getAllBookTickers();
+            if (all == null || all.isEmpty()) throw new IllegalStateException("Binance book ticker data unavailable");
+            Map<String, BookTicker> bySymbol = all.stream().filter(t -> t != null && t.getSymbol() != null)
+                    .collect(Collectors.toMap(BookTicker::getSymbol, Function.identity(), (first, ignored) -> first));
+            return open.stream().sorted(Comparator.comparing(LaplacePaperPositionEntity::getEntryTime,
+                            Comparator.nullsLast(Comparator.naturalOrder())))
+                    .map(position -> currentState(position, requiredTicker(bySymbol, position.getSymbol())))
+                    .toList();
+        } catch (RuntimeException exception) {
+            log.error("LAPLACE_CURRENT_POSITION_PRICE_UNAVAILABLE errorType={} errorMessage={}",
+                    exception.getClass().getSimpleName(), exception.getMessage());
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Current paper position prices are temporarily unavailable", exception);
+        }
+    }
+
+    private LaplaceOpenPositionCurrentStateResponse currentState(LaplacePaperPositionEntity p, BookTicker ticker) {
+        BigDecimal entry = requiredPositive(p.getEntryExecutionPrice(), "entry price");
+        BigDecimal current = requiredPositive(p.getSide() == PositionSide.LONG ? ticker.getBidPrice() : ticker.getAskPrice(), "book price");
+        BigDecimal remaining = p.getRemainingQuantity() == null ? p.getQuantity() : p.getRemainingQuantity();
+        BigDecimal realizedGross = money(p.getRealizedGrossPnl());
+        BigDecimal cumulativeExitFee = money(p.getCumulativeExitFee());
+        BigDecimal signedMove = p.getSide() == PositionSide.LONG ? current.subtract(entry) : entry.subtract(current);
+        BigDecimal priceMovePct = signedMove.multiply(ONE_HUNDRED).divide(entry, SCALE, RoundingMode.HALF_UP);
+        BigDecimal remainingGross = signedMove.multiply(remaining);
+        BigDecimal estimatedExitFee = current.multiply(remaining).multiply(p.getEntryFeeRate());
+        BigDecimal net = realizedGross.add(remainingGross).subtract(money(p.getEntryFee()))
+                .subtract(cumulativeExitFee).subtract(estimatedExitFee);
+        return new LaplaceOpenPositionCurrentStateResponse(p.getId(), p.getSymbol(), p.getSide(), p.getEntryTime(),
+                entry, current, priceMovePct, net.setScale(SCALE, RoundingMode.HALF_UP));
+    }
+
+    private BookTicker requiredTicker(Map<String, BookTicker> tickers, String symbol) {
+        BookTicker ticker = tickers.get(symbol);
+        if (ticker == null) throw new IllegalStateException("Book ticker unavailable for " + symbol);
+        return ticker;
+    }
+
+    private BigDecimal requiredPositive(BigDecimal value, String field) {
+        if (value == null || value.signum() <= 0) throw new IllegalStateException("Invalid " + field);
+        return value;
     }
 
     public LaplaceAnalysisSummaryResponse summary() {

@@ -3,10 +3,16 @@ package com.crypto.laplace.api;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 
 import com.crypto.api.dto.LaplaceAnalysisSummaryResponse;
 import com.crypto.api.dto.LaplaceOpenPaperPositionResponse;
+import com.crypto.api.dto.LaplaceOpenPositionCurrentStateResponse;
+import com.crypto.binance.client.BinanceFuturesClient;
 import com.crypto.common.enums.PositionSide;
+import com.crypto.domain.model.BookTicker;
 import com.crypto.laplace.config.LaplaceStrategyProperties;
 import com.crypto.laplace.execution.LaplacePaperExecutionService;
 import com.crypto.laplace.model.LaplacePositionStatus;
@@ -21,13 +27,15 @@ import org.junit.jupiter.api.Test;
 class LaplacePaperApiServiceTest {
     private LaplacePaperPositionRepository repository;
     private LaplacePaperApiService service;
+    private BinanceFuturesClient binance;
 
     @BeforeEach
     void setUp() {
         repository = mock(LaplacePaperPositionRepository.class);
         LaplaceStrategyProperties properties = new LaplaceStrategyProperties();
         properties.setActiveStrategy("LAPLACE_KERNEL_REGRESSION_30M");
-        service = new LaplacePaperApiService(repository, properties);
+        binance = mock(BinanceFuturesClient.class);
+        service = new LaplacePaperApiService(repository, properties, binance);
     }
 
     @Test
@@ -48,6 +56,53 @@ class LaplacePaperApiServiceTest {
         assertThat(response.get(0).entryFee()).isEqualByComparingTo("0.004");
         assertThat(response.get(1).entryExecutionPriceType()).isEqualTo("ASK");
         assertThat(response.get(1).executionAction()).isEqualTo("LONG_OPEN");
+    }
+
+    @Test
+    void currentOpenPositionsUseSingleBookRequestAndBidAskExitPrices() {
+        var longPosition = open("btc", "BTCUSDT", PositionSide.LONG, "2026-07-18T09:00:00Z");
+        var shortPosition = open("sol", "SOLUSDT", PositionSide.SHORT, "2026-07-18T09:01:00Z");
+        when(repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN))
+                .thenReturn(List.of(longPosition, shortPosition));
+        when(binance.getAllBookTickers()).thenReturn(List.of(ticker("BTCUSDT", "110", "111"), ticker("SOLUSDT", "89", "90")));
+        List<LaplaceOpenPositionCurrentStateResponse> response = service.findCurrentOpenPositions();
+        assertThat(response).hasSize(2);
+        assertThat(response.get(0).currentPrice()).isEqualByComparingTo("110");
+        assertThat(response.get(0).priceMovePct()).isPositive();
+        assertThat(response.get(0).currentPnlUsdt()).isEqualByComparingTo("0.9916");
+        assertThat(response.get(1).currentPrice()).isEqualByComparingTo("90");
+        assertThat(response.get(1).priceMovePct()).isPositive();
+        assertThat(response.get(1).currentPnlUsdt()).isEqualByComparingTo("0.9924");
+        verify(binance, times(1)).getAllBookTickers();
+    }
+
+    @Test
+    void emptyOpenPositionsDoNotRequestBinancePrices() {
+        when(repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN)).thenReturn(List.of());
+        assertThat(service.findCurrentOpenPositions()).isEmpty();
+        verifyNoInteractions(binance);
+    }
+
+    @Test
+    void partialPositionUsesOnlyRemainingRunnerAndPriorRealizedAmounts() {
+        var position = open("btc", "BTCUSDT", PositionSide.LONG, "2026-07-18T09:00:00Z");
+        position.setRemainingQuantity(new BigDecimal("0.075"));
+        position.setRealizedGrossPnl(new BigDecimal("0.25"));
+        position.setCumulativeExitFee(new BigDecimal("0.001"));
+        when(repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN)).thenReturn(List.of(position));
+        when(binance.getAllBookTickers()).thenReturn(List.of(ticker("BTCUSDT", "110", "111")));
+        assertThat(service.findCurrentOpenPositions().getFirst().currentPnlUsdt()).isEqualByComparingTo("0.9917");
+    }
+
+    @Test
+    void missingBookTickerReturnsServiceUnavailable() {
+        when(repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN))
+                .thenReturn(List.of(open("btc", "BTCUSDT", PositionSide.LONG, "2026-07-18T09:00:00Z")));
+        when(binance.getAllBookTickers()).thenReturn(List.of(ticker("SOLUSDT", "10", "11")));
+        org.assertj.core.api.Assertions.assertThatThrownBy(service::findCurrentOpenPositions)
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .extracting(e -> ((org.springframework.web.server.ResponseStatusException)e).getStatusCode().value())
+                .isEqualTo(503);
     }
 
     @Test
@@ -109,6 +164,10 @@ class LaplacePaperApiServiceTest {
 
     private LaplacePaperPositionEntity open(String id, String symbol, PositionSide side, String entryTime) {
         return base(id, symbol, side, LaplacePositionStatus.OPEN, Instant.parse(entryTime)).exitTime(null).build();
+    }
+
+    private BookTicker ticker(String symbol, String bid, String ask) {
+        return BookTicker.builder().symbol(symbol).bidPrice(new BigDecimal(bid)).askPrice(new BigDecimal(ask)).build();
     }
 
     private LaplacePaperPositionEntity closed(String id, String symbol, PositionSide side, String grossPnl,

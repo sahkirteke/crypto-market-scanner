@@ -12,6 +12,7 @@ import com.crypto.laplace.api.LaplacePaperApiService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import com.crypto.api.dto.LaplaceOpenPositionCurrentStateResponse;
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +43,11 @@ public class PaperPositionQueryService {
         );
         log.info("PAPER_POSITIONS_OPEN_READY count={}", responses.size());
         return responses;
+    }
+
+    public List<LaplaceOpenPositionCurrentStateResponse> getCurrentLaplaceOpenPositions() {
+        if (laplacePaperApiService == null || !laplacePaperApiService.isLaplaceActive()) return List.of();
+        return laplacePaperApiService.findCurrentOpenPositions();
     }
 
     public List<PaperPositionResponse> getClosedPositions(int limit) {

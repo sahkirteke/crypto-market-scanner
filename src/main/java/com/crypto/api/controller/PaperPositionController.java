@@ -40,6 +40,12 @@ public class PaperPositionController {
         return paperPositionQueryService.getOpenPositions();
     }
 
+    @GetMapping("/positions/open/current")
+    public List<?> getCurrentOpenPositions() {
+        log.info("PAPER_API_CURRENT_OPEN_POSITIONS_REQUEST");
+        return paperPositionQueryService.getCurrentLaplaceOpenPositions();
+    }
+
     @GetMapping("/positions/closed")
     public List<PaperPositionResponse> getClosedPositions(@RequestParam(defaultValue = "50") int limit) {
         log.info("PAPER_API_CLOSED_POSITIONS_REQUEST limit={}", limit);
