@@ -105,7 +105,8 @@ public class LaplacePaperApiService implements ApplicationRunner {
         BigDecimal net = realizedGross.add(remainingGross).subtract(money(p.getEntryFee()))
                 .subtract(cumulativeExitFee).subtract(estimatedExitFee);
         return new LaplaceOpenPositionCurrentStateResponse(p.getId(), p.getSymbol(), p.getSide(), p.getEntryTime(),
-                entry, current, priceMovePct, net.setScale(SCALE, RoundingMode.HALF_UP));
+                entry, current, priceMovePct, net.setScale(SCALE, RoundingMode.HALF_UP),
+                Boolean.TRUE.equals(p.getPartialTakeProfitExecuted()));
     }
 
     private BookTicker requiredTicker(Map<String, BookTicker> tickers, String symbol) {

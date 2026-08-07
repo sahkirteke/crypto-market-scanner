@@ -7,4 +7,4 @@ import java.time.Instant;
 public record LaplaceOpenPositionCurrentStateResponse(
         String positionId, String symbol, PositionSide side, Instant entryTime,
         BigDecimal entryPrice, BigDecimal currentPrice, BigDecimal priceMovePct,
-        BigDecimal currentPnlUsdt) {}
+        BigDecimal currentPnlUsdt, boolean partialExit) {}

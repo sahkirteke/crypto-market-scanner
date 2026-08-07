@@ -70,6 +70,7 @@ class LaplacePaperApiServiceTest {
         assertThat(response.get(0).currentPrice()).isEqualByComparingTo("110");
         assertThat(response.get(0).priceMovePct()).isPositive();
         assertThat(response.get(0).currentPnlUsdt()).isEqualByComparingTo("0.9916");
+        assertThat(response.get(0).partialExit()).isFalse();
         assertThat(response.get(1).currentPrice()).isEqualByComparingTo("90");
         assertThat(response.get(1).priceMovePct()).isPositive();
         assertThat(response.get(1).currentPnlUsdt()).isEqualByComparingTo("0.9924");
@@ -89,9 +90,12 @@ class LaplacePaperApiServiceTest {
         position.setRemainingQuantity(new BigDecimal("0.075"));
         position.setRealizedGrossPnl(new BigDecimal("0.25"));
         position.setCumulativeExitFee(new BigDecimal("0.001"));
+        position.setPartialTakeProfitExecuted(true);
         when(repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN)).thenReturn(List.of(position));
         when(binance.getAllBookTickers()).thenReturn(List.of(ticker("BTCUSDT", "110", "111")));
-        assertThat(service.findCurrentOpenPositions().getFirst().currentPnlUsdt()).isEqualByComparingTo("0.9917");
+        LaplaceOpenPositionCurrentStateResponse response = service.findCurrentOpenPositions().getFirst();
+        assertThat(response.currentPnlUsdt()).isEqualByComparingTo("0.9917");
+        assertThat(response.partialExit()).isTrue();
     }
 
     @Test
