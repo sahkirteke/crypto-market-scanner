@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 public class FiveMinuteKlineService {
     static final String INTERVAL = "5m";
     static final int MAX_BINANCE_LIMIT = 1000;
+    static final int HISTORY_SAFETY_BUFFER = 2;
     private static final long FIVE_MINUTES_MILLIS = Duration.ofMinutes(5).toMillis();
     private final BinanceFuturesClient client;
 
@@ -42,18 +43,24 @@ public class FiveMinuteKlineService {
 
     public List<Kline> loadLastClosedThrough(String symbol, Instant cutoffInclusive, int requiredCount) {
         if (requiredCount <= 0 || requiredCount > MAX_BINANCE_LIMIT) throw new IllegalArgumentException("Invalid required 5m candle count");
-        List<Kline> closed = closedThrough(client.getKlines(symbol, INTERVAL, MAX_BINANCE_LIMIT), cutoffInclusive);
+        int requestLimit = Math.min(MAX_BINANCE_LIMIT, requiredCount + HISTORY_SAFETY_BUFFER);
+        List<Kline> closed = closedThrough(client.getKlines(symbol, INTERVAL, requestLimit), cutoffInclusive);
         if (closed.size() < requiredCount) throw new IllegalStateException("Insufficient closed 5m history");
         return List.copyOf(closed.subList(closed.size() - requiredCount, closed.size()));
     }
 
     public List<Kline> loadClosedRange(String symbol, Instant afterExclusive, Instant cutoffInclusive) {
+        if (afterExclusive == null || cutoffInclusive == null) throw new IllegalArgumentException("5m range bounds are required");
+        Instant expectedLast = lastExpectedClosedFiveMinuteCandle(cutoffInclusive);
+        if (!afterExclusive.isBefore(expectedLast)) return List.of();
         TreeMap<Instant,Kline> pages = new TreeMap<>();
         Instant pageEnd = cutoffInclusive;
         Instant previousEarliestCloseTime = null;
+        int initialLimit = requiredRangeLimit(afterExclusive, expectedLast);
         while (true) {
             Instant previousPageEnd = pageEnd;
-            List<Kline> page = closedThrough(client.getKlines(symbol, INTERVAL, MAX_BINANCE_LIMIT, pageEnd), cutoffInclusive);
+            int requestLimit = pages.isEmpty() ? initialLimit : MAX_BINANCE_LIMIT;
+            List<Kline> page = closedThrough(client.getKlines(symbol, INTERVAL, requestLimit, pageEnd), cutoffInclusive);
             if (page.isEmpty()) break;
             for (Kline candle : page) {
                 Kline existing = pages.putIfAbsent(candle.getCloseTime(), candle);
@@ -62,7 +69,7 @@ public class FiveMinuteKlineService {
             Instant earliest = page.getFirst().getCloseTime();
             if (Objects.equals(previousEarliestCloseTime, earliest)) throw new IllegalStateException("5m pagination repeated same page");
             if (!earliest.isAfter(afterExclusive)) break;
-            if (page.size() < MAX_BINANCE_LIMIT) throw new IllegalStateException("Missing closed 5m candles before first returned candle");
+            if (page.size() < requestLimit) throw new IllegalStateException("Missing closed 5m candles before first returned candle");
             Instant nextPageEnd = page.getFirst().getOpenTime().minusMillis(1);
             if (!nextPageEnd.isBefore(previousPageEnd)) throw new IllegalStateException("5m pagination did not make progress");
             previousEarliestCloseTime = earliest;
@@ -74,13 +81,19 @@ public class FiveMinuteKlineService {
             throw new IllegalStateException("Missing closed 5m candles before first returned candle");
         }
         validateContinuity(range);
-        Instant expectedLast = lastExpectedClosedFiveMinuteCandle(cutoffInclusive);
         if (range.isEmpty()) {
             if (afterExclusive.isBefore(expectedLast)) throw new IllegalStateException("Closed 5m range does not reach cutoff");
         } else if (!range.getLast().getCloseTime().equals(expectedLast)) {
             throw new IllegalStateException("Closed 5m range does not reach cutoff");
         }
         return range;
+    }
+
+    int requiredRangeLimit(Instant afterExclusive, Instant expectedLast) {
+        if (afterExclusive == null || expectedLast == null || !expectedLast.isAfter(afterExclusive)) return 3;
+        long diffMillis = expectedLast.toEpochMilli() - afterExclusive.toEpochMilli();
+        long barCount = Math.max(1L, Math.floorDiv(diffMillis + FIVE_MINUTES_MILLIS - 1L, FIVE_MINUTES_MILLIS));
+        return (int) Math.min(MAX_BINANCE_LIMIT, Math.max(3L, barCount + 2L));
     }
 
     public Instant lastExpectedClosedFiveMinuteCandle(Instant cutoffInclusive) {

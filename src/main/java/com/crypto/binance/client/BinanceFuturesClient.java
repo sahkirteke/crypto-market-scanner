@@ -131,7 +131,8 @@ public class BinanceFuturesClient {
                     .filter(Objects::nonNull)
                     .map(kline -> mapKline(symbol, interval, kline))
                     .toList();
-            log.info("BINANCE_KLINES_READY symbol={} interval={} count={}", symbol, interval, klines.size());
+            log.info("BINANCE_KLINES_READY symbol={} interval={} requestedLimit={} count={}",
+                    symbol, interval, limit, klines.size());
             return klines;
         },
                 exception -> log.warn("BINANCE_KLINES_TRANSIENT_ERROR symbol={} interval={} limit={} message={}",
