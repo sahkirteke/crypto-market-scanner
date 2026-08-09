@@ -63,7 +63,8 @@ public class LaplaceEntryDecisionService {
                 && emaRise >= p.getShortEma50RiseThresholdPct().doubleValue()) reasons.add(LaplaceEntryRejectionReason.KURAL5_SHORT_EMA_TREND);
         if (effectiveSide == PositionSide.SHORT && signal.currentNormalizedSlope() >= p.getShortRawSlopeThreshold().doubleValue()) reasons.add(LaplaceEntryRejectionReason.KURAL5_SHORT_STRONG_RAW_SLOPE);
         if (!(vpGap >= p.getVolumeProfileMinGapPct().doubleValue()) && !reasons.contains(LaplaceEntryRejectionReason.KURAL5_VOLUME_PROFILE)) reasons.add(LaplaceEntryRejectionReason.KURAL5_VOLUME_PROFILE);
-        java.time.ZonedDateTime utc = signal.signalCandleCloseTime().atZone(java.time.ZoneOffset.UTC);
+        Instant slotTime = signal.signalCandleCloseTime().plusMillis(1);
+        java.time.ZonedDateTime utc = slotTime.atZone(java.time.ZoneOffset.UTC);
         if (utc.getHour() == 0 && utc.getMinute() == 0) reasons.add(LaplaceEntryRejectionReason.BLOCK_5C_0000_UTC);
         if (effectiveSide == PositionSide.LONG && utc.getHour() == 11 && utc.getMinute() == 0) reasons.add(LaplaceEntryRejectionReason.BLOCK_5C_1100_LONG);
         if (effectiveSide == PositionSide.LONG && rangePosition2h >= .30d && quoteVolumeAccel1h <= .90d) reasons.add(LaplaceEntryRejectionReason.BLOCK_5C_LONG_WEAK_BOUNCE);
