@@ -1,0 +1,5 @@
+package com.crypto.laplace.service;
+import static org.assertj.core.api.Assertions.assertThat;import static org.mockito.Mockito.*;import com.crypto.binance.client.BinanceFuturesClient;import com.crypto.domain.model.Kline;import java.math.BigDecimal;import java.time.Instant;import java.util.*;import org.junit.jupiter.api.Test;
+class LaplaceBreadthServiceTest {
+ @Test void cachesOneBreadthPerSignalCloseSlot(){var client=mock(BinanceFuturesClient.class);var universe=mock(StartupMarketUniverseService.class);when(universe.symbols()).thenReturn(Set.of("BTCUSDT"));Instant close=Instant.parse("2026-08-07T10:30:00Z");when(client.getKlines("BTCUSDT","30m",3)).thenReturn(List.of(Kline.builder().open(BigDecimal.ONE).close(BigDecimal.TEN).closeTime(close).closed(true).build()));var service=new LaplaceBreadthService(client,universe);assertThat(service.positiveBreadth30Pct(close)).isEqualTo(100);assertThat(service.positiveBreadth30Pct(close)).isEqualTo(100);verify(client,times(1)).getKlines("BTCUSDT","30m",3);}
+}

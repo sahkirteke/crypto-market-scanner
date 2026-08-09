@@ -18,6 +18,8 @@ import com.crypto.laplace.persistence.LaplacePaperPositionEntity;
 import com.crypto.laplace.persistence.LaplacePaperPositionRepository;
 import com.crypto.laplace.persistence.LaplaceTradeEventRepository;
 import com.crypto.laplace.service.StartupMarketUniverseService;
+import com.crypto.laplace.service.LaplaceBreadthService;
+import com.crypto.laplace.service.FiveMinuteKlineService;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -29,6 +31,7 @@ class LaplacePaperExecutionServiceTest {
     private LaplacePaperPositionRepository positions;
     private LaplaceExecutionPriceProvider prices;
     private LaplacePaperExecutionService service;
+    private FiveMinuteKlineService fiveMinuteKlines;
 
     @BeforeEach
     void setUp() {
@@ -40,8 +43,9 @@ class LaplacePaperExecutionServiceTest {
         when(writer.json(any())).thenReturn("{}");
         when(universe.symbols()).thenReturn(Set.of("BTCUSDT"));
         LaplaceStrategyProperties properties = new LaplaceStrategyProperties();
+        fiveMinuteKlines = mock(FiveMinuteKlineService.class);
         service = new LaplacePaperExecutionService(positions, events, prices, new LaplacePnlCalculator(),
-                properties, writer, universe, mock(LaplaceBreadthService.class), mock(FiveMinuteKlineService.class));
+                properties, writer, universe, mock(LaplaceBreadthService.class), fiveMinuteKlines);
     }
 
     @Test
@@ -229,6 +233,25 @@ class LaplacePaperExecutionServiceTest {
         Kline next = managementCandle("96", expected.add(new BigDecimal("0.01")).toPlainString(), "2026-08-06T10:39:59.999Z");
         assertThat(service.evaluateClosedFiveMinuteCandle("position", next)).isEqualTo(PositionManagementOutcome.CLOSED_BREAK_EVEN);
         assertThat(open.getExitExecutionPrice()).isEqualByComparingTo(expected);
+    }
+
+
+    @Test
+    void shortAcceptanceLoadsFullConfiguredHistory() {
+        LaplacePaperPositionEntity open = kural5Position(PositionSide.SHORT);
+        when(positions.findByIdForUpdate("position")).thenReturn(java.util.Optional.of(open));
+        Kline candle=Kline.builder().closeTime(Instant.parse("2026-08-06T12:04:59.999Z")).low(new BigDecimal("99")).high(new BigDecimal("101")).close(new BigDecimal("101.6")).build();
+        assertThatThrownBy(() -> service.evaluateClosedFiveMinuteCandle("position",candle)).isInstanceOf(java.util.NoSuchElementException.class);
+        verify(fiveMinuteKlines).loadLastClosedThrough("BTCUSDT",candle.getCloseTime(),500);
+    }
+
+    @Test
+    void longFastExitDoesNotRequirePreviousNegativeSlope() {
+        LaplacePaperPositionEntity open=kural5Position(PositionSide.LONG);open.setFastExitMode(true);
+        when(positions.findByIdForUpdate("position")).thenReturn(java.util.Optional.of(open));
+        when(prices.quote("BTCUSDT",MarketExecutionAction.LONG_CLOSE)).thenReturn(price("75","76","75","BID"));
+        Instant now=Instant.parse("2026-08-06T12:00:00Z");LaplaceSignalResult signal=new LaplaceSignalResult(LaplacePaperExecutionService.STRATEGY,"1.0","BTCUSDT","30m","LAPLACE",14,"CLOSE",false,now.minusSeconds(1800),now,75,76,77,78,-1,1,10,10,-.02,.50,.03,.04,2,LaplaceSignal.NONE,LaplaceSignal.NONE,StartupState.ACTIVE,1,false,List.of());
+        assertThat(service.closeLongFastRegime(signal,open)).isTrue();assertThat(open.getExitReason()).isEqualTo("EXIT_5C_LONG_FAST_REGIME");
     }
 
     private Kline stopCandle(String low, String high) {

@@ -10,13 +10,15 @@ import org.springframework.stereotype.Service;
 @Service @RequiredArgsConstructor
 public class LaplaceBreadthService {
  private final BinanceFuturesClient client; private final StartupMarketUniverseService universe;
- public double positiveBreadth30Pct(Instant cutoff) {
+ private Instant cachedCandleClose; private double cachedBreadth;
+ public synchronized double positiveBreadth30Pct(Instant cutoff) {
+  if(cutoff.equals(cachedCandleClose))return cachedBreadth;
   int valid=0,positive=0;
   for(String symbol:universe.symbols()) try {
    Kline candle=client.getKlines(symbol,"30m",3).stream().filter(c->c!=null&&c.getOpen()!=null&&c.getClose()!=null&&c.getCloseTime()!=null)
     .filter(c->!c.getCloseTime().isAfter(cutoff)&&!Boolean.FALSE.equals(c.getClosed())).max(java.util.Comparator.comparing(Kline::getCloseTime)).orElse(null);
    if(candle==null||candle.getOpen().signum()<=0)continue;valid++;if(candle.getClose().compareTo(candle.getOpen())>0)positive++;
   } catch(RuntimeException ignored) { /* invalid coins do not enter either count */ }
-  return valid==0?Double.NaN:positive*100d/valid;
+  cachedCandleClose=cutoff;cachedBreadth=valid==0?Double.NaN:positive*100d/valid;return cachedBreadth;
  }
 }
