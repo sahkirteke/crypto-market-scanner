@@ -44,6 +44,13 @@ public class LaplaceEntryDecisionService {
         double atrPct = signal.currentAtr14() / signal.signalCandleClose() * 100d;
         double distance = (current - lowest) / current * 100d;
         double emaGap = (e20[last] - e50[last]) / current * 100d;
+        List<Kline> twoHours = history.subList(history.size() - 24, history.size());
+        double lowest2h = twoHours.stream().mapToDouble(c -> c.getLow().doubleValue()).min().orElse(Double.NaN);
+        double highest2h = twoHours.stream().mapToDouble(c -> c.getHigh().doubleValue()).max().orElse(Double.NaN);
+        double rangePosition2h = highest2h == lowest2h ? 0d : (current - lowest2h) / (highest2h - lowest2h);
+        double lastHourVolume = history.subList(last - 11, last + 1).stream().map(Kline::getQuoteAssetVolume).mapToDouble(java.math.BigDecimal::doubleValue).sum();
+        double previousHourVolume = history.subList(last - 23, last - 11).stream().map(Kline::getQuoteAssetVolume).mapToDouble(java.math.BigDecimal::doubleValue).sum();
+        double quoteVolumeAccel1h = previousHourVolume == 0d ? Double.POSITIVE_INFINITY : lastHourVolume / previousHourVolume;
         double emaRise = (e50[last] / e50[last - TWELVE_BARS] - 1d) * 100d;
         double poc = Double.NaN, vpGap = Double.NaN;
         try {
@@ -56,9 +63,14 @@ public class LaplaceEntryDecisionService {
                 && emaRise >= p.getShortEma50RiseThresholdPct().doubleValue()) reasons.add(LaplaceEntryRejectionReason.KURAL5_SHORT_EMA_TREND);
         if (effectiveSide == PositionSide.SHORT && signal.currentNormalizedSlope() >= p.getShortRawSlopeThreshold().doubleValue()) reasons.add(LaplaceEntryRejectionReason.KURAL5_SHORT_STRONG_RAW_SLOPE);
         if (!(vpGap >= p.getVolumeProfileMinGapPct().doubleValue()) && !reasons.contains(LaplaceEntryRejectionReason.KURAL5_VOLUME_PROFILE)) reasons.add(LaplaceEntryRejectionReason.KURAL5_VOLUME_PROFILE);
+        java.time.ZonedDateTime utc = signal.signalCandleOpenTime().atZone(java.time.ZoneOffset.UTC);
+        if (utc.getHour() == 0 && utc.getMinute() == 0) reasons.add(LaplaceEntryRejectionReason.BLOCK_5C_0000_UTC);
+        if (effectiveSide == PositionSide.LONG && utc.getHour() == 11 && utc.getMinute() == 0) reasons.add(LaplaceEntryRejectionReason.BLOCK_5C_1100_LONG);
+        if (effectiveSide == PositionSide.LONG && rangePosition2h >= .30d && quoteVolumeAccel1h <= .90d) reasons.add(LaplaceEntryRejectionReason.BLOCK_5C_LONG_WEAK_BOUNCE);
+        if (effectiveSide == PositionSide.SHORT && emaGap >= .20d && quoteVolumeAccel1h <= .90d) reasons.add(LaplaceEntryRejectionReason.BLOCK_5C_SHORT_EMA_VOLUME);
         boolean allowed = !p.isKural5Enabled() || reasons.isEmpty();
         return new LaplaceEntryDecision(allowed, effectiveSide, atrPct, lowest, distance, current, e20[last], e50[last], e50[last-TWELVE_BARS], emaGap, emaRise,
-                signal.currentNormalizedSlope(), window, p.getVolumeProfileBins(), poc, vpGap, reasons);
+                signal.currentNormalizedSlope(), window, p.getVolumeProfileBins(), poc, vpGap, rangePosition2h, quoteVolumeAccel1h, emaGap, reasons);
     }
 
     private static double[] ema(List<Kline> candles, int span) {
@@ -69,6 +81,6 @@ public class LaplaceEntryDecisionService {
     }
     private static LaplaceEntryDecision unavailable(PositionSide side, LaplaceSignalResult s, LaplaceStrategyProperties.Laplace p, LaplaceEntryRejectionReason reason) {
         double n=Double.NaN;
-        return new LaplaceEntryDecision(false,side,n,n,n,n,n,n,n,n,n,s.currentNormalizedSlope(),p.getVolumeProfileWindowBars(),p.getVolumeProfileBins(),n,n,List.of(reason));
+        return new LaplaceEntryDecision(false,side,n,n,n,n,n,n,n,n,n,s.currentNormalizedSlope(),p.getVolumeProfileWindowBars(),p.getVolumeProfileBins(),n,n,n,n,n,List.of(reason));
     }
 }

@@ -9,6 +9,7 @@ public record LaplaceEntryDecision(
         double ema20, double ema50, double ema50TwelveBarsAgo, double ema20AboveEma50Pct,
         double ema50Rise60mPct, double currentNormalizedSlope, int volumeProfileWindowBars,
         int volumeProfileBins, double volumeProfilePoc, double volumeProfileGapPct,
+        double rangePosition2h, double quoteVolumeAccel1h, double emaGapPct,
         List<LaplaceEntryRejectionReason> rejectionReasons) {
     public LaplaceEntryDecision {
         rejectionReasons = List.copyOf(rejectionReasons);

@@ -41,7 +41,7 @@ class LaplacePaperExecutionServiceTest {
         when(universe.symbols()).thenReturn(Set.of("BTCUSDT"));
         LaplaceStrategyProperties properties = new LaplaceStrategyProperties();
         service = new LaplacePaperExecutionService(positions, events, prices, new LaplacePnlCalculator(),
-                properties, writer, universe);
+                properties, writer, universe, mock(LaplaceBreadthService.class), mock(FiveMinuteKlineService.class));
     }
 
     @Test
