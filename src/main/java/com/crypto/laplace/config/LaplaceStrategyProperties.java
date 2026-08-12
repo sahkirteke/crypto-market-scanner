@@ -74,6 +74,13 @@ public class LaplaceStrategyProperties {
         private BigDecimal volumeProfileMinGapPct = new BigDecimal("0.10");
         private BigDecimal partialTakeProfitPct = new BigDecimal("0.03");
         private BigDecimal partialCloseRatio = new BigDecimal("0.25");
+        private int sessionHours = 12;
+        private int entryCutoffHours = 10;
+        private BigDecimal sessionBaseCapitalUsdt = new BigDecimal("350");
+        private BigDecimal sessionBaseMarginUsdt = new BigDecimal("5");
+        private BigDecimal sessionProfitLockRealizedPct = new BigDecimal("5.00");
+        private BigDecimal sessionProfitLockProjectedPct = new BigDecimal("4.60");
+        private int maxLongPerThirtyMinuteSlot = 5;
         private String diagnosticDirectory = "logs/laplace";
         private String tradeDirectory = "logs/laplace-trades";
     }

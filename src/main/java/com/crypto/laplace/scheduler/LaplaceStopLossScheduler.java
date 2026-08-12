@@ -4,6 +4,7 @@ import com.crypto.laplace.execution.LaplacePaperExecutionService;
 import com.crypto.laplace.model.LaplacePositionStatus;
 import com.crypto.laplace.persistence.LaplacePaperPositionRepository;
 import com.crypto.laplace.service.LaplacePositionManagementService;
+import com.crypto.laplace.session.LaplaceSessionManager;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,7 @@ public class LaplaceStopLossScheduler {
     private final LaplacePaperPositionRepository positions;
     private final LaplacePositionManagementService management;
     private final LaplacePaperExecutionService execution;
+    private final LaplaceSessionManager session;
     private final AtomicBoolean running = new AtomicBoolean();
 
     @Scheduled(cron = "${trading.laplace.stop-loss-cron}", zone = "${trading.laplace.zone}")
@@ -37,6 +39,7 @@ public class LaplaceStopLossScheduler {
         try {
             management.catchUp(positionId, Instant.now());
             execution.drainTradeEvents();
+            session.tick();
         } catch (RuntimeException exception) {
             log.error("LAPLACE_STOP_LOSS_EVALUATION_FAILED positionId={} symbol={} error={}",
                     positionId, symbol, exception.getMessage(), exception);
