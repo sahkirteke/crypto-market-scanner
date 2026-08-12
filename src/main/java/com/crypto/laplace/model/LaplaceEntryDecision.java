@@ -10,6 +10,8 @@ public record LaplaceEntryDecision(
         double ema50Rise60mPct, double currentNormalizedSlope, int volumeProfileWindowBars,
         int volumeProfileBins, double volumeProfilePoc, double volumeProfileGapPct,
         double rangePosition2h, double quoteVolumeAccel1h, double emaGapPct,
+        double last30mReturnPct, double previous30mReturnPct, double momentumDeteriorationPct,
+        int green5mCandleCountLast30m, boolean longFallingKnifeContinuation,
         List<LaplaceEntryRejectionReason> rejectionReasons) {
     public LaplaceEntryDecision {
         rejectionReasons = List.copyOf(rejectionReasons);
