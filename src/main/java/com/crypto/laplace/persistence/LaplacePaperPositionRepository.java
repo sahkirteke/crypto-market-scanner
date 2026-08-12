@@ -11,6 +11,10 @@ import org.springframework.data.repository.query.Param;
 
 public interface LaplacePaperPositionRepository extends JpaRepository<LaplacePaperPositionEntity, String> {
     List<LaplacePaperPositionEntity> findByStrategyAndStatus(String strategy, LaplacePositionStatus status);
+    List<LaplacePaperPositionEntity> findByStrategyAndTradingRunIdAndStatus(
+            String strategy, String tradingRunId, LaplacePositionStatus status);
+    List<LaplacePaperPositionEntity> findByStrategyAndTradingRunIdAndSessionIdAndStatus(
+            String strategy, String tradingRunId, String sessionId, LaplacePositionStatus status);
     List<LaplacePaperPositionEntity> findByStrategyAndSymbolAndStatus(
             String strategy, String symbol, LaplacePositionStatus status);
 

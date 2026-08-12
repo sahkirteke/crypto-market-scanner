@@ -3,6 +3,7 @@ package com.crypto.laplace.execution;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -26,12 +27,16 @@ import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
+import com.crypto.laplace.session.LaplaceSessionManager;
 
 class LaplacePaperExecutionServiceTest {
     private LaplacePaperPositionRepository positions;
     private LaplaceExecutionPriceProvider prices;
     private LaplacePaperExecutionService service;
     private FiveMinuteKlineService fiveMinuteKlines;
+    private LaplaceSessionManager session;
+    private ObjectProvider<LaplaceSessionManager> sessionProvider;
 
     @BeforeEach
     void setUp() {
@@ -44,8 +49,10 @@ class LaplacePaperExecutionServiceTest {
         when(universe.symbols()).thenReturn(Set.of("BTCUSDT"));
         LaplaceStrategyProperties properties = new LaplaceStrategyProperties();
         fiveMinuteKlines = mock(FiveMinuteKlineService.class);
+        session=mock(LaplaceSessionManager.class);when(session.tradingRunId()).thenReturn("current");when(session.currentSessionId()).thenReturn("session");
+        sessionProvider=mock(ObjectProvider.class);when(sessionProvider.getIfAvailable()).thenReturn(session);
         service = new LaplacePaperExecutionService(positions, events, prices, new LaplacePnlCalculator(),
-                properties, writer, universe, mock(LaplaceBreadthService.class), fiveMinuteKlines, mock(org.springframework.beans.factory.ObjectProvider.class));
+                properties, writer, universe, mock(LaplaceBreadthService.class), fiveMinuteKlines, sessionProvider);
     }
 
     @Test
@@ -65,6 +72,26 @@ class LaplacePaperExecutionServiceTest {
     }
 
     @Test
+    void accountEquityIgnoresClosedTradesFromOlderRuns() {
+        LaplaceSessionManager session=mock(LaplaceSessionManager.class);when(session.tradingRunId()).thenReturn("current");
+        ObjectProvider<LaplaceSessionManager> provider=mock(ObjectProvider.class);when(provider.getIfAvailable()).thenReturn(session);
+        LaplacePaperPositionEntity old=LaplacePaperPositionEntity.builder().tradingRunId("old").netPnl(new BigDecimal("50")).build();
+        when(positions.findByStrategyAndTradingRunIdAndStatus(any(),eq("current"),eq(LaplacePositionStatus.CLOSED))).thenReturn(List.of());
+        LaplacePaperExecutionService scoped=new LaplacePaperExecutionService(positions,mock(LaplaceTradeEventRepository.class),prices,new LaplacePnlCalculator(),new LaplaceStrategyProperties(),mock(LaplaceTradeJsonlWriter.class),mock(StartupMarketUniverseService.class),mock(LaplaceBreadthService.class),fiveMinuteKlines,provider);
+        assertThat(scoped.accountEquity()).isEqualByComparingTo("250");
+    }
+
+    @Test
+    void accountEquityIncludesOnlyCurrentRunClosedPnl() {
+        LaplaceSessionManager session=mock(LaplaceSessionManager.class);when(session.tradingRunId()).thenReturn("current");
+        ObjectProvider<LaplaceSessionManager> provider=mock(ObjectProvider.class);when(provider.getIfAvailable()).thenReturn(session);
+        var current=LaplacePaperPositionEntity.builder().tradingRunId("current").netPnl(new BigDecimal("15")).build();
+        when(positions.findByStrategyAndTradingRunIdAndStatus(any(),eq("current"),eq(LaplacePositionStatus.CLOSED))).thenReturn(List.of(current));
+        LaplacePaperExecutionService scoped=new LaplacePaperExecutionService(positions,mock(LaplaceTradeEventRepository.class),prices,new LaplacePnlCalculator(),new LaplaceStrategyProperties(),mock(LaplaceTradeJsonlWriter.class),mock(StartupMarketUniverseService.class),mock(LaplaceBreadthService.class),fiveMinuteKlines,provider);
+        assertThat(scoped.accountEquity()).isEqualByComparingTo("265");
+    }
+
+    @Test
     void everyShortEntryUsesBidAndFixedSeventyFiveUsdtFifteenXSize() {
         when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of());
         when(prices.quote("BTCUSDT", MarketExecutionAction.SHORT_OPEN)).thenReturn(price("50", "51", "50", "BID"));
@@ -80,12 +107,12 @@ class LaplacePaperExecutionServiceTest {
     @Test
     void rejectsEntryWhenOpenMarginsAndUnrealizedEntryFeesExhaustAvailableBalance() {
         when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of());
-        List<LaplacePaperPositionEntity> nineteenOpen = java.util.stream.IntStream.range(0, 19)
+        List<LaplacePaperPositionEntity> fortyNineOpen = java.util.stream.IntStream.range(0, 49)
                 .mapToObj(i -> LaplacePaperPositionEntity.builder().margin(new BigDecimal("5"))
                         .entryFee(new BigDecimal("0.030")).build()).toList();
-        when(positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.CLOSED)).thenReturn(List.of());
-        when(positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN)).thenReturn(nineteenOpen);
-        assertThat(service.availableBalance()).isEqualByComparingTo("4.430");
+        when(positions.findByStrategyAndTradingRunIdAndStatus(LaplacePaperExecutionService.STRATEGY,"current",LaplacePositionStatus.CLOSED)).thenReturn(List.of());
+        when(positions.findByStrategyAndTradingRunIdAndStatus(LaplacePaperExecutionService.STRATEGY,"current",LaplacePositionStatus.OPEN)).thenReturn(fortyNineOpen);
+        assertThat(service.availableBalance()).isEqualByComparingTo("3.530");
         when(prices.quote("BTCUSDT", MarketExecutionAction.LONG_OPEN)).thenReturn(price("99", "100", "100", "ASK"));
         assertThatThrownBy(() -> service.open(signal(), PositionSide.LONG, null, "FLAT"))
                 .isInstanceOf(IllegalStateException.class).hasMessage("INSUFFICIENT_PAPER_BALANCE");

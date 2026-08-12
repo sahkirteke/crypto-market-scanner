@@ -62,7 +62,8 @@ public class LaplaceThirtyMinuteScheduler {
                     symbols.add(symbol);
                 }
             }
-            symbols.stream().sorted().forEach(symbol->process(symbol,scanContext));
+            List<LaplacePaperTradeCoordinator.SignalEnvelope> batch=symbols.stream().sorted().map(symbol->calculate(symbol,scanContext)).filter(java.util.Objects::nonNull).toList();
+            coordinator.onSignalBatch(batch,scanContext.sessionId(),scanContext.current24hVolumes());
         } finally {
             running.set(false);
         }
@@ -78,32 +79,35 @@ public class LaplaceThirtyMinuteScheduler {
     }
 
     void process(String symbol,LaplaceSessionManager.ScanContext scanContext) {
+        var item=calculate(symbol,scanContext);if(item!=null)coordinator.onSignal(item.signal(),item.inEntryUniverse(),scanContext.sessionId(),scanContext.current24hVolumes());
+    }
+
+    private LaplacePaperTradeCoordinator.SignalEnvelope calculate(String symbol,LaplaceSessionManager.ScanContext scanContext) {
         Instant close = null;
         try {
             StartupHistory history = startupHistory.history(symbol);
             if (history == null) {
-                return;
+                return null;
             }
             List<Kline> data = klines.loadClosed(symbol);
             if (!postStartupBarCounts.containsKey(symbol)) {
                 LaplaceSignalResult baseline = signals.calculate(symbol, history.candles(), 0);
-                coordinator.initializeBaseline(symbol, baseline.entrySignal());
+                session.processSignal(scanContext.sessionId(),()->coordinator.initializeBaseline(symbol,baseline.entrySignal()));
             }
             close = data.getLast().getCloseTime();
             Instant previous = lastProcessed.putIfAbsent(symbol, history.baselineCloseTime());
             previous = previous == null ? history.baselineCloseTime() : previous;
             if (!close.isAfter(previous)) {
                 log.debug("LAPLACE_DUPLICATE_OR_STARTUP_CANDLE symbol={} candleCloseTime={}", symbol, close);
-                return;
+                return null;
             }
             if (!lastProcessed.replace(symbol, previous, close)) {
                 log.debug("LAPLACE_DUPLICATE_CANDLE symbol={} candleCloseTime={}", symbol, close);
-                return;
+                return null;
             }
             int count = postStartupBarCounts.merge(symbol, 1, Integer::sum);
             LaplaceSignalResult result = signals.calculate(symbol, data, count);
             diagnostics.signal(result);
-            coordinator.onSignal(result, universe.symbols().contains(symbol),scanContext.sessionId(),scanContext.current24hVolumes());
             if (count == 1) {
                 log.info("LAPLACE_FIRST_POST_STARTUP_CANDLE_PROCESSED symbol={} candleCloseTime={} previousNormalizedSlope={} currentNormalizedSlope={} entrySignal={} strongReversalSignal={} eligibleForExecution={}",
                         symbol, close, result.previousNormalizedSlope(), result.currentNormalizedSlope(),
@@ -112,10 +116,12 @@ public class LaplaceThirtyMinuteScheduler {
             log.debug("LAPLACE_SIGNAL_CALCULATED symbol={} candleCloseTime={} entrySignal={} strongReversalSignal={} startupState={} postStartupClosedBarCount={} eligibleForExecution={}",
                     symbol, close, result.entrySignal(), result.strongReversalSignal(), result.startupState(),
                     count, result.eligibleForExecution());
+            return new LaplacePaperTradeCoordinator.SignalEnvelope(result,universe.symbols().contains(symbol));
         } catch (RuntimeException exception) {
             log.error("LAPLACE_SYMBOL_FAILED symbol={} candleCloseTime={} errorType={} errorMessage={}",
                     symbol, close, exception.getClass().getSimpleName(), exception.getMessage(), exception);
             diagnostics.error(symbol, exception.getClass().getSimpleName(), exception.getMessage());
+            return null;
         }
     }
 }
