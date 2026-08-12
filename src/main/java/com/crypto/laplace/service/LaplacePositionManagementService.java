@@ -26,7 +26,9 @@ public class LaplacePositionManagementService {
             for (var candle : klines.loadClosedRange(position.getSymbol(), after, cutoffInclusive)) {
                 PositionManagementOutcome outcome = execution.evaluateClosedFiveMinuteCandle(positionId, candle);
                 if (outcome != PositionManagementOutcome.ALREADY_PROCESSED) { count++; last = candle.getCloseTime(); }
-                if (outcome == PositionManagementOutcome.CLOSED_STOP_LOSS || outcome == PositionManagementOutcome.CLOSED_BREAK_EVEN)
+                if (outcome == PositionManagementOutcome.CLOSED_STOP_LOSS
+                        || outcome == PositionManagementOutcome.CLOSED_BREAK_EVEN
+                        || outcome == PositionManagementOutcome.CLOSED_SHORT_EMA20_ACCEPTANCE)
                     return new PositionCatchUpResult(count, true, last);
             }
             return new PositionCatchUpResult(count, false, last);

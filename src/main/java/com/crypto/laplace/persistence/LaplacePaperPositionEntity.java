@@ -46,6 +46,8 @@ public class LaplacePaperPositionEntity {
  @Column(precision=30,scale=12) private BigDecimal cumulativeExitFee;
  @Column(precision=30,scale=12) private BigDecimal realizedGrossPnl;
  private Instant lastManagedFiveMinuteCandleCloseTime;
+ private Boolean fastExitMode;
+ @Column(precision=10,scale=4) private BigDecimal positiveBreadth30Pct;
  private Instant exitTime;
  @Column(precision=30,scale=12) private BigDecimal exitExecutionPrice;
  @Column(precision=30,scale=12) private BigDecimal exitFee;
