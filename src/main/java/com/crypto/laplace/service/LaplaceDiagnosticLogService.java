@@ -4,6 +4,7 @@ import com.crypto.common.service.JsonlDecisionLogService;
 import com.crypto.laplace.config.LaplaceStrategyProperties;
 import com.crypto.laplace.model.LaplaceSignal;
 import com.crypto.laplace.model.LaplaceSignalResult;
+import com.crypto.laplace.model.LaplaceEntryDecision;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -20,4 +21,7 @@ public class LaplaceDiagnosticLogService {
   jsonl.append(properties.getLaplace().getDiagnosticDirectory(),"laplace-signals",m);
  }
  public void error(String symbol,String type,String message){ jsonl.append(properties.getLaplace().getDiagnosticDirectory(),"laplace-signals",Map.of("eventType","DATA_REJECTION","strategy","LAPLACE_KERNEL_REGRESSION_30M","symbol",symbol,"timeframe","30m","errorType",type,"errorMessage",String.valueOf(message))); }
+ public void entryDecision(LaplaceSignalResult r, LaplaceEntryDecision d) {
+  Map<String,Object> m=new LinkedHashMap<>();m.put("eventType","ENTRY_DECISION");m.put("rawEntrySignal",r.entrySignal());m.put("rawStrongReversalSignal",r.strongReversalSignal());m.put("effectiveExecutionSide",d.effectiveExecutionSide());m.put("signalInverted",true);m.put("signalCandleCloseTime",r.signalCandleCloseTime());m.put("current5mClose",d.current5mClose());m.put("atrPercentage30m",d.atrPercentage30m());m.put("lowestLow24",d.lowestLow24());m.put("distanceFromLowestLow24Pct",d.distanceFromLowestLow24Pct());m.put("ema20",d.ema20());m.put("ema50",d.ema50());m.put("ema50TwelveBarsAgo",d.ema50TwelveBarsAgo());m.put("ema20AboveEma50Pct",d.ema20AboveEma50Pct());m.put("ema50Rise60mPct",d.ema50Rise60mPct());m.put("currentNormalizedSlope",d.currentNormalizedSlope());m.put("volumeProfileWindowBars",d.volumeProfileWindowBars());m.put("volumeProfileBins",d.volumeProfileBins());m.put("volumeProfilePoc",d.volumeProfilePoc());m.put("volumeProfileGapPct",d.volumeProfileGapPct());m.put("rangePosition2h",d.rangePosition2h());m.put("quoteVolumeAccel1h",d.quoteVolumeAccel1h());m.put("emaGapPct",d.emaGapPct());m.put("last30mReturnPct",d.last30mReturnPct());m.put("previous30mReturnPct",d.previous30mReturnPct());m.put("momentumDeteriorationPct",d.momentumDeteriorationPct());m.put("green5mCandleCountLast30m",d.green5mCandleCountLast30m());m.put("longFallingKnifeContinuation",d.longFallingKnifeContinuation());m.put("kural5Allowed",d.allowed());m.put("kural5RejectionReasons",d.rejectionReasons());jsonl.append(properties.getLaplace().getDiagnosticDirectory(),"laplace-signals",m);
+ }
 }

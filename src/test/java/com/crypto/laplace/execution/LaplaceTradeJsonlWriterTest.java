@@ -122,6 +122,19 @@ class LaplaceTradeJsonlWriterTest {
     }
 
     @Test
+    void writesPartialExitToSymbolLifecycleFileNotFailureFile() throws Exception {
+        var entry = event("entry", "ENTRY", "SOLUSDT", "position-1", null);
+        var partial = event("partial", "PARTIAL_EXIT", "SOLUSDT", "position-1", null);
+        var exit = event("exit", "EXIT", "SOLUSDT", "position-1", null);
+        writer(List.of(entry, partial, exit)).drain();
+        List<String> lines = Files.readAllLines(tradeFile("SOLUSDT"));
+        assertThat(lines).hasSize(3);
+        assertThat(lines.get(1)).contains("\"eventType\":\"PARTIAL_EXIT\"");
+        assertThat(Files.exists(tempDir.resolve("laplace-diagnostics").resolve("laplace-failures.jsonl"))).isFalse();
+        assertThat(partial.isJsonlWritten()).isTrue();
+    }
+
+    @Test
     void writesReversalAsExitThenEntryWithSameReversalId() throws Exception {
         var shortEntry = event("short-entry", "ENTRY", "SOLUSDT", "short-position", null, "SHORT");
         var shortExit = event("short-exit", "EXIT", "SOLUSDT", "short-position", "rev-1", "SHORT");

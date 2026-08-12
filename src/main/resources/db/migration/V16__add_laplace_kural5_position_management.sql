@@ -1,0 +1,25 @@
+ALTER TABLE laplace_paper_positions ADD COLUMN IF NOT EXISTS original_quantity NUMERIC(30,12);
+ALTER TABLE laplace_paper_positions ADD COLUMN IF NOT EXISTS remaining_quantity NUMERIC(30,12);
+ALTER TABLE laplace_paper_positions ADD COLUMN IF NOT EXISTS original_notional NUMERIC(30,8);
+ALTER TABLE laplace_paper_positions ADD COLUMN IF NOT EXISTS remaining_entry_notional NUMERIC(30,12);
+ALTER TABLE laplace_paper_positions ADD COLUMN IF NOT EXISTS partial_take_profit_executed BOOLEAN;
+ALTER TABLE laplace_paper_positions ADD COLUMN IF NOT EXISTS partial_take_profit_time TIMESTAMP WITH TIME ZONE;
+ALTER TABLE laplace_paper_positions ADD COLUMN IF NOT EXISTS partial_trigger_candle_close_time TIMESTAMP WITH TIME ZONE;
+ALTER TABLE laplace_paper_positions ADD COLUMN IF NOT EXISTS partial_take_profit_price NUMERIC(30,12);
+ALTER TABLE laplace_paper_positions ADD COLUMN IF NOT EXISTS partial_take_profit_quantity NUMERIC(30,12);
+ALTER TABLE laplace_paper_positions ADD COLUMN IF NOT EXISTS partial_exit_notional NUMERIC(30,12);
+ALTER TABLE laplace_paper_positions ADD COLUMN IF NOT EXISTS partial_exit_fee NUMERIC(30,12);
+ALTER TABLE laplace_paper_positions ADD COLUMN IF NOT EXISTS partial_gross_pnl NUMERIC(30,12);
+ALTER TABLE laplace_paper_positions ADD COLUMN IF NOT EXISTS break_even_stop_price NUMERIC(30,12);
+ALTER TABLE laplace_paper_positions ADD COLUMN IF NOT EXISTS break_even_active_after_candle_close_time TIMESTAMP WITH TIME ZONE;
+ALTER TABLE laplace_paper_positions ADD COLUMN IF NOT EXISTS cumulative_exit_fee NUMERIC(30,12);
+ALTER TABLE laplace_paper_positions ADD COLUMN IF NOT EXISTS realized_gross_pnl NUMERIC(30,12);
+ALTER TABLE laplace_paper_positions ADD COLUMN IF NOT EXISTS last_managed_five_minute_candle_close_time TIMESTAMP WITH TIME ZONE;
+
+UPDATE laplace_paper_positions SET original_quantity=quantity WHERE original_quantity IS NULL;
+UPDATE laplace_paper_positions SET remaining_quantity=quantity WHERE remaining_quantity IS NULL;
+UPDATE laplace_paper_positions SET original_notional=notional WHERE original_notional IS NULL;
+UPDATE laplace_paper_positions SET remaining_entry_notional=notional WHERE remaining_entry_notional IS NULL;
+UPDATE laplace_paper_positions SET partial_take_profit_executed=FALSE WHERE partial_take_profit_executed IS NULL;
+UPDATE laplace_paper_positions SET cumulative_exit_fee=COALESCE(exit_fee,0) WHERE cumulative_exit_fee IS NULL;
+UPDATE laplace_paper_positions SET realized_gross_pnl=COALESCE(gross_pnl,0) WHERE realized_gross_pnl IS NULL;

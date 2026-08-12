@@ -50,7 +50,7 @@ public class ScannerProperties {
     @Getter
     @Setter
     public static class Liquidity {
-        private BigDecimal minQuoteVolume24h = BigDecimal.valueOf(30_000_000L);
+        private BigDecimal minQuoteVolume24h = BigDecimal.valueOf(20_000_000L);
         private BigDecimal maxSpreadPct = new BigDecimal("0.08");
         private BigDecimal maxPump24hPct = BigDecimal.valueOf(25);
         private BigDecimal maxDump24hPct = BigDecimal.valueOf(-25);

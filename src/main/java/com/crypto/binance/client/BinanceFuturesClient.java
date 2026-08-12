@@ -109,14 +109,18 @@ public class BinanceFuturesClient {
     }
 
     public List<Kline> getKlines(String symbol, String interval, int limit) {
+        return getKlines(symbol, interval, limit, null);
+    }
+
+    public List<Kline> getKlines(String symbol, String interval, int limit, Instant endTimeInclusive) {
         return execute("klines", () -> {
             List<List<Object>> response = binanceWebClient.get()
-                    .uri(uriBuilder -> uriBuilder
-                            .path("/fapi/v1/klines")
-                            .queryParam("symbol", symbol)
-                            .queryParam("interval", interval)
-                            .queryParam("limit", limit)
-                            .build())
+                    .uri(uriBuilder -> {
+                        var builder = uriBuilder.path("/fapi/v1/klines").queryParam("symbol", symbol)
+                                .queryParam("interval", interval).queryParam("limit", limit);
+                        if (endTimeInclusive != null) builder.queryParam("endTime", endTimeInclusive.toEpochMilli());
+                        return builder.build();
+                    })
                     .retrieve()
                     .onStatus(HttpStatusCode::isError, this::toClientException)
                     .bodyToMono(new ParameterizedTypeReference<List<List<Object>>>() {
@@ -127,7 +131,8 @@ public class BinanceFuturesClient {
                     .filter(Objects::nonNull)
                     .map(kline -> mapKline(symbol, interval, kline))
                     .toList();
-            log.info("BINANCE_KLINES_READY symbol={} interval={} count={}", symbol, interval, klines.size());
+            log.info("BINANCE_KLINES_READY symbol={} interval={} requestedLimit={} count={}",
+                    symbol, interval, limit, klines.size());
             return klines;
         },
                 exception -> log.warn("BINANCE_KLINES_TRANSIENT_ERROR symbol={} interval={} limit={} message={}",
