@@ -14,6 +14,8 @@ import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.Map;
+import java.math.BigDecimal;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.RequiredArgsConstructor;
@@ -40,7 +42,7 @@ public class LaplaceThirtyMinuteScheduler {
 
     @Scheduled(cron = "${trading.laplace.cron}", zone = "${trading.laplace.zone}")
     public void scan() {
-        session.tick();
+        LaplaceSessionManager.ScanContext scanContext=session.beginScan();
         Set<String> managed = coordinator.managementSymbols();
         if (!universe.isReady() && managed.isEmpty()) {
             log.error("LAPLACE_SCAN_SKIPPED marketUniverseReady=false");
@@ -60,7 +62,7 @@ public class LaplaceThirtyMinuteScheduler {
                     symbols.add(symbol);
                 }
             }
-            symbols.forEach(this::process);
+            symbols.stream().sorted().forEach(symbol->process(symbol,scanContext));
         } finally {
             running.set(false);
         }
@@ -72,6 +74,10 @@ public class LaplaceThirtyMinuteScheduler {
     }
 
     void process(String symbol) {
+        process(symbol,new LaplaceSessionManager.ScanContext(session.currentSessionId(),universe.currentVolumeSnapshot()));
+    }
+
+    void process(String symbol,LaplaceSessionManager.ScanContext scanContext) {
         Instant close = null;
         try {
             StartupHistory history = startupHistory.history(symbol);
@@ -97,7 +103,7 @@ public class LaplaceThirtyMinuteScheduler {
             int count = postStartupBarCounts.merge(symbol, 1, Integer::sum);
             LaplaceSignalResult result = signals.calculate(symbol, data, count);
             diagnostics.signal(result);
-            coordinator.onSignal(result, universe.symbols().contains(symbol));
+            coordinator.onSignal(result, universe.symbols().contains(symbol),scanContext.sessionId(),scanContext.current24hVolumes());
             if (count == 1) {
                 log.info("LAPLACE_FIRST_POST_STARTUP_CANDLE_PROCESSED symbol={} candleCloseTime={} previousNormalizedSlope={} currentNormalizedSlope={} entrySignal={} strongReversalSignal={} eligibleForExecution={}",
                         symbol, close, result.previousNormalizedSlope(), result.currentNormalizedSlope(),

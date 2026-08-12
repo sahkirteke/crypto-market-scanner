@@ -23,7 +23,7 @@ public class LaplaceStrategyProperties {
             throw new IllegalStateException("Invalid immutable Laplace phase-one configuration");
         }
         if (laplace.startupClosedCandleCount != 20
-                || laplace.initialCapitalUsdt.compareTo(new BigDecimal("100")) != 0
+                || laplace.initialCapitalUsdt.compareTo(new BigDecimal("250")) != 0
                 || laplace.marginPerPositionUsdt.compareTo(new BigDecimal("5")) != 0
                 || laplace.notionalUsdt.compareTo(new BigDecimal("75")) != 0
                 || laplace.leverage != 15
@@ -54,7 +54,7 @@ public class LaplaceStrategyProperties {
         private boolean repaint;
         private int klineLimit = 100;
         private int startupClosedCandleCount = 20;
-        private BigDecimal initialCapitalUsdt = new BigDecimal("100");
+        private BigDecimal initialCapitalUsdt = new BigDecimal("250");
         private BigDecimal marginPerPositionUsdt = new BigDecimal("5");
         private BigDecimal notionalUsdt = new BigDecimal("75");
         private int leverage = 15;
@@ -76,8 +76,6 @@ public class LaplaceStrategyProperties {
         private BigDecimal partialCloseRatio = new BigDecimal("0.25");
         private int sessionHours = 12;
         private int entryCutoffHours = 10;
-        private BigDecimal sessionBaseCapitalUsdt = new BigDecimal("350");
-        private BigDecimal sessionBaseMarginUsdt = new BigDecimal("5");
         private BigDecimal sessionProfitLockRealizedPct = new BigDecimal("5.00");
         private BigDecimal sessionProfitLockProjectedPct = new BigDecimal("4.60");
         private int maxLongPerThirtyMinuteSlot = 5;

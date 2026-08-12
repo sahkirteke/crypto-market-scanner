@@ -47,9 +47,7 @@ public class StartupMarketUniverseService implements ApplicationRunner {
   ready=false; symbols=Set.of(); startupVolumes=Map.of(); sessionId=UUID.randomUUID().toString();
   attempted.set(false); initialize();
  }
- public BigDecimal currentVolume(String symbol) {
-  return client.getAll24hTickers().stream().filter(t->symbol.equals(t.getSymbol())).map(Ticker24h::getQuoteVolume).findFirst().orElse(null);
- }
+ public Map<String,BigDecimal> currentVolumeSnapshot(){Map<String,BigDecimal> result=new HashMap<>();for(Ticker24h ticker:client.getAll24hTickers())if(ticker!=null&&ticker.getSymbol()!=null&&ticker.getQuoteVolume()!=null)result.put(ticker.getSymbol(),ticker.getQuoteVolume());return Map.copyOf(result);}
  public boolean isReady(){return ready;} public Set<String> symbols(){return symbols;}
  public String sessionId(){return sessionId;} public BigDecimal startupVolume(String symbol){return startupVolumes.get(symbol);} public BigDecimal minimumVolumeThreshold(){return scannerProperties.getLiquidity().getMinQuoteVolume24h();}
 }

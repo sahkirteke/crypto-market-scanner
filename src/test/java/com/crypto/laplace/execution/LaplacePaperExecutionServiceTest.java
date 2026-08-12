@@ -45,7 +45,7 @@ class LaplacePaperExecutionServiceTest {
         LaplaceStrategyProperties properties = new LaplaceStrategyProperties();
         fiveMinuteKlines = mock(FiveMinuteKlineService.class);
         service = new LaplacePaperExecutionService(positions, events, prices, new LaplacePnlCalculator(),
-                properties, writer, universe, mock(LaplaceBreadthService.class), fiveMinuteKlines);
+                properties, writer, universe, mock(LaplaceBreadthService.class), fiveMinuteKlines, mock(org.springframework.beans.factory.ObjectProvider.class));
     }
 
     @Test
