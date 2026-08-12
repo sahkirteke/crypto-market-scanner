@@ -49,7 +49,7 @@ class LaplacePaperExecutionServiceTest {
         when(universe.symbols()).thenReturn(Set.of("BTCUSDT"));
         LaplaceStrategyProperties properties = new LaplaceStrategyProperties();
         fiveMinuteKlines = mock(FiveMinuteKlineService.class);
-        session=mock(LaplaceSessionManager.class);when(session.tradingRunId()).thenReturn("current");when(session.currentSessionId()).thenReturn("session");
+        session=mock(LaplaceSessionManager.class);when(session.tradingRunId()).thenReturn("current");when(session.currentSessionId()).thenReturn("session");when(session.currentSessionMargin()).thenReturn(new BigDecimal("5"));
         sessionProvider=mock(ObjectProvider.class);when(sessionProvider.getIfAvailable()).thenReturn(session);
         service = new LaplacePaperExecutionService(positions, events, prices, new LaplacePnlCalculator(),
                 properties, writer, universe, mock(LaplaceBreadthService.class), fiveMinuteKlines, sessionProvider);
@@ -102,6 +102,16 @@ class LaplacePaperExecutionServiceTest {
         assertThat(opened.getLeverage()).isEqualTo(15);
         assertThat(opened.getQuantity()).isEqualByComparingTo("1.5");
         assertThat(opened.getEntryFee()).isEqualByComparingTo("0.030");
+    }
+
+    @Test
+    void entryUsesScaledSessionMarginAndNotional() {
+        when(session.currentSessionMargin()).thenReturn(new BigDecimal("5.25"));
+        when(positions.findOpenForUpdate(any(),any(),any())).thenReturn(List.of());
+        when(prices.quote("BTCUSDT",MarketExecutionAction.LONG_OPEN)).thenReturn(price("99","100","100","ASK"));
+        LaplacePaperPositionEntity opened=service.open(signal(),PositionSide.LONG,null,"FLAT");
+        assertThat(opened.getMargin()).isEqualByComparingTo("5.25");
+        assertThat(opened.getNotional()).isEqualByComparingTo("78.75");
     }
 
     @Test

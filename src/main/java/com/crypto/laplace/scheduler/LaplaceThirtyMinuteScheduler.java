@@ -42,17 +42,23 @@ public class LaplaceThirtyMinuteScheduler {
 
     @Scheduled(cron = "${trading.laplace.cron}", zone = "${trading.laplace.zone}")
     public void scan() {
-        LaplaceSessionManager.ScanContext scanContext=session.beginScan();
-        Set<String> managed = coordinator.managementSymbols();
-        if (!universe.isReady() && managed.isEmpty()) {
-            log.error("LAPLACE_SCAN_SKIPPED marketUniverseReady=false");
-            return;
-        }
         if (!running.compareAndSet(false, true)) {
             log.info("LAPLACE_SCAN_SKIPPED concurrentRun=true");
             return;
         }
         try {
+            session.processScan(this::scanLocked);
+        } finally {
+            running.set(false);
+        }
+    }
+
+    private void scanLocked(LaplaceSessionManager.ScanContext scanContext) {
+            Set<String> managed = coordinator.managementSymbols();
+            if (!universe.isReady() && managed.isEmpty()) {
+                log.error("LAPLACE_SCAN_SKIPPED marketUniverseReady=false");
+                return;
+            }
             Set<String> symbols = new HashSet<>(startupHistory.readySymbols());
             for (String symbol : managed) {
                 if (!startupHistory.isReady(symbol)) {
@@ -64,9 +70,6 @@ public class LaplaceThirtyMinuteScheduler {
             }
             List<LaplacePaperTradeCoordinator.SignalEnvelope> batch=symbols.stream().sorted().map(symbol->calculate(symbol,scanContext)).filter(java.util.Objects::nonNull).toList();
             coordinator.onSignalBatch(batch,scanContext.sessionId(),scanContext.current24hVolumes());
-        } finally {
-            running.set(false);
-        }
     }
 
     public void clearSessionRuntime() {

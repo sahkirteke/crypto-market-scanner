@@ -12,7 +12,7 @@ import lombok.*;
 public class LaplacePaperPositionEntity {
  @Id @Column(length=36) private String id;
  @Column(nullable=false,length=64) private String strategy;
- @Column(nullable=false,length=16) private String strategyVersion;
+ @Column(nullable=false,length=32) private String strategyVersion;
  @Column(nullable=false,length=32) private String symbol;
  @Column(length=36) private String tradingRunId;
  @Column(length=36) private String sessionId;
