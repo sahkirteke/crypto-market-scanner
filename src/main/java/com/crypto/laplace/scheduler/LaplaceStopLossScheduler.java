@@ -28,7 +28,8 @@ public class LaplaceStopLossScheduler {
     public void evaluate() {
         if (!running.compareAndSet(false, true)) return;
         try {
-            positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN)
+            positions.findByStrategyAndTradingRunIdAndStatus(LaplacePaperExecutionService.STRATEGY,
+                            session.tradingRunId(), LaplacePositionStatus.OPEN)
                     .forEach(position -> evaluate(position.getId(), position.getSymbol()));
         } finally {
             running.set(false);

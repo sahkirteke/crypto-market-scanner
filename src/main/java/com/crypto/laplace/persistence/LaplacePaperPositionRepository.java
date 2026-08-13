@@ -15,6 +15,8 @@ public interface LaplacePaperPositionRepository extends JpaRepository<LaplacePap
             String strategy, String tradingRunId, LaplacePositionStatus status);
     List<LaplacePaperPositionEntity> findByStrategyAndTradingRunIdAndSessionIdAndStatus(
             String strategy, String tradingRunId, String sessionId, LaplacePositionStatus status);
+    List<LaplacePaperPositionEntity> findByStrategyAndTradingRunIdAndSymbolAndStatus(
+            String strategy, String tradingRunId, String symbol, LaplacePositionStatus status);
     List<LaplacePaperPositionEntity> findByStrategyAndSymbolAndStatus(
             String strategy, String symbol, LaplacePositionStatus status);
 
@@ -23,9 +25,10 @@ public interface LaplacePaperPositionRepository extends JpaRepository<LaplacePap
     Optional<LaplacePaperPositionEntity> findByIdForUpdate(@Param("id") String id);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select p from LaplacePaperPositionEntity p where p.strategy=:strategy and p.symbol=:symbol and p.status=:status")
+    @Query("select p from LaplacePaperPositionEntity p where p.strategy=:strategy and p.tradingRunId=:tradingRunId and p.symbol=:symbol and p.status=:status")
     List<LaplacePaperPositionEntity> findOpenForUpdate(
             @Param("strategy") String strategy,
+            @Param("tradingRunId") String tradingRunId,
             @Param("symbol") String symbol,
             @Param("status") LaplacePositionStatus status);
 }

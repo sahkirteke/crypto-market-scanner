@@ -57,7 +57,7 @@ class LaplacePaperExecutionServiceTest {
 
     @Test
     void everyLongEntryUsesAskAndFixedSeventyFiveUsdtFifteenXSize() {
-        when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of());
+        when(positions.findOpenForUpdate(any(),any(),any(),any())).thenReturn(List.of());
         when(prices.quote("BTCUSDT", MarketExecutionAction.LONG_OPEN)).thenReturn(price("99", "100", "100", "ASK"));
         LaplaceSignalResult signal = signal();
         LaplacePaperPositionEntity opened = service.open(signal, PositionSide.LONG, null, "FLAT");
@@ -93,7 +93,7 @@ class LaplacePaperExecutionServiceTest {
 
     @Test
     void everyShortEntryUsesBidAndFixedSeventyFiveUsdtFifteenXSize() {
-        when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of());
+        when(positions.findOpenForUpdate(any(),any(),any(),any())).thenReturn(List.of());
         when(prices.quote("BTCUSDT", MarketExecutionAction.SHORT_OPEN)).thenReturn(price("50", "51", "50", "BID"));
         LaplacePaperPositionEntity opened = service.open(signal(), PositionSide.SHORT, null, "FLAT");
         assertThat(opened.getEntryExecutionPrice()).isEqualByComparingTo("50");
@@ -107,7 +107,7 @@ class LaplacePaperExecutionServiceTest {
     @Test
     void entryUsesScaledSessionMarginAndNotional() {
         when(session.currentSessionMargin()).thenReturn(new BigDecimal("5.25"));
-        when(positions.findOpenForUpdate(any(),any(),any())).thenReturn(List.of());
+        when(positions.findOpenForUpdate(any(),any(),any(),any())).thenReturn(List.of());
         when(prices.quote("BTCUSDT",MarketExecutionAction.LONG_OPEN)).thenReturn(price("99","100","100","ASK"));
         LaplacePaperPositionEntity opened=service.open(signal(),PositionSide.LONG,null,"FLAT");
         assertThat(opened.getMargin()).isEqualByComparingTo("5.25");
@@ -115,8 +115,16 @@ class LaplacePaperExecutionServiceTest {
     }
 
     @Test
+    void oldRunOpenDoesNotBlockCurrentRunEntry() {
+        when(positions.findOpenForUpdate(LaplacePaperExecutionService.STRATEGY,"current","BTCUSDT",LaplacePositionStatus.OPEN)).thenReturn(List.of());
+        when(prices.quote("BTCUSDT",MarketExecutionAction.LONG_OPEN)).thenReturn(price("99","100","100","ASK"));
+        service.open(signal(),PositionSide.LONG,null,"FLAT");
+        verify(positions).findOpenForUpdate(LaplacePaperExecutionService.STRATEGY,"current","BTCUSDT",LaplacePositionStatus.OPEN);
+    }
+
+    @Test
     void rejectsEntryWhenOpenMarginsAndUnrealizedEntryFeesExhaustAvailableBalance() {
-        when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of());
+        when(positions.findOpenForUpdate(any(),any(),any(),any())).thenReturn(List.of());
         List<LaplacePaperPositionEntity> fortyNineOpen = java.util.stream.IntStream.range(0, 49)
                 .mapToObj(i -> LaplacePaperPositionEntity.builder().margin(new BigDecimal("5"))
                         .entryFee(new BigDecimal("0.030")).build()).toList();
@@ -164,7 +172,7 @@ class LaplacePaperExecutionServiceTest {
     @Test
     void longCloseUsesBidAndExitNotionalForTakerFee() {
         LaplacePaperPositionEntity open = openPosition(PositionSide.LONG);
-        when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of(open));
+        when(positions.findOpenForUpdate(any(),any(),any(),any())).thenReturn(List.of(open));
         when(prices.quote("BTCUSDT", MarketExecutionAction.LONG_CLOSE)).thenReturn(price("110", "111", "110", "BID"));
         service.reverse(signal(), open, PositionSide.SHORT, false);
         assertThat(open.getExitExecutionPrice()).isEqualByComparingTo("110");
@@ -177,7 +185,7 @@ class LaplacePaperExecutionServiceTest {
     @Test
     void shortCloseUsesAsk() {
         LaplacePaperPositionEntity open = openPosition(PositionSide.SHORT);
-        when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of(open));
+        when(positions.findOpenForUpdate(any(),any(),any(),any())).thenReturn(List.of(open));
         when(prices.quote("BTCUSDT", MarketExecutionAction.SHORT_CLOSE)).thenReturn(price("89", "90", "90", "ASK"));
         service.reverse(signal(), open, PositionSide.LONG, false);
         assertThat(open.getExitExecutionPrice()).isEqualByComparingTo("90");
@@ -195,7 +203,7 @@ class LaplacePaperExecutionServiceTest {
         assertThat(open.getPartialGrossPnl()).isEqualByComparingTo("0.5625");
         assertThat(open.getPartialExitNotional()).isEqualByComparingTo("19.3125");
         assertThat(open.getPartialExitFee()).isEqualByComparingTo("0.007725");
-        when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of(open));
+        when(positions.findOpenForUpdate(any(),any(),any(),any())).thenReturn(List.of(open));
         when(prices.quote("BTCUSDT", MarketExecutionAction.LONG_CLOSE)).thenReturn(price("104", "105", "104", "BID"));
         service.closeForOppositeSignal(signal(), open, PositionSide.SHORT);
         assertThat(open.getGrossPnl()).isEqualByComparingTo("2.8125");
@@ -211,7 +219,7 @@ class LaplacePaperExecutionServiceTest {
         when(positions.findByIdForUpdate("position")).thenReturn(java.util.Optional.of(open));
         service.evaluateClosedFiveMinuteCandle("position", managementCandle("97", "101", "2026-08-06T10:34:59.999Z"));
         assertThat(open.getPartialExitFee()).isEqualByComparingTo("0.007275");
-        when(positions.findOpenForUpdate(any(), any(), any())).thenReturn(List.of(open));
+        when(positions.findOpenForUpdate(any(),any(),any(),any())).thenReturn(List.of(open));
         when(prices.quote("BTCUSDT", MarketExecutionAction.SHORT_CLOSE)).thenReturn(price("95", "96", "96", "ASK"));
         service.closeForOppositeSignal(signal(), open, PositionSide.LONG);
         assertThat(open.getGrossPnl()).isEqualByComparingTo("2.8125");
