@@ -12,6 +12,7 @@ import lombok.*;
 public class LaplacePaperPositionEntity {
  @Id @Column(length=36) private String id;
  @Column(nullable=false,length=64) private String strategy;
+ @Column(length=32) private String sessionId;
  @Column(nullable=false,length=16) private String strategyVersion;
  @Column(nullable=false,length=32) private String symbol;
  @Enumerated(EnumType.STRING) @Column(nullable=false,length=8) private PositionSide side;

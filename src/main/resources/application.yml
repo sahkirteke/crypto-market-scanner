@@ -172,7 +172,14 @@ trading:
     volume-profile-min-gap-pct: 0.10
     partial-take-profit-pct: 0.03
     partial-close-ratio: 0.25
-    stop-loss-pct: 0.05
+    stop-loss-pct: 0.045
+    min-daily-quote-volume-usdt: 20000000
+    session:
+      duration-hours: 12
+      entry-window-hours: 10
+      realized-profit-target-pct: 0.05
+      projected-profit-floor-pct: 0.046
+      compound-positive-session-profit: true
     stop-loss-cron: "1 */5 * * * *"
     order-type: MARKET
     taker-fee-rate: 0.0004

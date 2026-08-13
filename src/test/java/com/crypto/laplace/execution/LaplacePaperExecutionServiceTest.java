@@ -22,12 +22,20 @@ import com.crypto.laplace.service.LaplaceBreadthService;
 import com.crypto.laplace.service.FiveMinuteKlineService;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 
 class LaplacePaperExecutionServiceTest {
+    @Test
+    void springProductionConstructorIsExplicitlyAutowired() {
+        assertThat(Arrays.stream(LaplacePaperExecutionService.class.getDeclaredConstructors())
+                .filter(constructor -> constructor.isAnnotationPresent(Autowired.class))
+                .count()).isEqualTo(1);
+    }
     private LaplacePaperPositionRepository positions;
     private LaplaceExecutionPriceProvider prices;
     private LaplacePaperExecutionService service;
