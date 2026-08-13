@@ -21,6 +21,7 @@ import java.util.function.Supplier;
 import java.util.function.Consumer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -36,6 +37,7 @@ public class LaplaceSessionManager implements ApplicationRunner {
  public enum Lifecycle {ACTIVE,LOCKED,RESETTING,RISK_OFF}
  private final LaplaceStrategyProperties properties;private final LaplacePaperExecutionService execution;private final LaplacePaperPositionRepository positions;private final StartupMarketUniverseService universe;private final LaplaceStartupHistoryService history;private final LaplaceBreadthService breadth;private final ObjectProvider<LaplacePaperTradeCoordinator> coordinator;private final ObjectProvider<LaplaceThirtyMinuteScheduler> scheduler;private final ReentrantReadWriteLock lifecycleLock=new ReentrantReadWriteLock(true);private final Supplier<Instant> clock;
  private final String tradingRunId=UUID.randomUUID().toString();private volatile Snapshot state;
+ @Autowired
  public LaplaceSessionManager(LaplaceStrategyProperties properties,LaplacePaperExecutionService execution,LaplacePaperPositionRepository positions,StartupMarketUniverseService universe,LaplaceStartupHistoryService history,LaplaceBreadthService breadth,ObjectProvider<LaplacePaperTradeCoordinator> coordinator,ObjectProvider<LaplaceThirtyMinuteScheduler> scheduler){this(properties,execution,positions,universe,history,breadth,coordinator,scheduler,Instant::now);}
  LaplaceSessionManager(LaplaceStrategyProperties properties,LaplacePaperExecutionService execution,LaplacePaperPositionRepository positions,StartupMarketUniverseService universe,LaplaceStartupHistoryService history,LaplaceBreadthService breadth,ObjectProvider<LaplacePaperTradeCoordinator> coordinator,ObjectProvider<LaplaceThirtyMinuteScheduler> scheduler,Supplier<Instant> clock){this.properties=properties;this.execution=execution;this.positions=positions;this.universe=universe;this.history=history;this.breadth=breadth;this.coordinator=coordinator;this.scheduler=scheduler;this.clock=clock;}
  @Override public void run(ApplicationArguments ignored){lifecycleLock.writeLock().lock();try{startFresh(null);}finally{lifecycleLock.writeLock().unlock();}}
