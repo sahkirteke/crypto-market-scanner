@@ -9,6 +9,8 @@ import com.crypto.laplace.service.LaplaceSignalService;
 import com.crypto.laplace.service.LaplaceStartupHistoryService;
 import com.crypto.laplace.service.StartupMarketUniverseService;
 import com.crypto.laplace.service.ThirtyMinuteKlineService;
+import com.crypto.laplace.session.LaplaceSessionService;
+import org.springframework.beans.factory.ObjectProvider;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
@@ -32,6 +34,7 @@ public class LaplaceThirtyMinuteScheduler {
     private final LaplaceSignalService signals;
     private final LaplaceDiagnosticLogService diagnostics;
     private final LaplacePaperTradeCoordinator coordinator;
+    private final ObjectProvider<LaplaceSessionService> sessions;
     private final AtomicBoolean running = new AtomicBoolean();
     private final ConcurrentHashMap<String, Instant> lastProcessed = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Integer> postStartupBarCounts = new ConcurrentHashMap<>();
@@ -40,6 +43,11 @@ public class LaplaceThirtyMinuteScheduler {
 
     @Scheduled(cron = "${trading.laplace.cron}", zone = "${trading.laplace.zone}")
     public void scan() {
+        LaplaceSessionService sessionService=sessions.getIfAvailable();
+        if (sessionService==null||!sessionService.ensureActiveSessionBeforeScan(Instant.now())) {
+            log.info("LAPLACE_SCAN_SKIPPED sessionActive=false rolloverOrColdStart=true");
+            return;
+        }
         Set<String> managed = coordinator.managementSymbols();
         if (!universe.isReady() && managed.isEmpty()) {
             log.error("LAPLACE_SCAN_SKIPPED marketUniverseReady=false");
@@ -92,6 +100,7 @@ public class LaplaceThirtyMinuteScheduler {
             LaplaceSignalResult result = signals.calculate(symbol, data, count);
             diagnostics.signal(result);
             coordinator.onSignal(result, universe.symbols().contains(symbol));
+            sessionService.evaluateProfitLock(Instant.now());
             if (count == 1) {
                 log.info("LAPLACE_FIRST_POST_STARTUP_CANDLE_PROCESSED symbol={} candleCloseTime={} previousNormalizedSlope={} currentNormalizedSlope={} entrySignal={} strongReversalSignal={} eligibleForExecution={}",
                         symbol, close, result.previousNormalizedSlope(), result.currentNormalizedSlope(),

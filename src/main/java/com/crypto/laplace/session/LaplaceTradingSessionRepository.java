@@ -10,4 +10,5 @@ public interface LaplaceTradingSessionRepository extends JpaRepository<LaplaceTr
     @Query("select s from LaplaceTradingSessionEntity s where s.sessionId=:id")
     Optional<LaplaceTradingSessionEntity> findByIdForUpdate(@Param("id") String id);
     Optional<LaplaceTradingSessionEntity> findFirstByStatusOrderByStartTimeDesc(LaplaceSessionStatus status);
+    Optional<LaplaceTradingSessionEntity> findFirstByOrderByStartTimeDesc();
 }
