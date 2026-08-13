@@ -33,7 +33,7 @@ public class LaplaceStartupHistoryService implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        if (!universe.isReady()) {
+        if (!universe.isReady() || !histories.isEmpty()) {
             return;
         }
         universe.symbols().forEach(this::initializeSymbol);
@@ -69,6 +69,8 @@ public class LaplaceStartupHistoryService implements ApplicationRunner {
     public Set<String> readySymbols() {
         return Set.copyOf(histories.keySet());
     }
+
+    public void resetForSession() { histories.clear(); }
 
     private List<PreparedLaplaceCandle> prepare(List<Kline> candles) {
         List<PreparedLaplaceCandle> result = new ArrayList<>(candles.size());

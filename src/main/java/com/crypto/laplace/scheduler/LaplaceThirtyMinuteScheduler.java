@@ -36,6 +36,8 @@ public class LaplaceThirtyMinuteScheduler {
     private final ConcurrentHashMap<String, Instant> lastProcessed = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Integer> postStartupBarCounts = new ConcurrentHashMap<>();
 
+    public void resetForSession() { running.set(false); lastProcessed.clear(); postStartupBarCounts.clear(); }
+
     @Scheduled(cron = "${trading.laplace.cron}", zone = "${trading.laplace.zone}")
     public void scan() {
         Set<String> managed = coordinator.managementSymbols();

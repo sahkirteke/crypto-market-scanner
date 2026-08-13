@@ -27,8 +27,7 @@ public class LaplaceStrategyProperties {
                 || laplace.marginPerPositionUsdt.compareTo(new BigDecimal("5")) != 0
                 || laplace.notionalUsdt.compareTo(new BigDecimal("75")) != 0
                 || laplace.leverage != 15
-                || laplace.stopLossPct.compareTo(new BigDecimal("0.05")) != 0
-                || laplace.notionalUsdt.compareTo(laplace.marginPerPositionUsdt.multiply(BigDecimal.valueOf(laplace.leverage))) != 0
+                || laplace.stopLossPct.compareTo(new BigDecimal("0.045")) != 0
                 || !"MARKET".equals(laplace.orderType)
                 || laplace.takerFeeRate == null
                 || laplace.takerFeeRate.signum() < 0
@@ -56,9 +55,12 @@ public class LaplaceStrategyProperties {
         private int startupClosedCandleCount = 20;
         private BigDecimal initialCapitalUsdt = new BigDecimal("100");
         private BigDecimal marginPerPositionUsdt = new BigDecimal("5");
+        /** Legacy bootstrap value; runtime notional is always session margin x leverage. */
         private BigDecimal notionalUsdt = new BigDecimal("75");
         private int leverage = 15;
-        private BigDecimal stopLossPct = new BigDecimal("0.05");
+        private BigDecimal stopLossPct = new BigDecimal("0.045");
+        private BigDecimal minDailyQuoteVolumeUsdt = new BigDecimal("20000000");
+        private Session session = new Session();
         private String stopLossCron = "1 */5 * * * *";
         private String orderType = "MARKET";
         private BigDecimal takerFeeRate = new BigDecimal("0.0004");
@@ -76,5 +78,14 @@ public class LaplaceStrategyProperties {
         private BigDecimal partialCloseRatio = new BigDecimal("0.25");
         private String diagnosticDirectory = "logs/laplace";
         private String tradeDirectory = "logs/laplace-trades";
+    }
+
+    @Getter @Setter
+    public static class Session {
+        private int durationHours = 12;
+        private int entryWindowHours = 10;
+        private BigDecimal realizedProfitTargetPct = new BigDecimal("0.05");
+        private BigDecimal projectedProfitFloorPct = new BigDecimal("0.046");
+        private boolean compoundPositiveSessionProfit = true;
     }
 }
