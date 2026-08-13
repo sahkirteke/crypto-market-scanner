@@ -21,4 +21,5 @@ public class LaplaceBreadthService {
   } catch(RuntimeException ignored) { /* invalid coins do not enter either count */ }
   cachedCandleClose=cutoff;cachedBreadth=valid==0?Double.NaN:positive*100d/valid;return cachedBreadth;
  }
+ public synchronized void clearSessionRuntime(){cachedCandleClose=null;cachedBreadth=Double.NaN;}
 }

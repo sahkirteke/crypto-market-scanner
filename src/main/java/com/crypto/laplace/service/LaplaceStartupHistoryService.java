@@ -70,6 +70,11 @@ public class LaplaceStartupHistoryService implements ApplicationRunner {
         return Set.copyOf(histories.keySet());
     }
 
+    /** Clears every prepared/derived candle value before loading raw history again. */
+    public synchronized void clearSessionRuntime() { histories.clear(); }
+
+    public synchronized void reloadFresh() { universe.symbols().forEach(this::initializeSymbol); }
+
     private List<PreparedLaplaceCandle> prepare(List<Kline> candles) {
         List<PreparedLaplaceCandle> result = new ArrayList<>(candles.size());
         Double previousRegression = null;

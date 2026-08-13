@@ -156,7 +156,7 @@ trading:
     repaint: false
     kline-limit: 100
     startup-closed-candle-count: 20
-    initial-capital-usdt: 100
+    initial-capital-usdt: 250
     margin-per-position-usdt: 5
     notional-usdt: 75
     leverage: 15
@@ -180,6 +180,11 @@ trading:
     zone: Europe/Istanbul
     diagnostic-directory: logs/laplace
     trade-directory: logs/laplace-trades
+    session-hours: 12
+    entry-cutoff-hours: 10
+    session-profit-lock-realized-pct: 5.00
+    session-profit-lock-projected-pct: 4.60
+    max-long-per-thirty-minute-slot: 5
 logging:
   pattern:
     dateformat: "yyyy-MM-dd HH:mm:ss.SSS,Europe/Istanbul"
