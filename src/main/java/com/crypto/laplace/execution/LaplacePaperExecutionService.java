@@ -6,15 +6,18 @@ import com.crypto.laplace.persistence.*;
 import com.crypto.laplace.service.StartupMarketUniverseService;
 import com.crypto.laplace.config.LaplaceStrategyProperties;
 import java.math.*;import java.time.*;import java.util.*;
-import lombok.RequiredArgsConstructor;import lombok.extern.slf4j.Slf4j;import org.springframework.stereotype.Service;import org.springframework.transaction.annotation.Transactional;
+import lombok.extern.slf4j.Slf4j;import org.springframework.stereotype.Service;import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 
-@Slf4j @Service @RequiredArgsConstructor
+@Slf4j @Service
 public class LaplacePaperExecutionService {
  public static final String STRATEGY="LAPLACE_KERNEL_REGRESSION_30M", VERSION="KURAL5_V1";private static final int SCALE=12;
  private final LaplacePaperPositionRepository positions;private final LaplaceTradeEventRepository events;private final LaplaceExecutionPriceProvider prices;private final LaplacePnlCalculator pnl;private final LaplaceStrategyProperties properties;private final LaplaceTradeJsonlWriter writer;
  private final StartupMarketUniverseService universe; private final com.crypto.laplace.service.LaplaceBreadthService breadth; private final com.crypto.laplace.service.FiveMinuteKlineService fiveMinuteKlines;
  private final com.crypto.laplace.service.LaplaceDailyVolumeGate dailyVolumeGate; private final ObjectProvider<com.crypto.laplace.session.LaplaceSessionService> sessions;
+ @Autowired
+ public LaplacePaperExecutionService(LaplacePaperPositionRepository positions,LaplaceTradeEventRepository events,LaplaceExecutionPriceProvider prices,LaplacePnlCalculator pnl,LaplaceStrategyProperties properties,LaplaceTradeJsonlWriter writer,StartupMarketUniverseService universe,com.crypto.laplace.service.LaplaceBreadthService breadth,com.crypto.laplace.service.FiveMinuteKlineService fiveMinuteKlines,com.crypto.laplace.service.LaplaceDailyVolumeGate dailyVolumeGate,ObjectProvider<com.crypto.laplace.session.LaplaceSessionService> sessions){this.positions=positions;this.events=events;this.prices=prices;this.pnl=pnl;this.properties=properties;this.writer=writer;this.universe=universe;this.breadth=breadth;this.fiveMinuteKlines=fiveMinuteKlines;this.dailyVolumeGate=dailyVolumeGate;this.sessions=sessions;}
  public LaplacePaperExecutionService(LaplacePaperPositionRepository positions,LaplaceTradeEventRepository events,LaplaceExecutionPriceProvider prices,LaplacePnlCalculator pnl,LaplaceStrategyProperties properties,LaplaceTradeJsonlWriter writer,StartupMarketUniverseService universe,com.crypto.laplace.service.LaplaceBreadthService breadth,com.crypto.laplace.service.FiveMinuteKlineService fiveMinuteKlines){this(positions,events,prices,pnl,properties,writer,universe,breadth,fiveMinuteKlines,null,null);}
  @Transactional public LaplacePaperPositionEntity open(LaplaceSignalResult signal,PositionSide side,String reversalId,String positionBefore){ return open(signal,side,reversalId,positionBefore,null); }
  @Transactional public LaplacePaperPositionEntity open(LaplaceSignalResult signal,PositionSide side,String reversalId,String positionBefore,LaplaceEntryDecision decision){
