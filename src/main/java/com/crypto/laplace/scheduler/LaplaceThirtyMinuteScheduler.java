@@ -15,8 +15,6 @@ import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -35,11 +33,7 @@ public class LaplaceThirtyMinuteScheduler {
     private final LaplaceDiagnosticLogService diagnostics;
     private final LaplacePaperTradeCoordinator coordinator;
     private final ObjectProvider<LaplaceSessionService> sessions;
-    private final AtomicBoolean running = new AtomicBoolean();
-    private final ConcurrentHashMap<String, Instant> lastProcessed = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, Integer> postStartupBarCounts = new ConcurrentHashMap<>();
-
-    public void resetForSession() { running.set(false); lastProcessed.clear(); postStartupBarCounts.clear(); }
+    private final LaplaceThirtyMinuteRuntimeState runtimeState;
 
     @Scheduled(cron = "${trading.laplace.cron}", zone = "${trading.laplace.zone}")
     public void scan() {
@@ -53,7 +47,7 @@ public class LaplaceThirtyMinuteScheduler {
             log.error("LAPLACE_SCAN_SKIPPED marketUniverseReady=false");
             return;
         }
-        if (!running.compareAndSet(false, true)) {
+        if (!runtimeState.running().compareAndSet(false, true)) {
             log.info("LAPLACE_SCAN_SKIPPED concurrentRun=true");
             return;
         }
@@ -69,7 +63,7 @@ public class LaplaceThirtyMinuteScheduler {
             }
             symbols.forEach(this::process);
         } finally {
-            running.set(false);
+            runtimeState.running().set(false);
         }
     }
 
@@ -81,26 +75,27 @@ public class LaplaceThirtyMinuteScheduler {
                 return;
             }
             List<Kline> data = klines.loadClosed(symbol);
-            if (!postStartupBarCounts.containsKey(symbol)) {
+            if (!runtimeState.postStartupBarCounts().containsKey(symbol)) {
                 LaplaceSignalResult baseline = signals.calculate(symbol, history.candles(), 0);
                 coordinator.initializeBaseline(symbol, baseline.entrySignal());
             }
             close = data.getLast().getCloseTime();
-            Instant previous = lastProcessed.putIfAbsent(symbol, history.baselineCloseTime());
+            Instant previous = runtimeState.lastProcessed().putIfAbsent(symbol, history.baselineCloseTime());
             previous = previous == null ? history.baselineCloseTime() : previous;
             if (!close.isAfter(previous)) {
                 log.debug("LAPLACE_DUPLICATE_OR_STARTUP_CANDLE symbol={} candleCloseTime={}", symbol, close);
                 return;
             }
-            if (!lastProcessed.replace(symbol, previous, close)) {
+            if (!runtimeState.lastProcessed().replace(symbol, previous, close)) {
                 log.debug("LAPLACE_DUPLICATE_CANDLE symbol={} candleCloseTime={}", symbol, close);
                 return;
             }
-            int count = postStartupBarCounts.merge(symbol, 1, Integer::sum);
+            int count = runtimeState.postStartupBarCounts().merge(symbol, 1, Integer::sum);
             LaplaceSignalResult result = signals.calculate(symbol, data, count);
             diagnostics.signal(result);
             coordinator.onSignal(result, universe.symbols().contains(symbol));
-            sessionService.evaluateProfitLock(Instant.now());
+            LaplaceSessionService sessionService = sessions.getIfAvailable();
+            if (sessionService != null) sessionService.evaluateProfitLock(Instant.now());
             if (count == 1) {
                 log.info("LAPLACE_FIRST_POST_STARTUP_CANDLE_PROCESSED symbol={} candleCloseTime={} previousNormalizedSlope={} currentNormalizedSlope={} entrySignal={} strongReversalSignal={} eligibleForExecution={}",
                         symbol, close, result.previousNormalizedSlope(), result.currentNormalizedSlope(),
