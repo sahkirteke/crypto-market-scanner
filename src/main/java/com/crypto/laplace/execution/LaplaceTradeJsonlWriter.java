@@ -79,6 +79,8 @@ public class LaplaceTradeJsonlWriter implements ApplicationRunner {
         String id = UUID.randomUUID().toString();
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("eventType", "FAILURE");
+        payload.put("paperVariant", "INVERTED_TRUE");
+        payload.put("signalInverted", true);
         payload.put("eventId", id);
         payload.put("strategy", LaplacePaperExecutionService.STRATEGY);
         payload.put("symbol", symbol);

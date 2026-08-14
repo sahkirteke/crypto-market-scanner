@@ -20,6 +20,7 @@ public class LaplaceTemporaryStateResetService {
     private final LaplaceThirtyMinuteScheduler thirtyMinuteScheduler;
     private final LaplaceStopLossScheduler stopLossScheduler;
     private final ObjectProvider<CacheManager> cacheManagers;
+    private final LaplaceMarketDataGate marketDataGate;
     @Autowired private LaplaceInvertedFalseTradeCoordinator invertedFalseCoordinator;
     @Autowired private LaplaceInvertedFalseStopLossScheduler invertedFalseStopLossScheduler;
 
@@ -46,6 +47,13 @@ public class LaplaceTemporaryStateResetService {
         cacheManagers.orderedStream().forEach(cacheManager -> cacheManager.getCacheNames().stream()
                 .filter(name -> name.toLowerCase().contains("laplace"))
                 .map(cacheManager::getCache).filter(java.util.Objects::nonNull).forEach(org.springframework.cache.Cache::clear));
+    }
+
+    /** Clears shared transient strategy data only when no enabled variant needs it. */
+    public synchronized boolean clearSharedIfUnused() {
+        if (marketDataGate.allowsMarketData()) return false;
+        clear();
+        return true;
     }
 
     public boolean isEmpty() {

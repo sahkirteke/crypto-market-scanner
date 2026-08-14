@@ -88,6 +88,7 @@ public class LaplaceProfitLockService {
         runtime.recordLiquidationResult(actual);
         reset.clearInvertedTrue();
         runtime.startCooldown(lastExit);
+        reset.clearSharedIfUnused();
         execution.drainTradeEvents();
     }
 

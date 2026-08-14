@@ -10,7 +10,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Slf4j
@@ -24,7 +23,6 @@ public class LaplaceInvertedFalseStopLossScheduler {
     private final ConcurrentHashMap<String, Instant> lastProcessed = new ConcurrentHashMap<>();
     private final AtomicBoolean running = new AtomicBoolean();
 
-    @Scheduled(cron = "${trading.laplace.stop-loss-cron}", zone = "${trading.laplace.zone}")
     public void evaluate() {
         if (!runtime.isActive()) return;
         if (!running.compareAndSet(false, true)) return;
@@ -38,7 +36,15 @@ public class LaplaceInvertedFalseStopLossScheduler {
 
     void evaluate(String positionId, String symbol) {
         try {
-            var candle = klines.loadLatestClosed(symbol);
+            evaluate(positionId, symbol, klines.loadLatestClosed(symbol));
+        } catch (RuntimeException exception) {
+            log.error("LAPLACE_STOP_LOSS_EVALUATION_FAILED positionId={} symbol={} error={}",
+                    positionId, symbol, exception.getMessage(), exception);
+        }
+    }
+
+    public void evaluate(String positionId, String symbol, com.crypto.domain.model.Kline candle) {
+        try {
             Instant previous = lastProcessed.get(positionId);
             if (previous != null && !candle.getCloseTime().isAfter(previous)) return;
             if (execution.closeAtStopLoss(positionId, candle)) execution.drainTradeEvents();

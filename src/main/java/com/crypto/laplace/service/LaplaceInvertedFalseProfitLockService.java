@@ -88,6 +88,7 @@ public class LaplaceInvertedFalseProfitLockService {
         runtime.recordLiquidationResult(actual);
         reset.clearInvertedFalse();
         runtime.startCooldown(lastExit);
+        reset.clearSharedIfUnused();
         execution.drainTradeEvents();
     }
 
