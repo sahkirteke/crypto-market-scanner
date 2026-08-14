@@ -24,7 +24,9 @@ class LaplaceStopLossSchedulerTest {
                 .low(BigDecimal.ONE).high(BigDecimal.TEN).closed(true).build();
         when(klines.loadLatestClosed("BTCUSDT")).thenReturn(candle);
         when(execution.closeAtStopLoss("position", candle)).thenReturn(true);
-        LaplaceStopLossScheduler scheduler = new LaplaceStopLossScheduler(positions, klines, execution);
+        var runtime = mock(com.crypto.laplace.service.LaplaceRuntimeService.class);
+        when(runtime.isActive()).thenReturn(true);
+        LaplaceStopLossScheduler scheduler = new LaplaceStopLossScheduler(positions, klines, execution, runtime);
 
         scheduler.evaluate("position", "BTCUSDT");
         scheduler.evaluate("position", "BTCUSDT");

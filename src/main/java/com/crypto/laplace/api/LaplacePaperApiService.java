@@ -12,6 +12,7 @@ import com.crypto.laplace.execution.LaplacePnlCalculator;
 import com.crypto.laplace.model.LaplacePositionStatus;
 import com.crypto.laplace.persistence.LaplacePaperPositionEntity;
 import com.crypto.laplace.persistence.LaplacePaperPositionRepository;
+import com.crypto.laplace.service.LaplaceRuntimeService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
@@ -41,6 +42,7 @@ public class LaplacePaperApiService implements ApplicationRunner {
     private final LaplaceStrategyProperties properties;
     private final BinanceFuturesClient binanceFuturesClient;
     private final LaplacePnlCalculator pnlCalculator;
+    private final LaplaceRuntimeService runtime;
 
     @Value("${server.port:8080}")
     private String serverPort;
@@ -62,6 +64,9 @@ public class LaplacePaperApiService implements ApplicationRunner {
                     LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN);
             if (openPositions.isEmpty()) {
                 return new LaplaceOpenPaperPositionsResponse(List.of(), 0, BigDecimal.ZERO);
+            }
+            if (!runtime.isActive()) {
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Laplace market data is disabled while runtime is not ACTIVE");
             }
             Map<String, BookTicker> tickersBySymbol = binanceFuturesClient.getAllBookTickers().stream()
                     .filter(ticker -> ticker != null && ticker.getSymbol() != null)

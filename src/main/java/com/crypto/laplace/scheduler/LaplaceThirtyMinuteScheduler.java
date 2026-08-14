@@ -9,6 +9,7 @@ import com.crypto.laplace.service.LaplaceSignalService;
 import com.crypto.laplace.service.LaplaceStartupHistoryService;
 import com.crypto.laplace.service.StartupMarketUniverseService;
 import com.crypto.laplace.service.ThirtyMinuteKlineService;
+import com.crypto.laplace.service.LaplaceRuntimeService;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
@@ -32,12 +33,14 @@ public class LaplaceThirtyMinuteScheduler {
     private final LaplaceSignalService signals;
     private final LaplaceDiagnosticLogService diagnostics;
     private final LaplacePaperTradeCoordinator coordinator;
+    private final LaplaceRuntimeService runtime;
     private final AtomicBoolean running = new AtomicBoolean();
     private final ConcurrentHashMap<String, Instant> lastProcessed = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Integer> postStartupBarCounts = new ConcurrentHashMap<>();
 
     @Scheduled(cron = "${trading.laplace.cron}", zone = "${trading.laplace.zone}")
     public void scan() {
+        if (!runtime.isActive()) return;
         Set<String> managed = coordinator.managementSymbols();
         if (!universe.isReady() && managed.isEmpty()) {
             log.error("LAPLACE_SCAN_SKIPPED marketUniverseReady=false");
@@ -103,5 +106,11 @@ public class LaplaceThirtyMinuteScheduler {
                     symbol, close, exception.getClass().getSimpleName(), exception.getMessage(), exception);
             diagnostics.error(symbol, exception.getClass().getSimpleName(), exception.getMessage());
         }
+    }
+
+    public void clearRuntimeState() {
+        lastProcessed.clear();
+        postStartupBarCounts.clear();
+        running.set(false);
     }
 }

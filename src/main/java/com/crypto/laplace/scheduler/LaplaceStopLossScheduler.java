@@ -4,6 +4,7 @@ import com.crypto.laplace.execution.LaplacePaperExecutionService;
 import com.crypto.laplace.model.LaplacePositionStatus;
 import com.crypto.laplace.persistence.LaplacePaperPositionRepository;
 import com.crypto.laplace.service.FiveMinuteKlineService;
+import com.crypto.laplace.service.LaplaceRuntimeService;
 import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -21,11 +22,13 @@ public class LaplaceStopLossScheduler {
     private final LaplacePaperPositionRepository positions;
     private final FiveMinuteKlineService klines;
     private final LaplacePaperExecutionService execution;
+    private final LaplaceRuntimeService runtime;
     private final ConcurrentHashMap<String, Instant> lastProcessed = new ConcurrentHashMap<>();
     private final AtomicBoolean running = new AtomicBoolean();
 
     @Scheduled(cron = "${trading.laplace.stop-loss-cron}", zone = "${trading.laplace.zone}")
     public void evaluate() {
+        if (!runtime.isActive()) return;
         if (!running.compareAndSet(false, true)) return;
         try {
             positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN)
@@ -46,5 +49,10 @@ public class LaplaceStopLossScheduler {
             log.error("LAPLACE_STOP_LOSS_EVALUATION_FAILED positionId={} symbol={} error={}",
                     positionId, symbol, exception.getMessage(), exception);
         }
+    }
+
+    public void clearRuntimeState() {
+        lastProcessed.clear();
+        running.set(false);
     }
 }

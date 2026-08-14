@@ -16,6 +16,7 @@ import com.crypto.domain.model.BookTicker;
 import com.crypto.laplace.config.LaplaceStrategyProperties;
 import com.crypto.laplace.execution.LaplacePaperExecutionService;
 import com.crypto.laplace.execution.LaplacePnlCalculator;
+import com.crypto.laplace.service.LaplaceRuntimeService;
 import com.crypto.laplace.model.LaplacePositionStatus;
 import com.crypto.laplace.persistence.LaplacePaperPositionEntity;
 import com.crypto.laplace.persistence.LaplacePaperPositionRepository;
@@ -37,7 +38,9 @@ class LaplacePaperApiServiceTest {
         LaplaceStrategyProperties properties = new LaplaceStrategyProperties();
         properties.setActiveStrategy("LAPLACE_KERNEL_REGRESSION_30M");
         binanceFuturesClient = mock(BinanceFuturesClient.class);
-        service = new LaplacePaperApiService(repository, properties, binanceFuturesClient, new LaplacePnlCalculator());
+        LaplaceRuntimeService runtime = mock(LaplaceRuntimeService.class);
+        when(runtime.isActive()).thenReturn(true);
+        service = new LaplacePaperApiService(repository, properties, binanceFuturesClient, new LaplacePnlCalculator(), runtime);
     }
 
     @Test
