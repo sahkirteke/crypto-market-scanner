@@ -37,8 +37,7 @@ public class LaplaceInvertedFalseProfitLockService {
         var session = runtime.current();
         List<LaplaceInvertedFalsePositionEntity> open = positions.findBySessionIdAndStatus(session.getSessionId(), LaplacePositionStatus.OPEN);
         BigDecimal realized = sessionNetPnl(session.getSessionId());
-        if (open.isEmpty()) return;
-        Map<String, BookTicker> tickers = client.getAllBookTickers().stream().collect(Collectors.toMap(
+        Map<String, BookTicker> tickers = open.isEmpty() ? Map.of() : client.getAllBookTickers().stream().collect(Collectors.toMap(
                 BookTicker::getSymbol, Function.identity(), (first, ignored) -> first));
         BigDecimal openNet = BigDecimal.ZERO;
         BigDecimal exitFees = BigDecimal.ZERO;
@@ -49,11 +48,9 @@ public class LaplaceInvertedFalseProfitLockService {
             exitFees = exitFees.add(price.multiply(position.getQuantity()).multiply(position.getEntryFeeRate())
                     .setScale(SCALE, RoundingMode.HALF_UP));
         }
-        BigDecimal currentProfit = realized.add(openNet);
-        BigDecimal afterClose = currentProfit.subtract(exitFees);
-        if (currentProfit.compareTo(runtime.target(session)) < 0
-                || afterClose.compareTo(runtime.minimumLocked(session)) < 0) return;
-        if (!runtime.beginLiquidation(realized, openNet, exitFees, afterClose)) return;
+        BigDecimal feeAfterTotalPnl = realized.add(openNet).subtract(exitFees);
+        if (feeAfterTotalPnl.compareTo(runtime.target(session)) < 0) return;
+        if (!runtime.beginLiquidation(realized, openNet, exitFees, feeAfterTotalPnl)) return;
         liquidate(open, tickers, session.getSessionId());
     }
 
