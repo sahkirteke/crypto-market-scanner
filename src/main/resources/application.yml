@@ -14,7 +14,7 @@ spring:
       max-lifetime: 1800000
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     open-in-view: false
     properties:
       hibernate:
@@ -148,7 +148,16 @@ trading:
   laplace:
     enabled: true
     execution-enabled: false
-    paper-execution-enabled: false
+    paper-execution-enabled: true
+    paper:
+      inverted-true:
+        enabled: true
+        trade-directory: signals/laplace/inverted-true/trades
+        diagnostic-directory: signals/laplace/inverted-true/diagnostics
+      inverted-false:
+        enabled: true
+        trade-directory: signals/laplace/inverted-false/trades
+        diagnostic-directory: signals/laplace/inverted-false/diagnostics
     timeframe: 30m
     kernel: LAPLACE
     bandwidth: 14

@@ -29,19 +29,19 @@ public class LaplaceStartupHistoryService implements ApplicationRunner {
     private final LaplaceKernelRegressionCalculator regression;
     private final Atr14Calculator atr;
     private final LaplaceStrategyProperties properties;
-    private final LaplaceRuntimeService runtime;
+    private final LaplaceMarketDataGate marketDataGate;
     private final Map<String, StartupHistory> histories = new ConcurrentHashMap<>();
 
     @Override
     public void run(ApplicationArguments args) {
-        if (!runtime.allowsMarketData() || !universe.isReady()) {
+        if (!marketDataGate.allowsMarketData() || !universe.isReady()) {
             return;
         }
         universe.symbols().forEach(this::initializeSymbol);
     }
 
     public void initializeSymbol(String symbol) {
-        if (!runtime.allowsMarketData()) return;
+        if (!marketDataGate.allowsMarketData() || histories.containsKey(symbol)) return;
         int requested = properties.getLaplace().getStartupClosedCandleCount();
         log.info("LAPLACE_STARTUP_HISTORY_LOAD_STARTED symbol={} requestedClosedCandleCount={}", symbol, requested);
         try {

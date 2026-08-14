@@ -20,15 +20,15 @@ import org.springframework.stereotype.Service;
 public class StartupMarketUniverseService implements ApplicationRunner {
  private final BinanceFuturesClient client;
  private final ScannerProperties scannerProperties;
- private final LaplaceRuntimeService runtime;
+ private final LaplaceMarketDataGate marketDataGate;
  private final AtomicBoolean attempted = new AtomicBoolean();
  private volatile Set<String> symbols = Set.of();
  private volatile Map<String, BigDecimal> startupVolumes = Map.of();
  private volatile String sessionId = UUID.randomUUID().toString();
  private volatile boolean ready;
- @Override public void run(ApplicationArguments args) { if(runtime.allowsMarketData())initialize(); }
+ @Override public void run(ApplicationArguments args) { if(marketDataGate.allowsMarketData())initialize(); }
  public synchronized void initialize() {
-  if(!runtime.allowsMarketData())return;
+  if(!marketDataGate.allowsMarketData())return;
   if (!attempted.compareAndSet(false, true)) return;
   BigDecimal threshold=scannerProperties.getLiquidity().getMinQuoteVolume24h();
   log.info("MARKET_UNIVERSE_INITIALIZATION_STARTED minimumVolumeThreshold={}", threshold);

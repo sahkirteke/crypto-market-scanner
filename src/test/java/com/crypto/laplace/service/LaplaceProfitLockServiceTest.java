@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.crypto.binance.client.BinanceFuturesClient;
@@ -69,6 +70,37 @@ class LaplaceProfitLockServiceTest {
     }
 
     @Test
+    void feeBeforeTargetButFeeAfterBelowTargetDoesNotLiquidate() {
+        LaplacePaperPositionEntity position = open(PositionSide.LONG, bd("100"), bd("1"));
+        position.setEntryFee(bd("0.20"));
+        position.setEntryFeeRate(bd("0.01"));
+        when(positions.findBySessionIdAndStatus("session-1", LaplacePositionStatus.OPEN)).thenReturn(List.of(position));
+        when(positions.findBySessionIdAndStatus("session-1", LaplacePositionStatus.CLOSED)).thenReturn(List.of());
+        when(client.getAllBookTickers()).thenReturn(List.of(ticker(bd("117.5"), bd("117.6"))));
+
+        service.evaluate();
+
+        verify(runtime, never()).beginLiquidation(any(), any(), any(), any());
+    }
+
+    @Test
+    void closedOnlyProfitAtFivePercentTransitionsThroughLiquidationAndCooldown() {
+        LaplacePaperPositionEntity closed = LaplacePaperPositionEntity.builder().id("closed")
+                .sessionId("session-1").status(LaplacePositionStatus.CLOSED).netPnl(bd("17.5"))
+                .exitTime(Instant.parse("2026-08-14T11:00:00Z")).build();
+        when(positions.findBySessionIdAndStatus("session-1", LaplacePositionStatus.OPEN)).thenReturn(List.of());
+        when(positions.findBySessionIdAndStatus("session-1", LaplacePositionStatus.CLOSED)).thenReturn(List.of(closed));
+        when(runtime.beginLiquidation(any(), any(), any(), eq(bd("17.5")))).thenReturn(true);
+
+        service.evaluate();
+
+        verifyNoInteractions(client);
+        verify(runtime).recordLiquidationResult(bd("17.5"));
+        verify(runtime).startCooldown(Instant.parse("2026-08-14T11:00:00Z"));
+        verify(reset).clearInvertedTrue();
+    }
+
+    @Test
     void bothThresholdsCloseLongAtBidAndShortAtAsk() {
         var longPosition = open(PositionSide.LONG, bd("100"), bd("1")); longPosition.setId("long");
         var shortPosition = open(PositionSide.SHORT, bd("100"), bd("1")); shortPosition.setId("short");
@@ -82,7 +114,7 @@ class LaplaceProfitLockServiceTest {
                 org.mockito.ArgumentMatchers.argThat(q -> ((LaplaceExecutionPriceProvider.Price) q).value().compareTo(bd("110")) == 0), any());
         verify(execution).closeForProfitLock(eq("short"),
                 org.mockito.ArgumentMatchers.argThat(q -> ((LaplaceExecutionPriceProvider.Price) q).value().compareTo(bd("90")) == 0), any());
-        verify(reset).clear();
+        verify(reset).clearInvertedTrue();
     }
 
     private void stubOpen(BigDecimal bid, BigDecimal ask, BigDecimal quantity) {

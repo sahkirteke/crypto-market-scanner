@@ -2,6 +2,7 @@ package com.crypto.laplace.config;
 
 import java.math.BigDecimal;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -40,7 +41,9 @@ public class LaplaceStrategyProperties {
     public static class Laplace {
         private boolean enabled = true;
         private boolean executionEnabled;
-        private boolean paperExecutionEnabled;
+        /** Backward-compatible master switch: it gates both variants equally. */
+        private boolean paperExecutionEnabled = true;
+        private Paper paper = new Paper();
         private String timeframe = "30m";
         private String kernel = "LAPLACE";
         private int bandwidth = 14;
@@ -60,5 +63,26 @@ public class LaplaceStrategyProperties {
         private BigDecimal takerFeeRate = new BigDecimal("0.0004");
         private String diagnosticDirectory = "logs/laplace";
         private String tradeDirectory = "logs/laplace-trades";
+
+        @Getter @Setter
+        public static class Paper {
+            private Variant invertedTrue = new Variant(true,
+                    "signals/laplace/inverted-true/trades", "signals/laplace/inverted-true/diagnostics");
+            private Variant invertedFalse = new Variant(true,
+                    "signals/laplace/inverted-false/trades", "signals/laplace/inverted-false/diagnostics");
+        }
+
+        @Getter @Setter @NoArgsConstructor
+        public static class Variant {
+            private boolean enabled;
+            private String tradeDirectory;
+            private String diagnosticDirectory;
+
+            public Variant(boolean enabled, String tradeDirectory, String diagnosticDirectory) {
+                this.enabled = enabled;
+                this.tradeDirectory = tradeDirectory;
+                this.diagnosticDirectory = diagnosticDirectory;
+            }
+        }
     }
 }

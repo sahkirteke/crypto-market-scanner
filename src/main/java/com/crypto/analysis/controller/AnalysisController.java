@@ -6,6 +6,7 @@ import com.crypto.analysis.service.ForwardMetricsService;
 import com.crypto.api.exception.BadRequestException;
 import com.crypto.common.time.IstanbulTimeUtil;
 import com.crypto.laplace.api.LaplacePaperApiService;
+import com.crypto.laplace.api.LaplaceDualSummaryService;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AnalysisController {
     private final ResultAnalyzerService resultAnalyzerService;
     private final ForwardMetricsService forwardMetricsService;
+    private final LaplaceDualSummaryService laplaceDualSummaryService;
     @Autowired(required = false)
     private LaplacePaperApiService laplacePaperApiService;
 
@@ -35,7 +37,7 @@ public class AnalysisController {
     ) {
         if ((start == null && end == null && limit == null) && laplacePaperApiService != null && laplacePaperApiService.isLaplaceActive()) {
             log.info("ANALYSIS_SUMMARY_REQUEST strategy=LAPLACE_KERNEL_REGRESSION_30M");
-            return laplacePaperApiService.summary();
+            return laplaceDualSummaryService.summaries();
         }
         if (start != null || end != null) {
             if (start == null || end == null) {
