@@ -172,10 +172,10 @@ public class LaplaceTradeJsonlWriter implements ApplicationRunner {
     }
 
     private Path tradeDirectory() {
-        return Path.of(properties.getLaplace().getTradeDirectory());
+        return Path.of(properties.getLaplace().getPaper().getInvertedTrue().getTradeDirectory());
     }
 
     private Path diagnosticDirectory() {
-        return Path.of(properties.getLaplace().getDiagnosticDirectory());
+        return Path.of(properties.getLaplace().getPaper().getInvertedTrue().getDiagnosticDirectory());
     }
 }

@@ -8,8 +8,8 @@ import java.time.Instant;
 import lombok.*;
 
 @Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor @Entity
-@Table(name="laplace_paper_positions")
-public class LaplacePaperPositionEntity {
+@Table(name="laplace_inverted_false_positions")
+public class LaplaceInvertedFalsePositionEntity {
  @Id @Column(length=36) private String id;
  @Column(nullable=false,length=64) private String strategy;
  @Column(nullable=false,length=16) private String strategyVersion;

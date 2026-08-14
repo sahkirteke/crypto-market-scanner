@@ -1,14 +1,24 @@
 package com.crypto.laplace.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.crypto.api.dto.LaplaceAnalysisSummaryResponse;
 import com.crypto.api.dto.LaplaceOpenPaperPositionResponse;
+import com.crypto.api.dto.LaplaceOpenPaperPositionsResponse;
+import com.crypto.binance.client.BinanceFuturesClient;
 import com.crypto.common.enums.PositionSide;
+import com.crypto.domain.model.BookTicker;
 import com.crypto.laplace.config.LaplaceStrategyProperties;
 import com.crypto.laplace.execution.LaplacePaperExecutionService;
+import com.crypto.laplace.execution.LaplacePnlCalculator;
+import com.crypto.laplace.service.LaplaceRuntimeService;
+import com.crypto.laplace.persistence.LaplaceTradingSessionEntity;
+import com.crypto.laplace.model.LaplaceRuntimeState;
 import com.crypto.laplace.model.LaplacePositionStatus;
 import com.crypto.laplace.persistence.LaplacePaperPositionEntity;
 import com.crypto.laplace.persistence.LaplacePaperPositionRepository;
@@ -17,37 +27,145 @@ import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.server.ResponseStatusException;
 
 class LaplacePaperApiServiceTest {
     private LaplacePaperPositionRepository repository;
     private LaplacePaperApiService service;
+    private BinanceFuturesClient binanceFuturesClient;
 
     @BeforeEach
     void setUp() {
         repository = mock(LaplacePaperPositionRepository.class);
         LaplaceStrategyProperties properties = new LaplaceStrategyProperties();
         properties.setActiveStrategy("LAPLACE_KERNEL_REGRESSION_30M");
-        service = new LaplacePaperApiService(repository, properties);
+        binanceFuturesClient = mock(BinanceFuturesClient.class);
+        LaplaceRuntimeService runtime = mock(LaplaceRuntimeService.class);
+        when(runtime.isActive()).thenReturn(true);
+        when(runtime.current()).thenReturn(LaplaceTradingSessionEntity.builder().sessionId("true-session")
+                .sessionStartCapital(new BigDecimal("350")).marginPerPosition(new BigDecimal("5")).leverage(15)
+                .runtimeState(LaplaceRuntimeState.ACTIVE).build());
+        service = new LaplacePaperApiService(repository, properties, binanceFuturesClient, new LaplacePnlCalculator(), runtime);
     }
 
     @Test
-    void openPositionsReturnsOnlyOpenLaplacePositionsSortedByEntryTime() {
+    void openPositionsUseBidForLongAskForShortAndAggregateCurrentGrossPnl() {
         LaplacePaperPositionEntity btc = open("btc", "BTCUSDT", PositionSide.LONG, "2026-07-18T09:01:00Z");
         LaplacePaperPositionEntity sol = open("sol", "SOLUSDT", PositionSide.SHORT, "2026-07-18T09:00:00Z");
         when(repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN)).thenReturn(List.of(btc, sol));
-        List<LaplaceOpenPaperPositionResponse> response = service.findOpenPositions();
-        assertThat(response).extracting(LaplaceOpenPaperPositionResponse::symbol).containsExactly("SOLUSDT", "BTCUSDT");
-        assertThat(response.get(0).side()).isEqualTo(PositionSide.SHORT);
-        assertThat(response.get(0).status()).isEqualTo(LaplacePositionStatus.OPEN);
-        assertThat(response.get(0).entryNotional()).isEqualByComparingTo("10");
-        assertThat(response.get(0).margin()).isEqualByComparingTo("10");
-        assertThat(response.get(0).leverage()).isOne();
-        assertThat(response.get(0).orderType()).isEqualTo("MARKET");
-        assertThat(response.get(0).entryExecutionPriceType()).isEqualTo("BID");
-        assertThat(response.get(0).executionAction()).isEqualTo("SHORT_OPEN");
-        assertThat(response.get(0).entryFee()).isEqualByComparingTo("0.004");
-        assertThat(response.get(1).entryExecutionPriceType()).isEqualTo("ASK");
-        assertThat(response.get(1).executionAction()).isEqualTo("LONG_OPEN");
+        when(binanceFuturesClient.getAllBookTickers()).thenReturn(List.of(
+                ticker("BTCUSDT", "110", "111"), ticker("SOLUSDT", "89", "90")));
+
+        LaplaceOpenPaperPositionsResponse response = service.findOpenPositions();
+
+        assertThat(response.positions()).extracting(LaplaceOpenPaperPositionResponse::symbol).containsExactly("SOLUSDT", "BTCUSDT");
+        assertThat(response.positions().get(0).currentPrice()).isEqualByComparingTo("90");
+        assertThat(response.positions().get(0).priceMovePct()).isEqualByComparingTo("10");
+        assertThat(response.positions().get(0).currentPnlUsdt()).isEqualByComparingTo("1");
+        assertThat(response.positions().get(1).currentPrice()).isEqualByComparingTo("110");
+        assertThat(response.positions().get(1).priceMovePct()).isEqualByComparingTo("10");
+        assertThat(response.positions().get(1).currentPnlUsdt()).isEqualByComparingTo("1");
+        assertThat(response.positions()).allMatch(position -> !position.partialExit());
+        assertThat(response.openPositionCount()).isEqualTo(2);
+        assertThat(response.closedPositionCount()).isZero();
+        assertThat(response.closedPositionsNetPnlUsdt()).isEqualByComparingTo("0");
+        assertThat(response.openPositionsCurrentPnlUsdt()).isEqualByComparingTo("2");
+        assertThat(response.totalPnlUsdt()).isEqualByComparingTo("2");
+        verify(binanceFuturesClient).getAllBookTickers();
+    }
+
+    @Test
+    void openPositionsReturnsEmptyAggregateWithoutRequestingPrices() {
+        when(repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN)).thenReturn(List.of());
+
+        LaplaceOpenPaperPositionsResponse response = service.findOpenPositions();
+
+        assertThat(response.positions()).isEmpty();
+        assertThat(response.openPositionCount()).isZero();
+        assertThat(response.closedPositionCount()).isZero();
+        assertThat(response.closedPositionsNetPnlUsdt()).isEqualByComparingTo("0");
+        assertThat(response.openPositionsCurrentPnlUsdt()).isEqualByComparingTo("0");
+        assertThat(response.totalPnlUsdt()).isEqualByComparingTo("0");
+        verify(binanceFuturesClient, never()).getAllBookTickers();
+    }
+
+    @Test
+    void closedAndOpenNetPnlAreAddedWithoutPuttingClosedPositionsInList() {
+        when(repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN))
+                .thenReturn(List.of(open("open", "BTCUSDT", PositionSide.LONG, "2026-07-18T09:00:00Z")));
+        when(repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.CLOSED))
+                .thenReturn(List.of(pnlClosed("closed", "12.45")));
+        when(binanceFuturesClient.getAllBookTickers()).thenReturn(List.of(ticker("BTCUSDT", "98.86335", "99")));
+
+        LaplaceOpenPaperPositionsResponse response = service.findOpenPositions();
+
+        assertThat(response.positions()).hasSize(1);
+        assertThat(response.closedPositionCount()).isOne();
+        assertThat(response.closedPositionsNetPnlUsdt()).isEqualByComparingTo("12.45");
+        assertThat(response.openPositionsCurrentPnlUsdt()).isEqualByComparingTo("-0.113665");
+        assertThat(response.totalPnlUsdt()).isEqualByComparingTo("12.336335");
+    }
+
+    @Test
+    void onlyClosedPositionsReturnClosedNetPnlWithoutBinanceCallAndTreatNullAsZero() {
+        when(repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN))
+                .thenReturn(List.of());
+        LaplacePaperPositionEntity nullPnl = pnlClosed("null-pnl", null);
+        when(repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.CLOSED))
+                .thenReturn(List.of(pnlClosed("loss", "-3.25"), nullPnl));
+
+        LaplaceOpenPaperPositionsResponse response = service.findOpenPositions();
+
+        assertThat(response.positions()).isEmpty();
+        assertThat(response.closedPositionCount()).isEqualTo(2);
+        assertThat(response.closedPositionsNetPnlUsdt()).isEqualByComparingTo("-3.25");
+        assertThat(response.openPositionsCurrentPnlUsdt()).isEqualByComparingTo("0");
+        assertThat(response.totalPnlUsdt()).isEqualByComparingTo("-3.25");
+        verify(binanceFuturesClient, never()).getAllBookTickers();
+    }
+
+    @Test
+    void negativeClosedPnlAndPositiveLongAndShortOpenPnlAreAdded() {
+        when(repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN))
+                .thenReturn(List.of(open("long", "BTCUSDT", PositionSide.LONG, "2026-07-18T09:00:00Z"),
+                        open("short", "SOLUSDT", PositionSide.SHORT, "2026-07-18T09:01:00Z")));
+        when(repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.CLOSED))
+                .thenReturn(List.of(pnlClosed("loss", "-1.5")));
+        when(binanceFuturesClient.getAllBookTickers()).thenReturn(List.of(
+                ticker("BTCUSDT", "110", "111"), ticker("SOLUSDT", "89", "90")));
+
+        LaplaceOpenPaperPositionsResponse response = service.findOpenPositions();
+
+        assertThat(response.openPositionsCurrentPnlUsdt()).isEqualByComparingTo("2");
+        assertThat(response.totalPnlUsdt()).isEqualByComparingTo("0.5");
+    }
+
+    @Test
+    void duplicateAndDifferentStrategyClosedRowsAreNotCounted() {
+        LaplacePaperPositionEntity counted = pnlClosed("same-id", "4");
+        LaplacePaperPositionEntity otherStrategy = pnlClosed("other", "100");
+        otherStrategy.setStrategy("OTHER_STRATEGY");
+        when(repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN))
+                .thenReturn(List.of());
+        when(repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.CLOSED))
+                .thenReturn(List.of(counted, counted, otherStrategy));
+
+        LaplaceOpenPaperPositionsResponse response = service.findOpenPositions();
+
+        assertThat(response.closedPositionCount()).isOne();
+        assertThat(response.totalPnlUsdt()).isEqualByComparingTo("4");
+    }
+
+    @Test
+    void openPositionsFailsClearlyWhenLivePriceIsMissing() {
+        when(repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN))
+                .thenReturn(List.of(open("btc", "BTCUSDT", PositionSide.LONG, "2026-07-18T09:01:00Z")));
+        when(binanceFuturesClient.getAllBookTickers()).thenReturn(List.of(ticker("ETHUSDT", "10", "11")));
+
+        assertThatThrownBy(service::findOpenPositions)
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("503 SERVICE_UNAVAILABLE")
+                .hasMessageContaining("BTCUSDT");
     }
 
     @Test
@@ -147,5 +265,14 @@ class LaplacePaperApiServiceTest {
                 .leverage(1)
                 .entryFeeRate(new BigDecimal("0.0004"))
                 .entryFee(new BigDecimal("0.004"));
+    }
+
+    private BookTicker ticker(String symbol, String bid, String ask) {
+        return BookTicker.builder().symbol(symbol).bidPrice(new BigDecimal(bid)).askPrice(new BigDecimal(ask)).build();
+    }
+
+    private LaplacePaperPositionEntity pnlClosed(String id, String netPnl) {
+        return LaplacePaperPositionEntity.builder().id(id).strategy(LaplacePaperExecutionService.STRATEGY)
+                .status(LaplacePositionStatus.CLOSED).netPnl(netPnl == null ? null : new BigDecimal(netPnl)).build();
     }
 }
