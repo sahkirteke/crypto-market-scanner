@@ -2,6 +2,7 @@ package com.crypto.laplace.config;
 
 import java.math.BigDecimal;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -23,10 +24,10 @@ public class LaplaceStrategyProperties {
             throw new IllegalStateException("Invalid immutable Laplace phase-one configuration");
         }
         if (laplace.startupClosedCandleCount != 20
-                || laplace.initialCapitalUsdt.compareTo(new BigDecimal("100")) != 0
+                || laplace.initialCapitalUsdt.compareTo(new BigDecimal("350")) != 0
                 || laplace.marginPerPositionUsdt.compareTo(new BigDecimal("5")) != 0
-                || laplace.notionalUsdt.compareTo(new BigDecimal("50")) != 0
-                || laplace.leverage != 10
+                || laplace.notionalUsdt.compareTo(new BigDecimal("75")) != 0
+                || laplace.leverage != 15
                 || laplace.stopLossPct.compareTo(new BigDecimal("0.05")) != 0
                 || laplace.notionalUsdt.compareTo(laplace.marginPerPositionUsdt.multiply(BigDecimal.valueOf(laplace.leverage))) != 0
                 || !"MARKET".equals(laplace.orderType)
@@ -40,7 +41,9 @@ public class LaplaceStrategyProperties {
     public static class Laplace {
         private boolean enabled = true;
         private boolean executionEnabled;
-        private boolean paperExecutionEnabled;
+        /** Backward-compatible master switch: it gates both variants equally. */
+        private boolean paperExecutionEnabled = true;
+        private Paper paper = new Paper();
         private String timeframe = "30m";
         private String kernel = "LAPLACE";
         private int bandwidth = 14;
@@ -48,15 +51,38 @@ public class LaplaceStrategyProperties {
         private boolean repaint;
         private int klineLimit = 100;
         private int startupClosedCandleCount = 20;
-        private BigDecimal initialCapitalUsdt = new BigDecimal("100");
+        private BigDecimal initialCapitalUsdt = new BigDecimal("350");
         private BigDecimal marginPerPositionUsdt = new BigDecimal("5");
-        private BigDecimal notionalUsdt = new BigDecimal("50");
-        private int leverage = 10;
+        private BigDecimal notionalUsdt = new BigDecimal("75");
+        private int leverage = 15;
+        private BigDecimal profitTargetPct = new BigDecimal("5");
+        private BigDecimal minimumLockedProfitPct = new BigDecimal("4.7");
         private BigDecimal stopLossPct = new BigDecimal("0.05");
         private String stopLossCron = "1 */5 * * * *";
         private String orderType = "MARKET";
         private BigDecimal takerFeeRate = new BigDecimal("0.0004");
         private String diagnosticDirectory = "logs/laplace";
         private String tradeDirectory = "logs/laplace-trades";
+
+        @Getter @Setter
+        public static class Paper {
+            private Variant invertedTrue = new Variant(true,
+                    "signals/laplace/inverted-true/trades", "signals/laplace/inverted-true/diagnostics");
+            private Variant invertedFalse = new Variant(true,
+                    "signals/laplace/inverted-false/trades", "signals/laplace/inverted-false/diagnostics");
+        }
+
+        @Getter @Setter @NoArgsConstructor
+        public static class Variant {
+            private boolean enabled;
+            private String tradeDirectory;
+            private String diagnosticDirectory;
+
+            public Variant(boolean enabled, String tradeDirectory, String diagnosticDirectory) {
+                this.enabled = enabled;
+                this.tradeDirectory = tradeDirectory;
+                this.diagnosticDirectory = diagnosticDirectory;
+            }
+        }
     }
 }

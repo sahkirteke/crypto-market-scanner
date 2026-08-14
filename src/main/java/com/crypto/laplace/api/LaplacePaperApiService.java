@@ -2,17 +2,25 @@ package com.crypto.laplace.api;
 
 import com.crypto.api.dto.LaplaceAnalysisSummaryResponse;
 import com.crypto.api.dto.LaplaceOpenPaperPositionResponse;
+import com.crypto.api.dto.LaplaceOpenPaperPositionsResponse;
+import com.crypto.binance.client.BinanceFuturesClient;
 import com.crypto.common.enums.PositionSide;
+import com.crypto.domain.model.BookTicker;
 import com.crypto.laplace.config.LaplaceStrategyProperties;
 import com.crypto.laplace.execution.LaplacePaperExecutionService;
+import com.crypto.laplace.execution.LaplacePnlCalculator;
 import com.crypto.laplace.model.LaplacePositionStatus;
 import com.crypto.laplace.persistence.LaplacePaperPositionEntity;
 import com.crypto.laplace.persistence.LaplacePaperPositionRepository;
+import com.crypto.laplace.service.LaplaceRuntimeService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -32,6 +40,9 @@ public class LaplacePaperApiService implements ApplicationRunner {
 
     private final LaplacePaperPositionRepository repository;
     private final LaplaceStrategyProperties properties;
+    private final BinanceFuturesClient binanceFuturesClient;
+    private final LaplacePnlCalculator pnlCalculator;
+    private final LaplaceRuntimeService runtime;
 
     @Value("${server.port:8080}")
     private String serverPort;
@@ -47,14 +58,28 @@ public class LaplacePaperApiService implements ApplicationRunner {
                 || "LAPLACE_KERNEL_30M".equals(properties.getActiveStrategy());
     }
 
-    public List<LaplaceOpenPaperPositionResponse> findOpenPositions() {
+    public LaplaceOpenPaperPositionsResponse findOpenPositions() {
         try {
-            return repository.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN)
-                    .stream()
+            List<LaplacePaperPositionEntity> openPositions = repository.findByStrategyAndStatus(
+                    LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN);
+            if (openPositions.isEmpty()) {
+                return new LaplaceOpenPaperPositionsResponse(List.of(), 0, BigDecimal.ZERO);
+            }
+            if (!runtime.isActive()) {
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Laplace market data is disabled while runtime is not ACTIVE");
+            }
+            Map<String, BookTicker> tickersBySymbol = binanceFuturesClient.getAllBookTickers().stream()
+                    .filter(ticker -> ticker != null && ticker.getSymbol() != null)
+                    .collect(Collectors.toMap(BookTicker::getSymbol, Function.identity(), (first, ignored) -> first));
+            List<LaplaceOpenPaperPositionResponse> positions = openPositions.stream()
                     .sorted(Comparator.comparing(LaplacePaperPositionEntity::getEntryTime, Comparator.nullsLast(Comparator.naturalOrder()))
                             .thenComparing(LaplacePaperPositionEntity::getSymbol, Comparator.nullsLast(String::compareTo)))
-                    .map(this::toOpenResponse)
+                    .map(position -> toOpenResponse(position, tickersBySymbol))
                     .toList();
+            BigDecimal totalPnl = positions.stream()
+                    .map(LaplaceOpenPaperPositionResponse::currentPnlUsdt)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            return new LaplaceOpenPaperPositionsResponse(positions, positions.size(), totalPnl);
         } catch (DataAccessException exception) {
             throw unavailable(exception);
         }
@@ -70,13 +95,24 @@ public class LaplacePaperApiService implements ApplicationRunner {
         }
     }
 
-    private LaplaceOpenPaperPositionResponse toOpenResponse(LaplacePaperPositionEntity p) {
+    private LaplaceOpenPaperPositionResponse toOpenResponse(LaplacePaperPositionEntity p, Map<String, BookTicker> tickersBySymbol) {
+        BookTicker ticker = tickersBySymbol.get(p.getSymbol());
+        BigDecimal currentPrice = ticker == null ? null
+                : p.getSide() == PositionSide.LONG ? ticker.getBidPrice() : ticker.getAskPrice();
+        if (currentPrice == null || currentPrice.signum() <= 0) {
+            throw priceUnavailable(p.getSymbol());
+        }
+        BigDecimal entryPrice = p.getEntryExecutionPrice();
         return new LaplaceOpenPaperPositionResponse(
-                p.getId(), p.getStrategy(), p.getStrategyVersion(), p.getSymbol(), p.getSide(), p.getStatus(),
-                p.getEntryRawSignal(), p.getSignalInverted(), p.getSide(), null, p.getEntryCandleCloseTime(), p.getEntrySignalClosePrice(), p.getEntryTime(),
-                p.getEntryExecutionPrice(), entryExecutionPriceType(p.getSide()), executionAction(p.getSide()),
-                p.getQuantity(), p.getNotional(), p.getMargin(), p.getLeverage(), properties.getLaplace().getOrderType(),
-                p.getEntryFeeRate(), p.getEntryFee(), null, p.getEntryTime(), p.getEntryTime());
+                p.getId(), p.getSymbol(), p.getSide(), p.getEntryTime(), entryPrice, currentPrice,
+                pnlCalculator.priceMovePct(p.getSide(), entryPrice, currentPrice),
+                pnlCalculator.gross(p.getSide(), entryPrice, currentPrice, p.getQuantity()), false);
+    }
+
+    private ResponseStatusException priceUnavailable(String symbol) {
+        log.error("LAPLACE_LIVE_PRICE_UNAVAILABLE symbol={}", symbol);
+        return new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                "Live Binance Futures price is unavailable for open position: " + symbol);
     }
 
     private LaplaceAnalysisSummaryResponse buildSummary(List<LaplacePaperPositionEntity> open, List<LaplacePaperPositionEntity> closed) {

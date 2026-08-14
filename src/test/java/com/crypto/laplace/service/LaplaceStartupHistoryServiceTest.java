@@ -28,8 +28,10 @@ class LaplaceStartupHistoryServiceTest {
         when(klines.loadStartupClosed("ETHUSDT")).thenReturn(candles());
         when(regression.at(anyList(), anyInt())).thenAnswer(call -> 100d + call.getArgument(1, Integer.class));
         when(atr.at(anyList(), anyInt())).thenReturn(2d);
+        LaplaceMarketDataGate runtime = mock(LaplaceMarketDataGate.class);
+        when(runtime.allowsMarketData()).thenReturn(true);
         LaplaceStartupHistoryService service = new LaplaceStartupHistoryService(universe, klines,
-                regression, atr, new LaplaceStrategyProperties());
+                regression, atr, new LaplaceStrategyProperties(), runtime);
         service.run(null);
         var history = service.history("BTCUSDT");
         assertThat(history.candles()).hasSize(20);
@@ -54,8 +56,10 @@ class LaplaceStartupHistoryServiceTest {
         Atr14Calculator atr = mock(Atr14Calculator.class);
         when(regression.at(anyList(), anyInt())).thenReturn(100d);
         when(atr.at(anyList(), anyInt())).thenReturn(2d);
+        LaplaceMarketDataGate runtime = mock(LaplaceMarketDataGate.class);
+        when(runtime.allowsMarketData()).thenReturn(true);
         LaplaceStartupHistoryService service = new LaplaceStartupHistoryService(universe, klines,
-                regression, atr, new LaplaceStrategyProperties());
+                regression, atr, new LaplaceStrategyProperties(), runtime);
         service.run(null);
         assertThat(service.isReady("BTCUSDT")).isTrue();
         assertThat(service.isReady("BROKENUSDT")).isFalse();

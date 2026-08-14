@@ -8,14 +8,12 @@ import com.crypto.paper.model.PaperPositionStatus;
 import com.crypto.persistence.entity.PaperPositionEntity;
 import com.crypto.persistence.repository.PaperPositionRepository;
 import com.crypto.api.mapper.PaperPositionApiMapper;
-import com.crypto.laplace.api.LaplacePaperApiService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
@@ -30,13 +28,7 @@ public class PaperPositionQueryService {
 
     private final PaperPositionRepository paperPositionRepository;
     private final PaperPositionApiMapper paperPositionApiMapper;
-    @Autowired(required = false)
-    private LaplacePaperApiService laplacePaperApiService;
-
-    public List<?> getOpenPositions() {
-        if (laplacePaperApiService != null && laplacePaperApiService.isLaplaceActive()) {
-            return laplacePaperApiService.findOpenPositions();
-        }
+    public List<PaperPositionResponse> getOpenPositions() {
         List<PaperPositionResponse> responses = paperPositionApiMapper.toResponseList(
                 paperPositionRepository.findByStatusInOrderByOpenedAtDesc(List.of(PaperPositionStatus.OPEN, PaperPositionStatus.PARTIALLY_CLOSED))
         );

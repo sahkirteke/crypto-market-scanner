@@ -4,28 +4,27 @@ import com.crypto.laplace.execution.LaplacePaperExecutionService;
 import com.crypto.laplace.model.LaplacePositionStatus;
 import com.crypto.laplace.persistence.LaplacePaperPositionRepository;
 import com.crypto.laplace.service.FiveMinuteKlineService;
+import com.crypto.laplace.service.LaplaceRuntimeService;
 import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(prefix = "trading.laplace", name = "paper-execution-enabled", havingValue = "true")
 public class LaplaceStopLossScheduler {
     private final LaplacePaperPositionRepository positions;
     private final FiveMinuteKlineService klines;
     private final LaplacePaperExecutionService execution;
+    private final LaplaceRuntimeService runtime;
     private final ConcurrentHashMap<String, Instant> lastProcessed = new ConcurrentHashMap<>();
     private final AtomicBoolean running = new AtomicBoolean();
 
-    @Scheduled(cron = "${trading.laplace.stop-loss-cron}", zone = "${trading.laplace.zone}")
     public void evaluate() {
+        if (!runtime.isActive()) return;
         if (!running.compareAndSet(false, true)) return;
         try {
             positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN)
@@ -37,7 +36,15 @@ public class LaplaceStopLossScheduler {
 
     void evaluate(String positionId, String symbol) {
         try {
-            var candle = klines.loadLatestClosed(symbol);
+            evaluate(positionId, symbol, klines.loadLatestClosed(symbol));
+        } catch (RuntimeException exception) {
+            log.error("LAPLACE_STOP_LOSS_EVALUATION_FAILED positionId={} symbol={} error={}",
+                    positionId, symbol, exception.getMessage(), exception);
+        }
+    }
+
+    public void evaluate(String positionId, String symbol, com.crypto.domain.model.Kline candle) {
+        try {
             Instant previous = lastProcessed.get(positionId);
             if (previous != null && !candle.getCloseTime().isAfter(previous)) return;
             if (execution.closeAtStopLoss(positionId, candle)) execution.drainTradeEvents();
@@ -46,5 +53,10 @@ public class LaplaceStopLossScheduler {
             log.error("LAPLACE_STOP_LOSS_EVALUATION_FAILED positionId={} symbol={} error={}",
                     positionId, symbol, exception.getMessage(), exception);
         }
+    }
+
+    public void clearRuntimeState() {
+        lastProcessed.clear();
+        running.set(false);
     }
 }
