@@ -4,8 +4,10 @@ import com.crypto.api.dto.ManualClosePaperPositionRequest;
 import com.crypto.api.dto.PaperPositionResponse;
 import com.crypto.api.dto.PaperPositionEventResponse;
 import com.crypto.api.dto.PaperTradeSummaryResponse;
+import com.crypto.api.dto.LaplaceOpenPaperPositionsResponse;
 import com.crypto.api.mapper.PaperPositionApiMapper;
 import com.crypto.common.time.IstanbulTimeUtil;
+import com.crypto.laplace.api.LaplacePaperApiService;
 import com.crypto.paper.service.ExitEngineService;
 import com.crypto.paper.service.PaperPositionManualCloseService;
 import com.crypto.paper.service.PaperPositionQueryService;
@@ -33,11 +35,12 @@ public class PaperPositionController {
     private final PaperPositionManualCloseService paperPositionManualCloseService;
     private final PaperPositionApiMapper paperPositionApiMapper;
     private final PaperPositionEventRepository paperPositionEventRepository;
+    private final LaplacePaperApiService laplacePaperApiService;
 
     @GetMapping("/positions/open")
-    public List<?> getOpenPositions() {
+    public LaplaceOpenPaperPositionsResponse getOpenPositions() {
         log.info("PAPER_API_OPEN_POSITIONS_REQUEST");
-        return paperPositionQueryService.getOpenPositions();
+        return laplacePaperApiService.findOpenPositions();
     }
 
     @GetMapping("/positions/closed")
