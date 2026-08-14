@@ -1,10 +1,10 @@
 package com.crypto.laplace.scheduler;
 
-import com.crypto.laplace.execution.LaplacePaperExecutionService;
+import com.crypto.laplace.execution.LaplaceInvertedFalseExecutionService;
 import com.crypto.laplace.model.LaplacePositionStatus;
-import com.crypto.laplace.persistence.LaplacePaperPositionRepository;
+import com.crypto.laplace.persistence.LaplaceInvertedFalsePositionRepository;
 import com.crypto.laplace.service.FiveMinuteKlineService;
-import com.crypto.laplace.service.LaplaceRuntimeService;
+import com.crypto.laplace.service.LaplaceInvertedFalseRuntimeService;
 import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -16,11 +16,11 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class LaplaceStopLossScheduler {
-    private final LaplacePaperPositionRepository positions;
+public class LaplaceInvertedFalseStopLossScheduler {
+    private final LaplaceInvertedFalsePositionRepository positions;
     private final FiveMinuteKlineService klines;
-    private final LaplacePaperExecutionService execution;
-    private final LaplaceRuntimeService runtime;
+    private final LaplaceInvertedFalseExecutionService execution;
+    private final LaplaceInvertedFalseRuntimeService runtime;
     private final ConcurrentHashMap<String, Instant> lastProcessed = new ConcurrentHashMap<>();
     private final AtomicBoolean running = new AtomicBoolean();
 
@@ -29,7 +29,7 @@ public class LaplaceStopLossScheduler {
         if (!runtime.isActive()) return;
         if (!running.compareAndSet(false, true)) return;
         try {
-            positions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN)
+            positions.findByStrategyAndStatus(LaplaceInvertedFalseExecutionService.STRATEGY, LaplacePositionStatus.OPEN)
                     .forEach(position -> evaluate(position.getId(), position.getSymbol()));
         } finally {
             running.set(false);

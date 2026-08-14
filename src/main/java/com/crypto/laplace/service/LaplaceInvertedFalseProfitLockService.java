@@ -4,11 +4,11 @@ import com.crypto.binance.client.BinanceFuturesClient;
 import com.crypto.common.enums.PositionSide;
 import com.crypto.domain.model.BookTicker;
 import com.crypto.laplace.execution.LaplaceExecutionPriceProvider;
-import com.crypto.laplace.execution.LaplacePaperExecutionService;
+import com.crypto.laplace.execution.LaplaceInvertedFalseExecutionService;
 import com.crypto.laplace.execution.LaplacePnlCalculator;
 import com.crypto.laplace.model.LaplacePositionStatus;
-import com.crypto.laplace.persistence.LaplacePaperPositionEntity;
-import com.crypto.laplace.persistence.LaplacePaperPositionRepository;
+import com.crypto.laplace.persistence.LaplaceInvertedFalsePositionEntity;
+import com.crypto.laplace.persistence.LaplaceInvertedFalsePositionRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
@@ -22,20 +22,20 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 @Slf4j @Service @RequiredArgsConstructor
-public class LaplaceProfitLockService {
+public class LaplaceInvertedFalseProfitLockService {
     private static final int SCALE = 12;
-    private final LaplaceRuntimeService runtime;
-    private final LaplacePaperPositionRepository positions;
+    private final LaplaceInvertedFalseRuntimeService runtime;
+    private final LaplaceInvertedFalsePositionRepository positions;
     private final BinanceFuturesClient client;
     private final LaplacePnlCalculator pnl;
-    private final LaplacePaperExecutionService execution;
+    private final LaplaceInvertedFalseExecutionService execution;
     private final LaplaceTemporaryStateResetService reset;
     private final Clock clock;
 
     public void evaluate() {
         if (!runtime.isActive()) return;
         var session = runtime.current();
-        List<LaplacePaperPositionEntity> open = positions.findBySessionIdAndStatus(session.getSessionId(), LaplacePositionStatus.OPEN);
+        List<LaplaceInvertedFalsePositionEntity> open = positions.findBySessionIdAndStatus(session.getSessionId(), LaplacePositionStatus.OPEN);
         BigDecimal realized = sessionNetPnl(session.getSessionId());
         if (open.isEmpty()) return;
         Map<String, BookTicker> tickers = client.getAllBookTickers().stream().collect(Collectors.toMap(
@@ -60,13 +60,13 @@ public class LaplaceProfitLockService {
     public void retryLiquidation() {
         var session = runtime.current();
         if (session.getRuntimeState() != com.crypto.laplace.model.LaplaceRuntimeState.LIQUIDATING) return;
-        List<LaplacePaperPositionEntity> open = positions.findBySessionIdAndStatus(session.getSessionId(), LaplacePositionStatus.OPEN);
+        List<LaplaceInvertedFalsePositionEntity> open = positions.findBySessionIdAndStatus(session.getSessionId(), LaplacePositionStatus.OPEN);
         Map<String, BookTicker> tickers = open.isEmpty() ? Map.of() : client.getAllBookTickers().stream().collect(Collectors.toMap(
                 BookTicker::getSymbol, Function.identity(), (first, ignored) -> first));
         liquidate(open, tickers, session.getSessionId());
     }
 
-    private void liquidate(List<LaplacePaperPositionEntity> open, Map<String, BookTicker> tickers, String sessionId) {
+    private void liquidate(List<LaplaceInvertedFalsePositionEntity> open, Map<String, BookTicker> tickers, String sessionId) {
         for (var position : open) {
             BigDecimal price = closingPrice(position, tickers);
             String type = position.getSide() == PositionSide.LONG ? "BID" : "ASK";
@@ -79,14 +79,14 @@ public class LaplaceProfitLockService {
                 return;
             }
         }
-        List<LaplacePaperPositionEntity> remaining = positions.findBySessionIdAndStatus(sessionId, LaplacePositionStatus.OPEN);
+        List<LaplaceInvertedFalsePositionEntity> remaining = positions.findBySessionIdAndStatus(sessionId, LaplacePositionStatus.OPEN);
         if (!remaining.isEmpty()) return;
-        List<LaplacePaperPositionEntity> closed = positions.findBySessionIdAndStatus(sessionId, LaplacePositionStatus.CLOSED);
+        List<LaplaceInvertedFalsePositionEntity> closed = positions.findBySessionIdAndStatus(sessionId, LaplacePositionStatus.CLOSED);
         BigDecimal actual = closed.stream().map(p -> p.getNetPnl() == null ? BigDecimal.ZERO : p.getNetPnl())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        Instant lastExit = closed.stream().map(LaplacePaperPositionEntity::getExitTime).max(Instant::compareTo).orElse(clock.instant());
+        Instant lastExit = closed.stream().map(LaplaceInvertedFalsePositionEntity::getExitTime).max(Instant::compareTo).orElse(clock.instant());
         runtime.recordLiquidationResult(actual);
-        reset.clearInvertedTrue();
+        reset.clearInvertedFalse();
         runtime.startCooldown(lastExit);
         execution.drainTradeEvents();
     }
@@ -96,7 +96,7 @@ public class LaplaceProfitLockService {
                 .map(p -> p.getNetPnl() == null ? BigDecimal.ZERO : p.getNetPnl()).reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
-    private BigDecimal closingPrice(LaplacePaperPositionEntity position, Map<String, BookTicker> tickers) {
+    private BigDecimal closingPrice(LaplaceInvertedFalsePositionEntity position, Map<String, BookTicker> tickers) {
         BookTicker ticker = tickers.get(position.getSymbol());
         BigDecimal price = ticker == null ? null : position.getSide() == PositionSide.LONG ? ticker.getBidPrice() : ticker.getAskPrice();
         if (price == null || price.signum() <= 0) throw new IllegalStateException("EXECUTION_PRICE_UNAVAILABLE");

@@ -1,7 +1,7 @@
 package com.crypto.laplace.scheduler;
 
 import com.crypto.domain.model.Kline;
-import com.crypto.laplace.execution.LaplacePaperTradeCoordinator;
+import com.crypto.laplace.execution.LaplaceSignalFanOut;
 import com.crypto.laplace.model.LaplaceSignalResult;
 import com.crypto.laplace.model.StartupHistory;
 import com.crypto.laplace.service.LaplaceDiagnosticLogService;
@@ -10,6 +10,7 @@ import com.crypto.laplace.service.LaplaceStartupHistoryService;
 import com.crypto.laplace.service.StartupMarketUniverseService;
 import com.crypto.laplace.service.ThirtyMinuteKlineService;
 import com.crypto.laplace.service.LaplaceRuntimeService;
+import com.crypto.laplace.service.LaplaceInvertedFalseRuntimeService;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
@@ -32,15 +33,16 @@ public class LaplaceThirtyMinuteScheduler {
     private final ThirtyMinuteKlineService klines;
     private final LaplaceSignalService signals;
     private final LaplaceDiagnosticLogService diagnostics;
-    private final LaplacePaperTradeCoordinator coordinator;
+    private final LaplaceSignalFanOut coordinator;
     private final LaplaceRuntimeService runtime;
+    private final LaplaceInvertedFalseRuntimeService invertedFalseRuntime;
     private final AtomicBoolean running = new AtomicBoolean();
     private final ConcurrentHashMap<String, Instant> lastProcessed = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Integer> postStartupBarCounts = new ConcurrentHashMap<>();
 
     @Scheduled(cron = "${trading.laplace.cron}", zone = "${trading.laplace.zone}")
     public void scan() {
-        if (!runtime.isActive()) return;
+        if (!runtime.allowsMarketData() && !invertedFalseRuntime.allowsMarketData()) return;
         Set<String> managed = coordinator.managementSymbols();
         if (!universe.isReady() && managed.isEmpty()) {
             log.error("LAPLACE_SCAN_SKIPPED marketUniverseReady=false");

@@ -1,8 +1,8 @@
 package com.crypto.laplace.execution;
 
 import com.crypto.laplace.config.LaplaceStrategyProperties;
-import com.crypto.laplace.persistence.LaplaceTradeEventEntity;
-import com.crypto.laplace.persistence.LaplaceTradeEventRepository;
+import com.crypto.laplace.persistence.LaplaceInvertedFalseTradeEventEntity;
+import com.crypto.laplace.persistence.LaplaceInvertedFalseTradeEventRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -26,10 +26,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class LaplaceTradeJsonlWriter implements ApplicationRunner {
+public class LaplaceInvertedFalseTradeJsonlWriter implements ApplicationRunner {
     private static final Pattern VALID_SYMBOL = Pattern.compile("^[A-Z0-9]+$");
 
-    private final LaplaceTradeEventRepository repository;
+    private final LaplaceInvertedFalseTradeEventRepository repository;
     private final ObjectMapper mapper;
     private final LaplaceStrategyProperties properties;
     private final ConcurrentHashMap<String, ReentrantLock> symbolLocks = new ConcurrentHashMap<>();
@@ -92,7 +92,7 @@ public class LaplaceTradeJsonlWriter implements ApplicationRunner {
         payload.put("failureTime", Instant.now());
         try {
             String json = mapper.writeValueAsString(payload);
-            repository.save(LaplaceTradeEventEntity.builder()
+            repository.save(LaplaceInvertedFalseTradeEventEntity.builder()
                     .eventId(id).eventType("FAILURE").symbol(symbol).payloadJson(json)
                     .jsonlWritten(false).createdAt(Instant.now()).build());
             log.info("LAPLACE_FAILURE_EVENT_PUBLISHED eventId={} failureReason={} symbol={}", id, reason, symbol);
@@ -107,11 +107,11 @@ public class LaplaceTradeJsonlWriter implements ApplicationRunner {
         }
     }
 
-    private boolean isTradeEvent(LaplaceTradeEventEntity event) {
+    private boolean isTradeEvent(LaplaceInvertedFalseTradeEventEntity event) {
         return "ENTRY".equals(event.getEventType()) || "EXIT".equals(event.getEventType());
     }
 
-    private void writeSymbolTradeEvent(LaplaceTradeEventEntity event) throws Exception {
+    private void writeSymbolTradeEvent(LaplaceInvertedFalseTradeEventEntity event) throws Exception {
         String symbol = event.getSymbol();
         if (symbol == null || !VALID_SYMBOL.matcher(symbol).matches()) {
             log.error("LAPLACE_TRADE_FILE_INVALID_SYMBOL symbol={} eventId={} eventType={}",
@@ -149,7 +149,7 @@ public class LaplaceTradeJsonlWriter implements ApplicationRunner {
         }
     }
 
-    private void writeFailureEvent(LaplaceTradeEventEntity event) throws Exception {
+    private void writeFailureEvent(LaplaceInvertedFalseTradeEventEntity event) throws Exception {
         failureFileLock.lock();
         try {
             Path directory = diagnosticDirectory();
@@ -172,14 +172,10 @@ public class LaplaceTradeJsonlWriter implements ApplicationRunner {
     }
 
     private Path tradeDirectory() {
-        String legacy = properties.getLaplace().getTradeDirectory();
-        return Path.of("logs/laplace-trades".equals(legacy)
-                ? properties.getLaplace().getPaper().getInvertedTrue().getTradeDirectory() : legacy);
+        return Path.of(properties.getLaplace().getPaper().getInvertedFalse().getTradeDirectory());
     }
 
     private Path diagnosticDirectory() {
-        String legacy = properties.getLaplace().getDiagnosticDirectory();
-        return Path.of("logs/laplace".equals(legacy)
-                ? properties.getLaplace().getPaper().getInvertedTrue().getDiagnosticDirectory() : legacy);
+        return Path.of(properties.getLaplace().getPaper().getInvertedFalse().getDiagnosticDirectory());
     }
 }
