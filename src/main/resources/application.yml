@@ -152,10 +152,16 @@ trading:
     paper:
       inverted-true:
         enabled: true
+        stop-loss-pct: 0.035
+        soft-filter:
+          atr-min-pct: 5.0
+          slope-strength-min: 0.16
+        symbol-stop-loss-cooldown: PT4H
         trade-directory: signals/laplace/inverted-true/trades
         diagnostic-directory: signals/laplace/inverted-true/diagnostics
       inverted-false:
         enabled: true
+        stop-loss-pct: 0.05
         trade-directory: signals/laplace/inverted-false/trades
         diagnostic-directory: signals/laplace/inverted-false/diagnostics
     timeframe: 30m

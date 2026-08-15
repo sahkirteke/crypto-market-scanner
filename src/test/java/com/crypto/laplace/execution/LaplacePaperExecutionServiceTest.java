@@ -90,26 +90,26 @@ class LaplacePaperExecutionServiceTest {
     }
 
     @Test
-    void longStopLossUsesExactFivePercentPriceAndExistingPnlFees() {
+    void longStopLossUsesExactThreePointFivePercentPriceAndExistingPnlFees() {
         LaplacePaperPositionEntity open = openPosition(PositionSide.LONG);
         when(positions.findByIdForUpdate(open.getId())).thenReturn(java.util.Optional.of(open));
-        Kline candle = stopCandle("94.99", "101");
+        Kline candle = stopCandle("96.49", "101");
         assertThat(service.closeAtStopLoss(open.getId(), candle)).isTrue();
         assertThat(open.getStatus()).isEqualTo(LaplacePositionStatus.CLOSED);
         assertThat(open.getExitReason()).isEqualTo("STOP_LOSS");
-        assertThat(open.getExitExecutionPrice()).isEqualByComparingTo("95");
-        assertThat(open.getGrossPnl()).isEqualByComparingTo("-2.5");
-        assertThat(open.getExitFee()).isEqualByComparingTo("0.019");
-        assertThat(open.getNetPnl()).isEqualByComparingTo("-2.539");
+        assertThat(open.getExitExecutionPrice()).isEqualByComparingTo("96.5");
+        assertThat(open.getGrossPnl()).isEqualByComparingTo("-1.75");
+        assertThat(open.getExitFee()).isEqualByComparingTo("0.0193");
+        assertThat(open.getNetPnl()).isEqualByComparingTo("-1.7893");
     }
 
     @Test
     void shortStopLossTriggersAtEqualityAndClosedPositionIsNeverProcessedAgain() {
         LaplacePaperPositionEntity open = openPosition(PositionSide.SHORT);
-        Kline candle = stopCandle("99", "105");
+        Kline candle = stopCandle("99", "103.5");
         when(positions.findByIdForUpdate(open.getId())).thenReturn(java.util.Optional.of(open));
         assertThat(service.closeAtStopLoss(open.getId(), candle)).isTrue();
-        assertThat(open.getExitExecutionPrice()).isEqualByComparingTo("105");
+        assertThat(open.getExitExecutionPrice()).isEqualByComparingTo("103.5");
         assertThat(open.getExitReason()).isEqualTo("STOP_LOSS");
         assertThat(service.closeAtStopLoss(open.getId(), candle)).isFalse();
     }
@@ -118,7 +118,7 @@ class LaplacePaperExecutionServiceTest {
     void candleThatDoesNotTouchStopKeepsPositionOpen() {
         LaplacePaperPositionEntity open = openPosition(PositionSide.LONG);
         when(positions.findByIdForUpdate(open.getId())).thenReturn(java.util.Optional.of(open));
-        assertThat(service.closeAtStopLoss(open.getId(), stopCandle("95.01", "110"))).isFalse();
+        assertThat(service.closeAtStopLoss(open.getId(), stopCandle("96.51", "110"))).isFalse();
         assertThat(open.getStatus()).isEqualTo(LaplacePositionStatus.OPEN);
     }
 

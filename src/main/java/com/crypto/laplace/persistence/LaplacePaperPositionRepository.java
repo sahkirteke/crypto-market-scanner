@@ -14,6 +14,8 @@ public interface LaplacePaperPositionRepository extends JpaRepository<LaplacePap
     List<LaplacePaperPositionEntity> findBySessionIdAndStatus(String sessionId, LaplacePositionStatus status);
     List<LaplacePaperPositionEntity> findByStrategyAndSymbolAndStatus(
             String strategy, String symbol, LaplacePositionStatus status);
+    Optional<LaplacePaperPositionEntity> findFirstByStrategyAndSymbolAndExitReasonAndExitTimeIsNotNullOrderByExitTimeDesc(
+            String strategy, String symbol, String exitReason);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from LaplacePaperPositionEntity p where p.id=:id")
