@@ -10,6 +10,7 @@ import java.math.*;import java.time.*;import java.util.*;
 import lombok.RequiredArgsConstructor;import lombok.extern.slf4j.Slf4j;import org.springframework.stereotype.Service;import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j @Service @RequiredArgsConstructor
+@org.springframework.boot.autoconfigure.condition.ConditionalOnExpression("false")
 public class LaplaceInvertedFalseExecutionService {
  public static final String STRATEGY="LAPLACE_KERNEL_REGRESSION_30M", VERSION="1.0";private static final int SCALE=12;
  private final LaplaceInvertedFalsePositionRepository positions;private final LaplaceInvertedFalseTradeEventRepository events;private final LaplaceExecutionPriceProvider prices;private final LaplacePnlCalculator pnl;private final LaplaceStrategyProperties properties;private final LaplaceInvertedFalseTradeJsonlWriter writer;

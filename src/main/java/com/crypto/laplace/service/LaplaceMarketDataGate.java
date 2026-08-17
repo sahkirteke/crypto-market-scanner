@@ -10,13 +10,11 @@ import org.springframework.stereotype.Service;
 public class LaplaceMarketDataGate {
     private final LaplaceStrategyProperties properties;
     private final LaplaceRuntimeService invertedTrueRuntime;
-    private final LaplaceInvertedFalseRuntimeService invertedFalseRuntime;
 
     public boolean allowsMarketData() {
         var laplace = properties.getLaplace();
         if (!laplace.isEnabled() || !laplace.isPaperExecutionEnabled()) return false;
-        return laplace.getPaper().getInvertedTrue().isEnabled() && invertedTrueRuntime.allowsMarketData()
-                || laplace.getPaper().getInvertedFalse().isEnabled() && invertedFalseRuntime.allowsMarketData();
+        return laplace.getPaper().getInvertedTrue().isEnabled() && invertedTrueRuntime.allowsMarketData();
     }
 
     public boolean enabledTrue() {
@@ -25,9 +23,6 @@ public class LaplaceMarketDataGate {
                 && laplace.getPaper().getInvertedTrue().isEnabled();
     }
 
-    public boolean enabledFalse() {
-        var laplace = properties.getLaplace();
-        return laplace.isEnabled() && laplace.isPaperExecutionEnabled()
-                && laplace.getPaper().getInvertedFalse().isEnabled();
-    }
+    /** FALSE production runtime is permanently disabled. */
+    public boolean enabledFalse() { return false; }
 }

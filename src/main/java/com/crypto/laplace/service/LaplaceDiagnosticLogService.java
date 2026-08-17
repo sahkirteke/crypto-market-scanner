@@ -25,7 +25,6 @@ public class LaplaceDiagnosticLogService {
  public void signal(LaplaceSignalResult r) {
   if(r.entrySignal()==LaplaceSignal.NONE && r.strongReversalSignal()==LaplaceSignal.NONE) return;
   writeSignal(r, LaplacePaperVariant.INVERTED_TRUE);
-  writeSignal(r, LaplacePaperVariant.INVERTED_FALSE);
  }
  private void writeSignal(LaplaceSignalResult r, LaplacePaperVariant variant) {
   if (!enabled(variant)) return;
@@ -35,12 +34,8 @@ public class LaplaceDiagnosticLogService {
   jsonl.append(directory(variant),"laplace-signals",m);
  }
  public void error(String symbol,String type,String message){
-  for (LaplacePaperVariant variant : LaplacePaperVariant.values()) if (enabled(variant)) {
-   Map<String,Object> m=base(variant);m.put("eventType","DATA_REJECTION");m.put("strategy","LAPLACE_KERNEL_REGRESSION_30M");m.put("symbol",symbol);m.put("timeframe","30m");m.put("errorType",type);m.put("errorMessage",String.valueOf(message));
-   jsonl.append(directory(variant),"laplace-signals",m);
-  }
+  if(enabled(LaplacePaperVariant.INVERTED_TRUE)){Map<String,Object> m=base(LaplacePaperVariant.INVERTED_TRUE);m.put("eventType","DATA_REJECTION");m.put("strategy","LAPLACE_KERNEL_REGRESSION_30M");m.put("symbol",symbol);m.put("timeframe","30m");m.put("errorType",type);m.put("errorMessage",String.valueOf(message));jsonl.append(directory(LaplacePaperVariant.INVERTED_TRUE),"laplace-signals",m);}
  }
- public void trueSoftRiskFilter(LaplaceSignalResult r,PositionSide effective,double atrPercentage,double slopeStrength,double atrThreshold,double slopeThreshold){Map<String,Object>m=blocked(r,effective,"TRUE_SOFT_RISK_FILTER",atrPercentage,slopeStrength);m.put("atrThreshold",atrThreshold);m.put("slopeStrengthThreshold",slopeThreshold);writeBlocked(r,m,"TRUE_SOFT_RISK_FILTER");}
  public void trueSymbolStopLossCooldown(LaplaceSignalResult r,PositionSide effective,double atrPercentage,double slopeStrength,ActiveCooldown cooldown,long remainingSeconds){Map<String,Object>m=blocked(r,effective,"TRUE_SYMBOL_STOP_LOSS_COOLDOWN",atrPercentage,slopeStrength);m.put("triggeringStopLossPositionId",cooldown.positionId());m.put("stopLossExitTime",cooldown.stopLossExitTime());m.put("cooldownStartedAt",cooldown.cooldownStartedAt());m.put("cooldownUntil",cooldown.cooldownUntil());m.put("remainingCooldownSeconds",remainingSeconds);writeBlocked(r,m,"TRUE_SYMBOL_STOP_LOSS_COOLDOWN");}
  private Map<String,Object> blocked(LaplaceSignalResult r,PositionSide effective,String reason,double atrPercentage,double slopeStrength){Map<String,Object>m=base(LaplacePaperVariant.INVERTED_TRUE);m.put("eventType","ENTRY_BLOCKED");m.put("blockReason",reason);m.put("symbol",r.symbol());m.put("rawEntrySignal",r.entrySignal());m.put("effectiveExecutionSide",effective);m.put("signalCandleOpenTime",r.signalCandleOpenTime());m.put("signalCandleCloseTime",r.signalCandleCloseTime());m.put("signalDetectedAt",r.signalCandleCloseTime());m.put("blockedAt",clock.instant());m.put("atrPercentage",atrPercentage);m.put("currentNormalizedSlope",r.currentNormalizedSlope());m.put("slopeStrength",slopeStrength);return m;}
  private void writeBlocked(LaplaceSignalResult r,Map<String,Object>m,String reason){if(!enabled(LaplacePaperVariant.INVERTED_TRUE))return;String key=r.symbol()+":"+r.signalCandleCloseTime()+":"+r.entrySignal()+":"+reason;if(!entryBlockLogKeys.add(key))return;try{jsonl.append(directory(LaplacePaperVariant.INVERTED_TRUE),"laplace-signals",m);}catch(RuntimeException failure){entryBlockLogKeys.remove(key);}}

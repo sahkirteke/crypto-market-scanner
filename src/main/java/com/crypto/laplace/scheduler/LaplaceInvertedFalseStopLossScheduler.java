@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @RequiredArgsConstructor
+@org.springframework.boot.autoconfigure.condition.ConditionalOnExpression("false")
 public class LaplaceInvertedFalseStopLossScheduler {
     private final LaplaceInvertedFalsePositionRepository positions;
     private final FiveMinuteKlineService klines;

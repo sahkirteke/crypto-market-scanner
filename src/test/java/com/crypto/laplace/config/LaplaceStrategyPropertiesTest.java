@@ -25,6 +25,7 @@ class LaplaceStrategyPropertiesTest {
         var properties = new LaplaceStrategyProperties();
         assertThat(properties.getLaplace().getPaper().getInvertedTrue().getStopLossPct()).isEqualByComparingTo("0.035");
         assertThat(properties.getLaplace().getPaper().getInvertedFalse().getStopLossPct()).isEqualByComparingTo("0.05");
+        assertThat(properties.getLaplace().getPaper().getInvertedFalse().isEnabled()).isFalse();
     }
 
     @Test

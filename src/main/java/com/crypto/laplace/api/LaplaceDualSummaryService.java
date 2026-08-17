@@ -20,19 +20,17 @@ import org.springframework.transaction.annotation.Transactional;
 @Service @RequiredArgsConstructor
 public class LaplaceDualSummaryService {
  private static final int SCALE=8;private static final BigDecimal HUNDRED=BigDecimal.valueOf(100);
- private final LaplacePaperPositionRepository truePositions;private final LaplaceInvertedFalsePositionRepository falsePositions;
- private final LaplaceRuntimeService trueRuntime;private final LaplaceInvertedFalseRuntimeService falseRuntime;
+ private final LaplacePaperPositionRepository truePositions;
+ private final LaplaceRuntimeService trueRuntime;
  private final BinanceFuturesClient binance;private final LaplacePnlCalculator pnl;
  @Transactional(readOnly=true)
  public List<LaplaceVariantAnalysisSummaryResponse> summaries(){
   List<View> trueOpen=truePositions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY,LaplacePositionStatus.OPEN).stream().map(this::view).toList();
   List<View> trueClosed=truePositions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY,LaplacePositionStatus.CLOSED).stream().map(this::view).toList();
-  List<View> falseOpen=falsePositions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY,LaplacePositionStatus.OPEN).stream().map(this::view).toList();
-  List<View> falseClosed=falsePositions.findByStrategyAndStatus(LaplacePaperExecutionService.STRATEGY,LaplacePositionStatus.CLOSED).stream().map(this::view).toList();
-  boolean needsPrices=!trueOpen.isEmpty()||!falseOpen.isEmpty();
+  boolean needsPrices=!trueOpen.isEmpty();
   Map<String,BookTicker> tickers=needsPrices?binance.getAllBookTickers().stream().filter(Objects::nonNull).filter(x->x.getSymbol()!=null).collect(Collectors.toMap(BookTicker::getSymbol,Function.identity(),(a,b)->a)):Map.of();
-  var ts=trueRuntime.current();var fs=falseRuntime.current();
-  return List.of(build(LaplacePaperVariant.INVERTED_TRUE,trueOpen,trueClosed,tickers,new Session(ts.getSessionId(),ts.getRuntimeState(),ts.getSessionStartCapital(),ts.getMarginPerPosition(),ts.getNextSessionCapital(),ts.getNextMarginPerPosition(),ts.getCooldownUntil())),build(LaplacePaperVariant.INVERTED_FALSE,falseOpen,falseClosed,tickers,new Session(fs.getSessionId(),fs.getRuntimeState(),fs.getSessionStartCapital(),fs.getMarginPerPosition(),fs.getNextSessionCapital(),fs.getNextMarginPerPosition(),fs.getCooldownUntil())));
+  var ts=trueRuntime.current();
+  return List.of(build(LaplacePaperVariant.INVERTED_TRUE,trueOpen,trueClosed,tickers,new Session(ts.getSessionId(),ts.getRuntimeState(),ts.getSessionStartCapital(),ts.getMarginPerPosition(),ts.getNextSessionCapital(),ts.getNextMarginPerPosition(),ts.getCooldownUntil())));
  }
  private LaplaceVariantAnalysisSummaryResponse build(LaplacePaperVariant variant,List<View> open,List<View> closed,Map<String,BookTicker> tickers,Session session){
   long trades=closed.size(),longs=closed.stream().filter(x->x.side()==PositionSide.LONG).count(),shorts=closed.stream().filter(x->x.side()==PositionSide.SHORT).count();
@@ -51,7 +49,6 @@ public class LaplaceDualSummaryService {
  }
  private BigDecimal openNet(View x,Map<String,BookTicker> tickers){BookTicker q=tickers.get(x.symbol());BigDecimal price=q==null?null:x.side()==PositionSide.LONG?q.getBidPrice():q.getAskPrice();if(price==null||price.signum()<=0)throw new IllegalStateException("EXECUTION_PRICE_UNAVAILABLE:"+x.symbol());BigDecimal exitFee=price.multiply(x.quantity()).multiply(x.feeRate()).setScale(12,RoundingMode.HALF_UP);return pnl.gross(x.side(),x.entryPrice(),price,x.quantity()).subtract(money(x.entryFee())).subtract(exitFee);}
  private View view(LaplacePaperPositionEntity x){return new View(x.getSessionId(),x.getSymbol(),x.getSide(),x.getEntryTime(),x.getExitTime(),x.getEntryExecutionPrice(),x.getQuantity(),x.getEntryFeeRate(),x.getEntryFee(),x.getExitFee(),x.getGrossPnl(),x.getNetPnl(),x.getNetPnlPct());}
- private View view(LaplaceInvertedFalsePositionEntity x){return new View(x.getSessionId(),x.getSymbol(),x.getSide(),x.getEntryTime(),x.getExitTime(),x.getEntryExecutionPrice(),x.getQuantity(),x.getEntryFeeRate(),x.getEntryFee(),x.getExitFee(),x.getGrossPnl(),x.getNetPnl(),x.getNetPnlPct());}
  private BigDecimal sum(List<BigDecimal>x){return x.stream().map(this::money).reduce(BigDecimal.ZERO,BigDecimal::add);}private BigDecimal money(BigDecimal x){return x==null?BigDecimal.ZERO:x;}private BigDecimal avg(BigDecimal x,long n){return n==0?BigDecimal.ZERO:x.divide(BigDecimal.valueOf(n),SCALE,RoundingMode.HALF_UP);}private BigDecimal pct(long x,long n){return n==0?BigDecimal.ZERO:BigDecimal.valueOf(x).multiply(HUNDRED).divide(BigDecimal.valueOf(n),SCALE,RoundingMode.HALF_UP);}
  private record View(String sessionId,String symbol,PositionSide side,Instant entryTime,Instant exitTime,BigDecimal entryPrice,BigDecimal quantity,BigDecimal feeRate,BigDecimal entryFee,BigDecimal exitFee,BigDecimal gross,BigDecimal net,BigDecimal netPct){}
  private record Session(String id,LaplaceRuntimeState state,BigDecimal capital,BigDecimal margin,BigDecimal nextCapital,BigDecimal nextMargin,Instant cooldownUntil){}

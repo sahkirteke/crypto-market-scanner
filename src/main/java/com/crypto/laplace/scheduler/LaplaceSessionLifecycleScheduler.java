@@ -22,7 +22,7 @@ public class LaplaceSessionLifecycleScheduler {
     public void advance() {
         if (!marketDataGate.enabledTrue() || !runtime.beginInitializationIfDue()) return;
         try {
-            reset.clearInvertedTrue();
+            reset.clear();
             if (!universe.isReady()) universe.initialize();
             if (!universe.isReady()) throw new IllegalStateException("UNIVERSE_NOT_READY");
             universe.symbols().forEach(symbol -> { if (!histories.isReady(symbol)) histories.initializeSymbol(symbol); });

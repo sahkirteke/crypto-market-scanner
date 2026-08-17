@@ -92,5 +92,21 @@ class LaplaceRuntimeServiceTest {
         assertThat(restarted.beginInitializationIfDue()).isFalse();
     }
 
+    @Test
+    void oneSecondBeforeCooldownUntilDoesNotInitializeButExactBoundaryDoes() {
+        service.run(null);
+        service.beginLiquidation(BigDecimal.ZERO, bd("18"), bd("0.5"), bd("17.5"));
+        service.recordLiquidationResult(bd("17.5"));
+        service.startCooldown(now);
+        var before = new LaplaceRuntimeService(repository, new LaplaceStrategyProperties(),
+                Clock.fixed(now.plusSeconds(21599), ZoneOffset.UTC));
+        assertThat(before.beginInitializationIfDue()).isFalse();
+        var exact = new LaplaceRuntimeService(repository, new LaplaceStrategyProperties(),
+                Clock.fixed(now.plusSeconds(21600), ZoneOffset.UTC));
+        assertThat(exact.beginInitializationIfDue()).isTrue();
+        assertThat(stored.get().getNextSessionCapital()).isEqualByComparingTo("367.5");
+        assertThat(stored.get().getNextMarginPerPosition()).isEqualByComparingTo("5.25");
+    }
+
     private BigDecimal bd(String value) { return new BigDecimal(value); }
 }

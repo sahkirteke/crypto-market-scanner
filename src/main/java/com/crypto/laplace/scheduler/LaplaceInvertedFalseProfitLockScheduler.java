@@ -10,6 +10,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component @RequiredArgsConstructor
+@org.springframework.boot.autoconfigure.condition.ConditionalOnExpression("false")
 public class LaplaceInvertedFalseProfitLockScheduler {
     private final LaplaceInvertedFalseRuntimeService runtime;
     private final LaplaceInvertedFalseProfitLockService profitLock;

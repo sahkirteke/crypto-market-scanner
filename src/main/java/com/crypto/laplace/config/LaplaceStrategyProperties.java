@@ -32,8 +32,6 @@ public class LaplaceStrategyProperties {
                 || laplace.stopLossPct.compareTo(new BigDecimal("0.05")) != 0
                 || laplace.paper.invertedTrue.stopLossPct.compareTo(new BigDecimal("0.035")) != 0
                 || laplace.paper.invertedFalse.stopLossPct.compareTo(laplace.stopLossPct) != 0
-                || laplace.paper.invertedTrue.softFilter.atrMinPct != 5.0
-                || laplace.paper.invertedTrue.softFilter.slopeStrengthMin != 0.16
                 || !Duration.ofHours(4).equals(laplace.paper.invertedTrue.symbolStopLossCooldown)
                 || laplace.notionalUsdt.compareTo(laplace.marginPerPositionUsdt.multiply(BigDecimal.valueOf(laplace.leverage))) != 0
                 || !"MARKET".equals(laplace.orderType)
@@ -74,7 +72,7 @@ public class LaplaceStrategyProperties {
         public static class Paper {
             private Variant invertedTrue = new Variant(true,
                     "signals/laplace/inverted-true/trades", "signals/laplace/inverted-true/diagnostics");
-            private Variant invertedFalse = new Variant(true,
+            private Variant invertedFalse = new Variant(false,
                     "signals/laplace/inverted-false/trades", "signals/laplace/inverted-false/diagnostics");
 
             public Paper() { invertedTrue.setStopLossPct(new BigDecimal("0.035")); }
@@ -86,7 +84,6 @@ public class LaplaceStrategyProperties {
             private String tradeDirectory;
             private String diagnosticDirectory;
             private BigDecimal stopLossPct = new BigDecimal("0.05");
-            private SoftFilter softFilter = new SoftFilter();
             private Duration symbolStopLossCooldown = Duration.ofHours(4);
 
             public Variant(boolean enabled, String tradeDirectory, String diagnosticDirectory) {
@@ -94,12 +91,6 @@ public class LaplaceStrategyProperties {
                 this.tradeDirectory = tradeDirectory;
                 this.diagnosticDirectory = diagnosticDirectory;
             }
-        }
-
-        @Getter @Setter
-        public static class SoftFilter {
-            private double atrMinPct = 5.0;
-            private double slopeStrengthMin = 0.16;
         }
     }
 }

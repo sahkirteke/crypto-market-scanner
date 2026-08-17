@@ -11,6 +11,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Slf4j @Component @RequiredArgsConstructor
+@org.springframework.boot.autoconfigure.condition.ConditionalOnExpression("false")
 public class LaplaceInvertedFalseSessionLifecycleScheduler {
     private final LaplaceInvertedFalseRuntimeService runtime;
     private final LaplaceTemporaryStateResetService reset;
