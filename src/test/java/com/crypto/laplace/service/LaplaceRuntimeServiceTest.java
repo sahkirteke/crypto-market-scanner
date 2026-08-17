@@ -52,6 +52,7 @@ class LaplaceRuntimeServiceTest {
         service.run(null);
         assertThat(service.beginLiquidation(bd("0"), bd("17.6"), bd("0.1"), bd("17.5"))).isTrue();
         service.recordLiquidationResult(bd("17.50"));
+        assertThat(stored.get().getSessionStartCapital()).isEqualByComparingTo("350");
         assertThat(stored.get().getNextSessionCapital()).isEqualByComparingTo("367.50");
         assertThat(stored.get().getNextMarginPerPosition()).isEqualByComparingTo("5.25");
         assertThat(stored.get().getNextPositionNotional()).isEqualByComparingTo("78.75");
@@ -60,7 +61,15 @@ class LaplaceRuntimeServiceTest {
         stored.get().setCooldownUntil(now);
         assertThat(service.beginInitializationIfDue()).isTrue();
         service.activateNextSession();
+        assertThat(service.current().getSessionStartCapital()).isEqualByComparingTo("367.50");
         assertThat(service.status().profitTargetUsdt()).isEqualByComparingTo("18.375");
+    }
+
+    @Test
+    void targetAlwaysUsesFivePercentOfCurrentSessionOpeningCapital() {
+        var current = LaplaceTradingSessionEntity.builder()
+                .sessionStartCapital(bd("367.50")).profitTargetPct(bd("99")).build();
+        assertThat(service.target(current)).isEqualByComparingTo("18.375");
     }
 
     @Test

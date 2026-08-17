@@ -29,6 +29,7 @@ public class LaplaceStrategyProperties {
                 || laplace.marginPerPositionUsdt.compareTo(new BigDecimal("5")) != 0
                 || laplace.notionalUsdt.compareTo(new BigDecimal("75")) != 0
                 || laplace.leverage != 15
+                || laplace.profitTargetPct.compareTo(new BigDecimal("5")) != 0
                 || laplace.stopLossPct.compareTo(new BigDecimal("0.05")) != 0
                 || laplace.paper.invertedTrue.stopLossPct.compareTo(new BigDecimal("0.035")) != 0
                 || laplace.paper.invertedFalse.stopLossPct.compareTo(laplace.stopLossPct) != 0

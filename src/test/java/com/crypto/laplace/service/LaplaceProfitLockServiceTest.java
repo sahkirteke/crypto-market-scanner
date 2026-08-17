@@ -101,6 +101,47 @@ class LaplaceProfitLockServiceTest {
     }
 
     @Test
+    void secondSessionProfitOneMillionthBelowItsOwnTargetDoesNotLock() {
+        useSecondSession();
+        when(positions.findBySessionIdAndStatus("session-2", LaplacePositionStatus.OPEN)).thenReturn(List.of());
+        when(positions.findBySessionIdAndStatus("session-2", LaplacePositionStatus.CLOSED))
+                .thenReturn(List.of(closed("session-2", "18.374999")));
+
+        service.evaluate();
+
+        verify(runtime, never()).beginLiquidation(any(), any(), any(), any());
+        verifyNoInteractions(client);
+    }
+
+    @Test
+    void secondSessionProfitExactlyAtItsOwnTargetLocks() {
+        useSecondSession();
+        var current = closed("session-2", "18.375");
+        when(positions.findBySessionIdAndStatus("session-2", LaplacePositionStatus.OPEN)).thenReturn(List.of());
+        when(positions.findBySessionIdAndStatus("session-2", LaplacePositionStatus.CLOSED)).thenReturn(List.of(current));
+        when(runtime.beginLiquidation(any(), any(), any(), eq(bd("18.375")))).thenReturn(true);
+
+        service.evaluate();
+
+        verify(runtime).beginLiquidation(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, bd("18.375"));
+        verify(runtime).recordLiquidationResult(bd("18.375"));
+        verifyNoInteractions(client);
+    }
+
+    @Test
+    void previousSessionProfitIsNotIncludedInCurrentSessionThreshold() {
+        useSecondSession();
+        when(positions.findBySessionIdAndStatus("session-2", LaplacePositionStatus.OPEN)).thenReturn(List.of());
+        when(positions.findBySessionIdAndStatus("session-2", LaplacePositionStatus.CLOSED))
+                .thenReturn(List.of(closed("session-2", "1")));
+
+        service.evaluate();
+
+        verify(positions, never()).findBySessionIdAndStatus(eq("session-1"), any());
+        verify(runtime, never()).beginLiquidation(any(), any(), any(), any());
+    }
+
+    @Test
     void bothThresholdsCloseLongAtBidAndShortAtAsk() {
         var longPosition = open(PositionSide.LONG, bd("100"), bd("1")); longPosition.setId("long");
         var shortPosition = open(PositionSide.SHORT, bd("100"), bd("1")); shortPosition.setId("short");
@@ -128,6 +169,20 @@ class LaplaceProfitLockServiceTest {
         return LaplacePaperPositionEntity.builder().id("id").sessionId("session-1").symbol("BTCUSDT")
                 .side(side).status(LaplacePositionStatus.OPEN).entryExecutionPrice(entry).quantity(quantity)
                 .notional(entry.multiply(quantity)).entryFee(bd("0.03")).entryFeeRate(bd("0.0004")).build();
+    }
+
+    private void useSecondSession() {
+        session = LaplaceTradingSessionEntity.builder().sessionId("session-2").runtimeState(LaplaceRuntimeState.ACTIVE)
+                .sessionStartCapital(bd("367.50")).marginPerPosition(bd("5.25")).leverage(15)
+                .profitTargetPct(bd("5")).minimumLockedProfitPct(bd("4.7")).build();
+        when(runtime.current()).thenReturn(session);
+        when(runtime.target(session)).thenReturn(bd("18.375"));
+    }
+
+    private LaplacePaperPositionEntity closed(String sessionId, String netPnl) {
+        return LaplacePaperPositionEntity.builder().id("closed-" + sessionId).sessionId(sessionId)
+                .status(LaplacePositionStatus.CLOSED).netPnl(bd(netPnl))
+                .exitTime(Instant.parse("2026-08-14T11:00:00Z")).build();
     }
 
     private BookTicker ticker(BigDecimal bid, BigDecimal ask) {
