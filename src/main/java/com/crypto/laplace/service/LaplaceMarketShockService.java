@@ -29,31 +29,44 @@ public class LaplaceMarketShockService {
     private final LaplaceMarketShockDataService data;
     private final LaplacePaperPositionRepository positions;
     private final LaplacePaperExecutionService execution;
+    private final LaplaceRuntimeService runtime;
     private Candidate pending;
 
     public synchronized void evaluate() {
         Set<String> symbols = universe.symbols();
         if (symbols.isEmpty()) return;
-        Set<String> requested = new LinkedHashSet<>(symbols);
-        requested.add("BTCUSDT"); requested.add("ETHUSDT");
-        Map<String, List<Kline>> candles = new LinkedHashMap<>();
-        requested.forEach(symbol -> candles.put(symbol, data.loadClosed(symbol)));
-        Instant latest = latestTime(candles.get("BTCUSDT"));
-        if (latest == null || candleAt(candles.get("ETHUSDT"), latest) == null) return;
+        List<Kline> btcCandles = data.loadClosed("BTCUSDT");
+        Instant evaluationAnchor = latestTime(btcCandles);
+        if (evaluationAnchor == null) return;
 
         if (pending != null) {
             Instant expected = pending.closeTime().plus(FIVE_MINUTES);
-            if (latest.equals(pending.closeTime())) return;
-            if (latest.equals(expected)) confirm(candles, symbols, latest);
-            else if (latest.isAfter(expected)) {
-                log.info("LAPLACE_MARKET_SHOCK_CANDIDATE_EXPIRED direction={} candidateCandleCloseTime={} latestCandleCloseTime={}",
-                        pending.direction(), pending.closeTime(), latest);
+            int timing = evaluationAnchor.compareTo(expected);
+            if (timing < 0) return;
+            if (timing > 0) {
+                log.info("LAPLACE_MARKET_SHOCK_CANDIDATE_EXPIRED direction={} candidateCandleCloseTime={} expectedConfirmationCandleCloseTime={} evaluationAnchorCandleCloseTime={} reason=CONFIRMATION_CYCLE_MISSED",
+                        pending.direction(), pending.closeTime(), expected, evaluationAnchor);
                 pending = null;
-                detect(candles, symbols, latest);
+                return;
             }
+            Map<String, List<Kline>> candles = loadSnapshotInputs(pending.symbols(), btcCandles);
+            confirm(candles, evaluationAnchor);
             return;
         }
-        detect(candles, symbols, latest);
+
+        Map<String, List<Kline>> candles = loadSnapshotInputs(symbols, btcCandles);
+        detect(candles, symbols, evaluationAnchor);
+    }
+
+    private Map<String, List<Kline>> loadSnapshotInputs(Set<String> symbols, List<Kline> btcCandles) {
+        Set<String> requested = new LinkedHashSet<>(symbols);
+        requested.add("BTCUSDT"); requested.add("ETHUSDT");
+        Map<String, List<Kline>> candles = new LinkedHashMap<>();
+        candles.put("BTCUSDT", btcCandles);
+        for (String symbol : requested) {
+            if (!"BTCUSDT".equals(symbol)) candles.put(symbol, data.loadClosed(symbol));
+        }
+        return candles;
     }
 
     private void detect(Map<String, List<Kline>> candles, Set<String> symbols, Instant latest) {
@@ -70,24 +83,27 @@ public class LaplaceMarketShockService {
         BigDecimal btc = returnAt(candles.get("BTCUSDT"), latest, FIFTEEN_MINUTES);
         BigDecimal eth = returnAt(candles.get("ETHUSDT"), latest, FIFTEEN_MINUTES);
         if (btc == null || eth == null || returns.isEmpty()) return;
-        BigDecimal up = pct(returns.values().stream().filter(v -> v.signum() > 0).count(), returns.size());
-        BigDecimal down = pct(returns.values().stream().filter(v -> v.signum() < 0).count(), returns.size());
+        long upCount = returns.values().stream().filter(v -> v.signum() > 0).count();
+        long downCount = returns.values().stream().filter(v -> v.signum() < 0).count();
+        BigDecimal up = pct(upCount, symbols.size());
+        BigDecimal down = pct(downCount, symbols.size());
         LaplaceMarketShockDirection direction = null; BigDecimal breadth = null;
         if (up.compareTo(CANDIDATE_THRESHOLD) >= 0 && btc.signum() > 0 && eth.signum() > 0) { direction = LaplaceMarketShockDirection.UP; breadth = up; }
         else if (down.compareTo(CANDIDATE_THRESHOLD) >= 0 && btc.signum() < 0 && eth.signum() < 0) { direction = LaplaceMarketShockDirection.DOWN; breadth = down; }
         if (direction == null) return;
-        pending = new Candidate(direction, latest, breadth, btc, eth, Map.copyOf(closes));
-        log.info("LAPLACE_MARKET_SHOCK_CANDIDATE direction={} candidateCandleCloseTime={} breadthPct={} validSymbolCount={} totalUniverseCount={} btc15mReturn={} eth15mReturn={}",
-                direction, latest, breadth, returns.size(), symbols.size(), btc, eth);
+        long directionalCount = direction == LaplaceMarketShockDirection.UP ? upCount : downCount;
+        pending = new Candidate(direction, latest, breadth, btc, eth, Map.copyOf(closes), Set.copyOf(symbols));
+        log.info("LAPLACE_MARKET_SHOCK_CANDIDATE direction={} candidateCandleCloseTime={} candidateBreadthPct={} candidateDirectionalCount={} candidateValidSymbolCount={} totalUniverseCount={} btc15mReturn={} eth15mReturn={}",
+                direction, latest, breadth, directionalCount, returns.size(), symbols.size(), btc, eth);
     }
 
-    private void confirm(Map<String, List<Kline>> candles, Set<String> symbols, Instant confirmationTime) {
+    private void confirm(Map<String, List<Kline>> candles, Instant confirmationTime) {
         Candidate candidate = pending;
         pending = null;
         if (candleAt(candles.get("BTCUSDT"), confirmationTime) == null
                 || candleAt(candles.get("ETHUSDT"), confirmationTime) == null) return;
         int valid = 0, continuing = 0;
-        for (String symbol : symbols) {
+        for (String symbol : candidate.symbols()) {
             BigDecimal candidateClose = candidate.closes().get(symbol);
             Kline confirmation = candleAt(candles.get(symbol), confirmationTime);
             if (candidateClose == null || confirmation == null) continue;
@@ -97,35 +113,47 @@ public class LaplaceMarketShockService {
                     || (candidate.direction() == LaplaceMarketShockDirection.DOWN && sign < 0)) continuing++;
         }
         if (valid == 0) return;
-        BigDecimal breadth = pct(continuing, valid);
+        BigDecimal breadth = pct(continuing, candidate.symbols().size());
         if (breadth.compareTo(CONTINUATION_THRESHOLD) < 0) {
-            log.info("LAPLACE_MARKET_SHOCK_TRANSIENT direction={} candidateCandleCloseTime={} confirmationCandleCloseTime={} continuationBreadthPct={}",
-                    candidate.direction(), candidate.closeTime(), confirmationTime, breadth);
+            log.info("LAPLACE_MARKET_SHOCK_TRANSIENT direction={} candidateCandleCloseTime={} confirmationCandleCloseTime={} continuationBreadthPct={} continuingSymbolCount={} confirmationValidSymbolCount={} totalUniverseCount={}",
+                    candidate.direction(), candidate.closeTime(), confirmationTime, breadth, continuing, valid, candidate.symbols().size());
             return;
         }
         closeOpposite(candidate, confirmationTime, breadth);
     }
 
     private void closeOpposite(Candidate candidate, Instant confirmationTime, BigDecimal continuationBreadth) {
-        List<LaplacePaperPositionEntity> open = positions.findByStrategyAndStatus(
-                LaplacePaperExecutionService.STRATEGY, LaplacePositionStatus.OPEN);
+        String sessionId = runtime.current().getSessionId();
+        List<LaplacePaperPositionEntity> open = positions.findBySessionIdAndStatus(sessionId, LaplacePositionStatus.OPEN);
         PositionSide oppositeSide = candidate.direction() == LaplaceMarketShockDirection.UP ? PositionSide.SHORT : PositionSide.LONG;
         List<LaplacePaperPositionEntity> opposite = open.stream().filter(p -> p.getSide() == oppositeSide).toList();
         BigDecimal ratio = open.isEmpty() ? BigDecimal.ZERO : BigDecimal.valueOf(opposite.size())
                 .divide(BigDecimal.valueOf(open.size()), 8, RoundingMode.HALF_UP);
-        log.info("LAPLACE_MARKET_SHOCK_PERSISTENT direction={} candidateBreadthPct={} continuationBreadthPct={} totalOpenPositions={} oppositeOpenPositions={} oppositeRatio={}",
-                candidate.direction(), candidate.breadth(), continuationBreadth, open.size(), opposite.size(), ratio);
+        log.info("LAPLACE_MARKET_SHOCK_PERSISTENT direction={} candidateBreadthPct={} continuationBreadthPct={} sessionId={} totalOpenPositions={} oppositeOpenPositions={} oppositeRatio={}",
+                candidate.direction(), candidate.breadth(), continuationBreadth, sessionId, open.size(), opposite.size(), ratio);
         if (open.size() < 10 || ratio.compareTo(OPPOSITE_THRESHOLD) < 0) return;
+        if (!runtime.isActive()) {
+            log.info("LAPLACE_MARKET_SHOCK_EXIT_SKIPPED_RUNTIME_NOT_ACTIVE direction={} candidateCandleCloseTime={} confirmationCandleCloseTime={}",
+                    candidate.direction(), candidate.closeTime(), confirmationTime);
+            return;
+        }
         LaplaceMarketShockContext context = new LaplaceMarketShockContext(candidate.direction(), candidate.closeTime(),
                 confirmationTime, candidate.breadth(), continuationBreadth, open.size(), opposite.size(), ratio);
+        boolean closedAny = false;
         for (LaplacePaperPositionEntity position : opposite) {
+            if (!runtime.isActive()) {
+                log.info("LAPLACE_MARKET_SHOCK_EXIT_SKIPPED_RUNTIME_NOT_ACTIVE direction={} candidateCandleCloseTime={} confirmationCandleCloseTime={}",
+                        candidate.direction(), candidate.closeTime(), confirmationTime);
+                break;
+            }
             try {
-                if (execution.closeForPersistentMarketShock(position.getId(), context)) execution.drainTradeEvents();
+                closedAny |= execution.closeForPersistentMarketShock(position.getId(), context);
             } catch (RuntimeException failure) {
                 log.error("LAPLACE_MARKET_SHOCK_EXIT_FAILED positionId={} symbol={} error={}",
                         position.getId(), position.getSymbol(), failure.getMessage(), failure);
             }
         }
+        if (closedAny) execution.drainTradeEvents();
     }
 
     public synchronized void clearRuntimeState() { pending = null; }
@@ -139,5 +167,6 @@ public class LaplaceMarketShockService {
     private BigDecimal ratio(BigDecimal current, BigDecimal prior) { return current.divide(prior, 12, RoundingMode.HALF_UP).subtract(BigDecimal.ONE); }
     private BigDecimal pct(long count, long total) { return BigDecimal.valueOf(count).multiply(BigDecimal.valueOf(100)).divide(BigDecimal.valueOf(total), 8, RoundingMode.HALF_UP); }
     record Candidate(LaplaceMarketShockDirection direction, Instant closeTime, BigDecimal breadth,
-                     BigDecimal btcReturn, BigDecimal ethReturn, Map<String, BigDecimal> closes) { }
+                     BigDecimal btcReturn, BigDecimal ethReturn, Map<String, BigDecimal> closes,
+                     Set<String> symbols) { }
 }

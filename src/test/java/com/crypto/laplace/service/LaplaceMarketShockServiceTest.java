@@ -11,6 +11,7 @@ import com.crypto.laplace.model.LaplaceMarketShockDirection;
 import com.crypto.laplace.model.LaplacePositionStatus;
 import com.crypto.laplace.persistence.LaplacePaperPositionEntity;
 import com.crypto.laplace.persistence.LaplacePaperPositionRepository;
+import com.crypto.laplace.persistence.LaplaceTradingSessionEntity;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.*;
@@ -22,6 +23,7 @@ class LaplaceMarketShockServiceTest {
     private final LaplaceMarketShockDataService data = mock(LaplaceMarketShockDataService.class);
     private final LaplacePaperPositionRepository positions = mock(LaplacePaperPositionRepository.class);
     private final LaplacePaperExecutionService execution = mock(LaplacePaperExecutionService.class);
+    private final LaplaceRuntimeService runtime = mock(LaplaceRuntimeService.class);
     private LaplaceMarketShockService service;
     private Map<String, List<Kline>> current;
     private final Set<String> symbols = new LinkedHashSet<>(List.of(
@@ -29,10 +31,12 @@ class LaplaceMarketShockServiceTest {
     private final Instant candidateTime = Instant.parse("2026-08-20T12:40:00Z");
 
     @BeforeEach void setUp() {
-        service = new LaplaceMarketShockService(universe, data, positions, execution);
+        service = new LaplaceMarketShockService(universe, data, positions, execution, runtime);
         when(universe.symbols()).thenReturn(symbols);
         when(data.loadClosed(anyString())).thenAnswer(invocation -> current.getOrDefault(invocation.getArgument(0), List.of()));
-        when(positions.findByStrategyAndStatus(anyString(), eq(LaplacePositionStatus.OPEN))).thenReturn(List.of());
+        when(runtime.isActive()).thenReturn(true);
+        when(runtime.current()).thenReturn(LaplaceTradingSessionEntity.builder().sessionId("active-session").build());
+        when(positions.findBySessionIdAndStatus(eq("active-session"), eq(LaplacePositionStatus.OPEN))).thenReturn(List.of());
     }
 
     @Test void upBreadthAndBtcEthCreateCandidateWithoutClosing() {
@@ -40,6 +44,19 @@ class LaplaceMarketShockServiceTest {
         service.evaluate();
         assertThat(service.pendingCandidate().direction()).isEqualTo(LaplaceMarketShockDirection.UP);
         verifyNoInteractions(execution);
+    }
+
+    @Test void exactlySeventyFivePercentCreatesCandidateInEitherDirection() {
+        Set<String> four = new LinkedHashSet<>(List.of("BTCUSDT", "ETHUSDT", "A", "B"));
+        when(universe.symbols()).thenReturn(four);
+        current = subset(market(candidateTime, 3, true, false), four);
+        service.evaluate();
+        assertThat(service.pendingCandidate().breadth()).isEqualByComparingTo("75");
+        service.clearRuntimeState();
+        current = subset(market(candidateTime.plusSeconds(300), 3, false, false), four);
+        service.evaluate();
+        assertThat(service.pendingCandidate().direction()).isEqualTo(LaplaceMarketShockDirection.DOWN);
+        assertThat(service.pendingCandidate().breadth()).isEqualByComparingTo("75");
     }
 
     @Test void downBreadthAndBtcEthCreateCandidate() {
@@ -68,6 +85,32 @@ class LaplaceMarketShockServiceTest {
         assertThat(service.pendingCandidate().closeTime()).isEqualTo(candidateTime);
     }
 
+    @Test void btcAnchorMakesNewerClosedCandlesFromOtherSymbolsInvisible() {
+        current = market(candidateTime, 8, true, false);
+        for (String symbol : symbols) if (!symbol.equals("BTCUSDT")) {
+            List<Kline> copy = new ArrayList<>(current.get(symbol));
+            copy.add(candle(symbol, candidateTime.plusSeconds(300), "500", true));
+            current.put(symbol, copy);
+        }
+        service.evaluate();
+        assertThat(service.pendingCandidate().closeTime()).isEqualTo(candidateTime);
+    }
+
+    @Test void missingSymbolsRemainInCandidateBreadthDenominator() {
+        Set<String> hundred = new LinkedHashSet<>();
+        hundred.add("BTCUSDT"); hundred.add("ETHUSDT");
+        for (int i=0;i<98;i++) hundred.add("X"+i);
+        when(universe.symbols()).thenReturn(hundred);
+        current = new LinkedHashMap<>(); int valid = 0;
+        for (String symbol : hundred) {
+            if (valid++ >= 40) break;
+            current.put(symbol, List.of(candle(symbol, candidateTime.minusSeconds(900), "100", true),
+                    candle(symbol, candidateTime, valid <= 32 ? "101" : "99", true)));
+        }
+        service.evaluate();
+        assertThat(service.pendingCandidate()).isNull();
+    }
+
     @Test void continuationBelowSixtyIsTransientAndDoesNotClose() {
         current = market(candidateTime, 8, true, false); service.evaluate();
         current = confirmation(current, 5, true, candidateTime.plusSeconds(300)); service.evaluate();
@@ -78,7 +121,7 @@ class LaplaceMarketShockServiceTest {
     @Test void exactlySixtyWithTenOpenAndHalfOppositeClosesOnlyShorts() {
         current = market(candidateTime, 8, true, false); service.evaluate();
         List<LaplacePaperPositionEntity> open = positions(5, 5);
-        when(positions.findByStrategyAndStatus(anyString(), eq(LaplacePositionStatus.OPEN))).thenReturn(open);
+        when(positions.findBySessionIdAndStatus(eq("active-session"), eq(LaplacePositionStatus.OPEN))).thenReturn(open);
         when(execution.closeForPersistentMarketShock(anyString(), any())).thenReturn(true);
         current = confirmation(current, 6, true, candidateTime.plusSeconds(300)); service.evaluate();
         verify(execution, times(5)).closeForPersistentMarketShock(argThat(id -> id.startsWith("S")), any());
@@ -87,12 +130,12 @@ class LaplaceMarketShockServiceTest {
 
     @Test void persistentWithNineOpenOrLessThanHalfOppositeDoesNotClose() {
         current = market(candidateTime, 8, true, false); service.evaluate();
-        when(positions.findByStrategyAndStatus(anyString(), eq(LaplacePositionStatus.OPEN))).thenReturn(positions(5, 4));
+        when(positions.findBySessionIdAndStatus(eq("active-session"), eq(LaplacePositionStatus.OPEN))).thenReturn(positions(5, 4));
         current = confirmation(current, 6, true, candidateTime.plusSeconds(300)); service.evaluate();
         verify(execution, never()).closeForPersistentMarketShock(anyString(), any());
         service.clearRuntimeState(); reset(execution);
         current = market(candidateTime.plusSeconds(600), 8, true, false); service.evaluate();
-        when(positions.findByStrategyAndStatus(anyString(), eq(LaplacePositionStatus.OPEN))).thenReturn(positions(4, 6));
+        when(positions.findBySessionIdAndStatus(eq("active-session"), eq(LaplacePositionStatus.OPEN))).thenReturn(positions(4, 6));
         current = confirmation(current, 6, true, candidateTime.plusSeconds(900)); service.evaluate();
         verify(execution, never()).closeForPersistentMarketShock(anyString(), any());
     }
@@ -101,6 +144,32 @@ class LaplaceMarketShockServiceTest {
         current = market(candidateTime, 8, true, false); service.evaluate();
         current = confirmation(current, 10, true, candidateTime.plusSeconds(600)); service.evaluate();
         verifyNoInteractions(execution);
+    }
+
+    @Test void anchorBeforeExpectedKeepsPendingAndDoesNotReuseConfirmationAsCandidate() {
+        current = market(candidateTime, 8, true, false); service.evaluate();
+        service.evaluate();
+        assertThat(service.pendingCandidate().closeTime()).isEqualTo(candidateTime);
+        current = confirmation(current, 5, true, candidateTime.plusSeconds(300)); service.evaluate();
+        assertThat(service.pendingCandidate()).isNull();
+    }
+
+    @Test void missingExactEthConfirmationPreventsEmergencyExit() {
+        current = market(candidateTime, 8, true, false); service.evaluate();
+        current = confirmation(current, 10, true, candidateTime.plusSeconds(300));
+        current.put("ETHUSDT", current.get("ETHUSDT").stream()
+                .filter(c -> !candidateTime.plusSeconds(300).equals(c.getCloseTime())).toList());
+        service.evaluate();
+        verifyNoInteractions(execution);
+    }
+
+    @Test void runtimeChangeDuringExitLoopStopsRemainingPositions() {
+        current = market(candidateTime, 8, true, false); service.evaluate();
+        when(positions.findBySessionIdAndStatus("active-session", LaplacePositionStatus.OPEN)).thenReturn(positions(5, 5));
+        when(execution.closeForPersistentMarketShock(anyString(), any())).thenReturn(true);
+        when(runtime.isActive()).thenReturn(true, true, false);
+        current = confirmation(current, 6, true, candidateTime.plusSeconds(300)); service.evaluate();
+        verify(execution, times(1)).closeForPersistentMarketShock(anyString(), any());
     }
 
     @Test void clearRemovesPendingCandidate() {
@@ -121,6 +190,12 @@ class LaplaceMarketShockServiceTest {
                     candle(symbol, close.minusSeconds(600), "100", true), candle(symbol, close.minusSeconds(300), "100", true),
                     candle(symbol, close, latest.toPlainString(), true)));
         }
+        return result;
+    }
+
+    private Map<String, List<Kline>> subset(Map<String, List<Kline>> source, Set<String> wanted) {
+        Map<String, List<Kline>> result = new LinkedHashMap<>();
+        wanted.forEach(symbol -> result.put(symbol, source.get(symbol)));
         return result;
     }
 

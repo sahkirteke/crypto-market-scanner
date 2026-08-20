@@ -10,6 +10,8 @@ import com.crypto.common.enums.PositionSide;
 import com.crypto.domain.model.Kline;
 import com.crypto.laplace.config.LaplaceStrategyProperties;
 import com.crypto.laplace.model.LaplacePositionStatus;
+import com.crypto.laplace.model.LaplaceMarketShockContext;
+import com.crypto.laplace.model.LaplaceMarketShockDirection;
 import com.crypto.laplace.model.LaplaceSignal;
 import com.crypto.laplace.model.LaplaceSignalResult;
 import com.crypto.laplace.model.StartupState;
@@ -30,6 +32,7 @@ class LaplacePaperExecutionServiceTest {
     private LaplacePaperPositionRepository positions;
     private LaplaceExecutionPriceProvider prices;
     private LaplacePaperExecutionService service;
+    private LaplaceRuntimeService runtime;
 
     @BeforeEach
     void setUp() {
@@ -41,12 +44,36 @@ class LaplacePaperExecutionServiceTest {
         when(writer.json(any())).thenReturn("{}");
         when(universe.symbols()).thenReturn(Set.of("BTCUSDT"));
         LaplaceStrategyProperties properties = new LaplaceStrategyProperties();
-        LaplaceRuntimeService runtime = mock(LaplaceRuntimeService.class);
+        runtime = mock(LaplaceRuntimeService.class);
         when(runtime.isActive()).thenReturn(true);
         when(runtime.current()).thenReturn(LaplaceTradingSessionEntity.builder().sessionId("session-1")
                 .sessionStartCapital(new BigDecimal("350")).marginPerPosition(new BigDecimal("5")).leverage(15).build());
         service = new LaplacePaperExecutionService(positions, events, prices, new LaplacePnlCalculator(),
                 properties, writer, universe, runtime);
+    }
+
+    @Test
+    void persistentShockUsesCloseSideAndExistingPnlFeeMathAndIsIdempotent() {
+        LaplacePaperPositionEntity open = openPosition(PositionSide.LONG);
+        when(positions.findByIdForUpdate(open.getId())).thenReturn(java.util.Optional.of(open));
+        when(prices.quote("BTCUSDT", MarketExecutionAction.LONG_CLOSE)).thenReturn(price("110", "111", "110", "BID"));
+        assertThat(service.closeForPersistentMarketShock(open.getId(), shock())).isTrue();
+        assertThat(open.getExitReason()).isEqualTo("MARKET_SHOCK_PERSISTENT");
+        assertThat(open.getExitExecutionPrice()).isEqualByComparingTo("110");
+        assertThat(open.getExitFee()).isEqualByComparingTo("0.022");
+        assertThat(open.getGrossPnl()).isEqualByComparingTo("5");
+        assertThat(open.getNetPnl()).isEqualByComparingTo("4.958");
+        assertThat(service.closeForPersistentMarketShock(open.getId(), shock())).isFalse();
+        verify(prices).quote("BTCUSDT", MarketExecutionAction.LONG_CLOSE);
+    }
+
+    @Test
+    void persistentShockDoesNotQuoteWhenRuntimeChangedOrPositionAlreadyClosed() {
+        LaplacePaperPositionEntity open = openPosition(PositionSide.SHORT);
+        when(positions.findByIdForUpdate(open.getId())).thenReturn(java.util.Optional.of(open));
+        when(runtime.isActive()).thenReturn(false);
+        assertThat(service.closeForPersistentMarketShock(open.getId(), shock())).isFalse();
+        org.mockito.Mockito.verifyNoInteractions(prices);
     }
 
     @Test
@@ -171,5 +198,12 @@ class LaplacePaperExecutionServiceTest {
                 "LAPLACE", 14, "CLOSE", false, now.minusSeconds(1800), now, 77,
                 76, 75, 74, 1, 1, 10, 10, .1, .1, .03, .04, 2,
                 LaplaceSignal.LONG, LaplaceSignal.LONG, StartupState.ACTIVE, 1, true, List.of());
+    }
+
+    private LaplaceMarketShockContext shock() {
+        Instant candidate = Instant.parse("2026-08-20T12:40:00Z");
+        return new LaplaceMarketShockContext(LaplaceMarketShockDirection.UP, candidate,
+                candidate.plusSeconds(300), new BigDecimal("75"), new BigDecimal("60"),
+                10, 5, new BigDecimal("0.50"));
     }
 }

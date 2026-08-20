@@ -18,7 +18,7 @@ public class LaplaceMarketShockScheduler {
     private final LaplaceMarketShockService shock;
     private final AtomicBoolean running = new AtomicBoolean();
 
-    @Scheduled(cron = "${trading.laplace.shock-cron:2 */5 * * * *}", zone = "${trading.laplace.zone}")
+    @Scheduled(cron = "${trading.laplace.shock-cron}", zone = "${trading.laplace.zone}")
     public void evaluate() {
         if (!gate.allowsMarketData() || !runtime.isActive() || !running.compareAndSet(false, true)) return;
         try { shock.evaluate(); }
