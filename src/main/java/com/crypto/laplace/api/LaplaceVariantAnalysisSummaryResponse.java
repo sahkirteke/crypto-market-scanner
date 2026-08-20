@@ -7,7 +7,7 @@ import java.time.Instant;
 public record LaplaceVariantAnalysisSummaryResponse(
         String paperVariant, boolean signalInverted,
         String strategy, String strategyVersion, long tradeCount, long openPositionCount,
-        long closedPositionCount, long longTradeCount, long shortTradeCount, long winCount,
+        long closedPositionCount, long shockedExit, long longTradeCount, long shortTradeCount, long winCount,
         long lossCount, long breakEvenCount, BigDecimal winRate, BigDecimal grossPnl,
         BigDecimal totalEntryFee, BigDecimal totalExitFee, BigDecimal totalFee, BigDecimal netPnl,
         BigDecimal averageGrossPnl, BigDecimal averageNetPnl, BigDecimal averageNetPnlPct,
