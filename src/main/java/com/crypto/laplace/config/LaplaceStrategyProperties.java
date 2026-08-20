@@ -64,6 +64,7 @@ public class LaplaceStrategyProperties {
         private BigDecimal minimumLockedProfitPct = new BigDecimal("4.7");
         private BigDecimal stopLossPct = new BigDecimal("0.05");
         private String stopLossCron = "1 */5 * * * *";
+        private String shockCron = "2 */5 * * * *";
         private String orderType = "MARKET";
         private BigDecimal takerFeeRate = new BigDecimal("0.0004");
         private String diagnosticDirectory = "logs/laplace";

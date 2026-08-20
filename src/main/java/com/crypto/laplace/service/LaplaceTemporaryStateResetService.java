@@ -3,6 +3,7 @@ package com.crypto.laplace.service;
 import com.crypto.laplace.execution.LaplacePaperTradeCoordinator;
 import com.crypto.laplace.scheduler.LaplaceStopLossScheduler;
 import com.crypto.laplace.scheduler.LaplaceThirtyMinuteScheduler;
+import com.crypto.laplace.scheduler.LaplaceMarketShockScheduler;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.CacheManager;
 import org.springframework.beans.factory.ObjectProvider;
@@ -18,11 +19,13 @@ public class LaplaceTemporaryStateResetService {
     private final LaplaceStopLossScheduler stopLossScheduler;
     private final ObjectProvider<CacheManager> cacheManagers;
     private final LaplaceMarketDataGate marketDataGate;
+    private final LaplaceMarketShockScheduler marketShockScheduler;
 
     /** Clears TRUE execution state without discarding shared market history. */
     public void clearInvertedTrue() {
         coordinator.clearRuntimeState();
         stopLossScheduler.clearRuntimeState();
+        marketShockScheduler.clearRuntimeState();
     }
 
     /** Compatibility no-op: FALSE has no production runtime state. */
@@ -34,6 +37,7 @@ public class LaplaceTemporaryStateResetService {
         coordinator.clearRuntimeState();
         thirtyMinuteScheduler.clearRuntimeState();
         stopLossScheduler.clearRuntimeState();
+        marketShockScheduler.clearRuntimeState();
         cacheManagers.orderedStream().forEach(cacheManager -> cacheManager.getCacheNames().stream()
                 .filter(name -> name.toLowerCase().contains("laplace"))
                 .map(cacheManager::getCache).filter(java.util.Objects::nonNull).forEach(org.springframework.cache.Cache::clear));

@@ -176,6 +176,7 @@ trading:
     minimum-locked-profit-pct: 4.7
     stop-loss-pct: 0.05
     stop-loss-cron: "1 */5 * * * *"
+    shock-cron: "2 */5 * * * *"
     order-type: MARKET
     taker-fee-rate: 0.0004
     cron: "5 0,30 * * * *"
