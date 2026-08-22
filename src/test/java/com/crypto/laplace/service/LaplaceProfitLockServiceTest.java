@@ -101,6 +101,31 @@ class LaplaceProfitLockServiceTest {
     }
 
     @Test
+    void manualCloseBelowTargetUsesTheSameLiquidationCompoundingAndCooldownPath() {
+        var open = open(PositionSide.LONG, bd("100"), bd("1"));
+        var closed = closed("session-1", "0.9296");
+        when(positions.findBySessionIdAndStatus("session-1", LaplacePositionStatus.OPEN))
+                .thenReturn(List.of(open)).thenReturn(List.of());
+        when(positions.findBySessionIdAndStatus("session-1", LaplacePositionStatus.CLOSED))
+                .thenReturn(List.of()).thenReturn(List.of(closed));
+        when(client.getAllBookTickers()).thenReturn(List.of(ticker(bd("101"), bd("102"))));
+        when(runtime.beginLiquidation(any(), any(), any(), any())).thenReturn(true);
+
+        service.closeCurrentSession();
+
+        verify(runtime).beginLiquidation(eq(BigDecimal.ZERO),
+                org.mockito.ArgumentMatchers.argThat(value -> value.compareTo(bd("0.97")) == 0),
+                org.mockito.ArgumentMatchers.argThat(value -> value.compareTo(bd("0.0404")) == 0),
+                org.mockito.ArgumentMatchers.argThat(value -> value.compareTo(bd("0.9296")) == 0));
+        verify(execution).closeForProfitLock(eq("id"),
+                org.mockito.ArgumentMatchers.argThat(q -> ((LaplaceExecutionPriceProvider.Price) q).value().compareTo(bd("101")) == 0), any());
+        verify(runtime).recordLiquidationResult(bd("0.9296"));
+        verify(runtime).startCooldown(closed.getExitTime());
+        verify(reset).clearInvertedTrue();
+        verify(reset).clearSharedIfUnused();
+    }
+
+    @Test
     void secondSessionProfitOneMillionthBelowItsOwnTargetDoesNotLock() {
         useSecondSession();
         when(positions.findBySessionIdAndStatus("session-2", LaplacePositionStatus.OPEN)).thenReturn(List.of());
