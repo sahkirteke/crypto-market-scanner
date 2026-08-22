@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;import lombok.extern.slf4j.Slf4j;import or
 
 /** Keeps raw strategy signals untouched and applies the configured direction mapping only at execution. */
 @Slf4j @Service @RequiredArgsConstructor
+@org.springframework.boot.autoconfigure.condition.ConditionalOnExpression("false")
 public class LaplaceInvertedFalseTradeCoordinator {
  private final LaplaceStrategyProperties config;private final LaplaceInvertedFalsePositionRepository positions;private final LaplaceInvertedFalseExecutionService execution;private final LaplaceInvertedFalseTradeJsonlWriter writer;private final LaplaceInvertedFalseRuntimeService runtime;private final ConcurrentHashMap<String,ReentrantLock> locks=new ConcurrentHashMap<>();private final ConcurrentHashMap<String,LaplaceSignal> rawStates=new ConcurrentHashMap<>();private final AtomicBoolean paperDisabledLogged=new AtomicBoolean(false);
  public Set<String> managementSymbols(){Set<String>x=new HashSet<>();for(var p:positions.findByStrategyAndStatus(LaplaceInvertedFalseExecutionService.STRATEGY,LaplacePositionStatus.OPEN))x.add(p.getSymbol());return Set.copyOf(x);}

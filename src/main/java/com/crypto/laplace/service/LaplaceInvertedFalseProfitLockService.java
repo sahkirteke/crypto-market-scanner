@@ -22,6 +22,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 @Slf4j @Service @RequiredArgsConstructor
+@org.springframework.boot.autoconfigure.condition.ConditionalOnExpression("false")
 public class LaplaceInvertedFalseProfitLockService {
     private static final int SCALE = 12;
     private final LaplaceInvertedFalseRuntimeService runtime;

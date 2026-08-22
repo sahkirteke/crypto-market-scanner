@@ -1,6 +1,7 @@
 package com.crypto.laplace.config;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -28,7 +29,11 @@ public class LaplaceStrategyProperties {
                 || laplace.marginPerPositionUsdt.compareTo(new BigDecimal("5")) != 0
                 || laplace.notionalUsdt.compareTo(new BigDecimal("75")) != 0
                 || laplace.leverage != 15
+                || laplace.profitTargetPct.compareTo(new BigDecimal("5")) != 0
                 || laplace.stopLossPct.compareTo(new BigDecimal("0.05")) != 0
+                || laplace.paper.invertedTrue.stopLossPct.compareTo(new BigDecimal("0.035")) != 0
+                || laplace.paper.invertedFalse.stopLossPct.compareTo(laplace.stopLossPct) != 0
+                || !Duration.ofHours(4).equals(laplace.paper.invertedTrue.symbolStopLossCooldown)
                 || laplace.notionalUsdt.compareTo(laplace.marginPerPositionUsdt.multiply(BigDecimal.valueOf(laplace.leverage))) != 0
                 || !"MARKET".equals(laplace.orderType)
                 || laplace.takerFeeRate == null
@@ -68,8 +73,10 @@ public class LaplaceStrategyProperties {
         public static class Paper {
             private Variant invertedTrue = new Variant(true,
                     "signals/laplace/inverted-true/trades", "signals/laplace/inverted-true/diagnostics");
-            private Variant invertedFalse = new Variant(true,
+            private Variant invertedFalse = new Variant(false,
                     "signals/laplace/inverted-false/trades", "signals/laplace/inverted-false/diagnostics");
+
+            public Paper() { invertedTrue.setStopLossPct(new BigDecimal("0.035")); }
         }
 
         @Getter @Setter @NoArgsConstructor
@@ -77,6 +84,8 @@ public class LaplaceStrategyProperties {
             private boolean enabled;
             private String tradeDirectory;
             private String diagnosticDirectory;
+            private BigDecimal stopLossPct = new BigDecimal("0.05");
+            private Duration symbolStopLossCooldown = Duration.ofHours(4);
 
             public Variant(boolean enabled, String tradeDirectory, String diagnosticDirectory) {
                 this.enabled = enabled;

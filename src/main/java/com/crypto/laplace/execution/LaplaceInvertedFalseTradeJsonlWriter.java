@@ -26,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@org.springframework.boot.autoconfigure.condition.ConditionalOnExpression("false")
 public class LaplaceInvertedFalseTradeJsonlWriter implements ApplicationRunner {
     private static final Pattern VALID_SYMBOL = Pattern.compile("^[A-Z0-9]+$");
 

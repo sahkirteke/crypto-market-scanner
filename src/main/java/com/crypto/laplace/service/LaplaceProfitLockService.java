@@ -33,6 +33,16 @@ public class LaplaceProfitLockService {
     private final Clock clock;
 
     public void evaluate() {
+        evaluateAndLiquidate(true);
+    }
+
+    /** Manually closes the active session through the exact same liquidation/compounding/cooldown path. */
+    public void closeCurrentSession() {
+        if (!runtime.isActive()) throw new IllegalStateException("LAPLACE_RUNTIME_NOT_ACTIVE");
+        evaluateAndLiquidate(false);
+    }
+
+    private void evaluateAndLiquidate(boolean requireProfitTarget) {
         if (!runtime.isActive()) return;
         var session = runtime.current();
         List<LaplacePaperPositionEntity> open = positions.findBySessionIdAndStatus(session.getSessionId(), LaplacePositionStatus.OPEN);
@@ -49,7 +59,7 @@ public class LaplaceProfitLockService {
                     .setScale(SCALE, RoundingMode.HALF_UP));
         }
         BigDecimal feeAfterTotalPnl = realized.add(openNet).subtract(exitFees);
-        if (feeAfterTotalPnl.compareTo(runtime.target(session)) < 0) return;
+        if (requireProfitTarget && feeAfterTotalPnl.compareTo(runtime.target(session)) < 0) return;
         if (!runtime.beginLiquidation(realized, openNet, exitFees, feeAfterTotalPnl)) return;
         liquidate(open, tickers, session.getSessionId());
     }

@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Order(1)
 public class LaplaceRuntimeService implements ApplicationRunner {
     private static final BigDecimal HUNDRED = new BigDecimal("100");
+    private static final BigDecimal PROFIT_TARGET_PCT = new BigDecimal("5");
     private static final int SCALE = 12;
     private static final Duration COOLDOWN = Duration.ofHours(6);
     private final LaplaceTradingSessionRepository sessions;
@@ -110,16 +111,16 @@ public class LaplaceRuntimeService implements ApplicationRunner {
                 .sessionId(UUID.randomUUID().toString()).sessionStartTime(clock.instant())
                 .sessionStartCapital(previous.getNextSessionCapital()).marginPerPosition(previous.getNextMarginPerPosition())
                 .startingNotional(previous.getNextPositionNotional())
-                .leverage(previous.getLeverage()).profitTargetPct(previous.getProfitTargetPct())
+                .leverage(previous.getLeverage()).profitTargetPct(PROFIT_TARGET_PCT)
                 .minimumLockedProfitPct(previous.getMinimumLockedProfitPct())
-                .profitTargetUsdt(pct(previous.getNextSessionCapital(), previous.getProfitTargetPct()))
+                .profitTargetUsdt(pct(previous.getNextSessionCapital(), PROFIT_TARGET_PCT))
                 .minimumLockedProfitUsdt(pct(previous.getNextSessionCapital(), previous.getMinimumLockedProfitPct()))
                 .realizedSessionNetPnl(BigDecimal.ZERO).runtimeState(LaplaceRuntimeState.ACTIVE).build();
         return sessions.saveAndFlush(next);
     }
 
     public BigDecimal target(LaplaceTradingSessionEntity session) {
-        return pct(session.getSessionStartCapital(), session.getProfitTargetPct());
+        return pct(session.getSessionStartCapital(), PROFIT_TARGET_PCT);
     }
 
     public BigDecimal minimumLocked(LaplaceTradingSessionEntity session) {
@@ -142,8 +143,8 @@ public class LaplaceRuntimeService implements ApplicationRunner {
                 .marginPerPosition(config.getMarginPerPositionUsdt())
                 .startingNotional(config.getMarginPerPositionUsdt().multiply(BigDecimal.valueOf(config.getLeverage())))
                 .leverage(config.getLeverage())
-                .profitTargetPct(config.getProfitTargetPct()).minimumLockedProfitPct(config.getMinimumLockedProfitPct())
-                .profitTargetUsdt(pct(config.getInitialCapitalUsdt(), config.getProfitTargetPct()))
+                .profitTargetPct(PROFIT_TARGET_PCT).minimumLockedProfitPct(config.getMinimumLockedProfitPct())
+                .profitTargetUsdt(pct(config.getInitialCapitalUsdt(), PROFIT_TARGET_PCT))
                 .minimumLockedProfitUsdt(pct(config.getInitialCapitalUsdt(), config.getMinimumLockedProfitPct()))
                 .realizedSessionNetPnl(BigDecimal.ZERO).runtimeState(LaplaceRuntimeState.ACTIVE).build();
     }

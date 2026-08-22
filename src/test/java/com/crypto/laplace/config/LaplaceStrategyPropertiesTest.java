@@ -1,5 +1,6 @@
 package com.crypto.laplace.config;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -17,6 +18,14 @@ class LaplaceStrategyPropertiesTest {
     @Test
     void acceptsInitialCompoundSessionSizingAndFivePercentStop() {
         assertThatCode(new LaplaceStrategyProperties()::validatePhaseOne).doesNotThrowAnyException();
+    }
+
+    @Test
+    void stopLossConfigurationIsVariantSpecific() {
+        var properties = new LaplaceStrategyProperties();
+        assertThat(properties.getLaplace().getPaper().getInvertedTrue().getStopLossPct()).isEqualByComparingTo("0.035");
+        assertThat(properties.getLaplace().getPaper().getInvertedFalse().getStopLossPct()).isEqualByComparingTo("0.05");
+        assertThat(properties.getLaplace().getPaper().getInvertedFalse().isEnabled()).isFalse();
     }
 
     @Test

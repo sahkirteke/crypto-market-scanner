@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 @Order(1)
+@org.springframework.boot.autoconfigure.condition.ConditionalOnExpression("false")
 public class LaplaceInvertedFalseRuntimeService implements ApplicationRunner {
     private static final BigDecimal HUNDRED = new BigDecimal("100");
     private static final int SCALE = 12;
